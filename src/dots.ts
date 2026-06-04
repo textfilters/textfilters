@@ -1,0 +1,59 @@
+import { DOT_LITERALS, DOT_WORDS_RAW, DOT_WORDS_SKELETON } from "./chars.js";
+import {
+  consumeWord,
+  matchesRawChars,
+  toRawChars,
+  toSkeletonChars,
+  type Match,
+  type TextMeta,
+} from "./meta.js";
+
+const DOT_LITERAL_CHARS = DOT_LITERALS.map((literal) => Array.from(literal));
+const DOT_WORDS_SKELETON_CHARS = DOT_WORDS_SKELETON.map(toSkeletonChars);
+const DOT_WORDS_RAW_CHARS = DOT_WORDS_RAW.map(toRawChars);
+
+// Dot words such as "dot" must stop at a boundary; otherwise normal prose like
+// "dotcom" would be split into a fake defanged domain.
+const hasDotWordBoundary = (meta: TextMeta, pos: number): boolean =>
+  pos >= meta.codePoints.length ||
+  meta.labelJoinSeparator[pos] ||
+  meta.symbol[pos] === "." ||
+  meta.symbol[pos] === "/" ||
+  meta.symbol[pos] === "?" ||
+  meta.symbol[pos] === "#";
+
+export const parseDot = (meta: TextMeta, start: number): Match | null => {
+  let pos = start;
+  while (
+    pos < meta.codePoints.length &&
+    (meta.zeroWidth[pos] || meta.whitespace[pos])
+  ) {
+    pos++;
+  }
+  // Bracketed dot markers are checked before generic separator skipping so
+  // spaced forms like `example [.] com` keep the whole marker.
+  for (const literalChars of DOT_LITERAL_CHARS) {
+    if (matchesRawChars(meta, pos, literalChars)) {
+      const len = literalChars.length;
+      return { start: pos, end: pos + len, pos: pos + len };
+    }
+  }
+
+  while (pos < meta.codePoints.length && meta.labelJoinSeparator[pos]) pos++;
+  if (pos >= meta.codePoints.length) return null;
+
+  if (meta.symbol[pos] === ".") {
+    return { start: pos, end: pos + 1, pos: pos + 1 };
+  }
+
+  for (const word of DOT_WORDS_SKELETON_CHARS) {
+    const matched = consumeWord(meta, pos, word, "skeleton");
+    if (matched && hasDotWordBoundary(meta, matched.pos)) return matched;
+  }
+  for (const word of DOT_WORDS_RAW_CHARS) {
+    const matched = consumeWord(meta, pos, word, "raw");
+    if (matched && hasDotWordBoundary(meta, matched.pos)) return matched;
+  }
+
+  return null;
+};

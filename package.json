@@ -1,0 +1,60 @@
+{
+  "name": "@textfilters/url",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "URL and obfuscated-link filtering for composable text moderation.",
+  "license": "MIT",
+  "keywords": [
+    "text-filtering",
+    "moderation",
+    "url-filter",
+    "typescript"
+  ],
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "docs",
+    "README.md",
+    "LICENSE"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "lint": "prettier README.md package.json src docs --check",
+    "format": "prettier README.md package.json src docs --write",
+    "prepack": "npm run build",
+    "pack:dry-run": "npm pack --dry-run",
+    "check": "npm run lint && npm test && npm run build && npm run pack:dry-run"
+  },
+  "dependencies": {
+    "@textfilters/core": "^0.1.0"
+  },
+  "devDependencies": {
+    "prettier": "^3.8.3",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.7"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "packageManager": "npm@11.16.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/textfilters/url.git"
+  },
+  "bugs": {
+    "url": "https://github.com/textfilters/url/issues"
+  },
+  "homepage": "https://github.com/textfilters/url#readme",
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  }
+}
