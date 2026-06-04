@@ -13,6 +13,7 @@ Textfilters is a small set of composable TypeScript text filtering primitives fo
 | `@textfilters/phone` | `textfilters/phone` | `0.1.0` on GitHub Packages | Phone-like sequence filtering. |
 | `@textfilters/profanity` | `textfilters/profanity` | `0.1.0` on GitHub Packages | Profanity filtering primitives. |
 | `@textfilters/spam` | `textfilters/spam` | `0.1.0` on GitHub Packages | Lightweight in-memory spam guard primitives. |
+| `@textfilters/email` | `textfilters/email` | `0.1.0` on GitHub Packages | Email address and obfuscated-email filtering. |
 
 All current packages are published to GitHub Packages as `0.1.0`.
 
@@ -27,7 +28,7 @@ Packages are published to GitHub Packages, not the public npm registry.
 GitHub Packages requires npm authentication for installs, including public packages.
 
 ```sh
-npm install @textfilters/core @textfilters/url @textfilters/phone @textfilters/profanity @textfilters/spam
+npm install @textfilters/core @textfilters/url @textfilters/phone @textfilters/profanity @textfilters/spam @textfilters/email
 ```
 
 ## Usage
@@ -37,13 +38,17 @@ import { createTextPipeline } from "@textfilters/core";
 import { filter as urlFilter } from "@textfilters/url";
 import { filter as phoneFilter } from "@textfilters/phone";
 import { filter as profanityFilter } from "@textfilters/profanity";
+import { filter as emailFilter } from "@textfilters/email";
 
 const pipeline = createTextPipeline()
   .use(urlFilter)
   .use(phoneFilter)
-  .use(profanityFilter);
+  .use(profanityFilter)
+  .use(emailFilter);
 
-const safeText = pipeline.censor("message with https://example.com and +7 999 123-45-67");
+const safeText = pipeline.censor(
+  "message with https://example.com, +7 999 123-45-67, and user@example.com",
+);
 ```
 
 ```ts
@@ -72,9 +77,7 @@ Open package-specific bugs in the relevant package repository. Open ecosystem do
 
 ## Roadmap
 
-Planned future packages:
-
-* `@textfilters/email` - email address and obfuscated-email filtering.
+Future package additions are tracked as they become ready for release.
 
 ## License
 
