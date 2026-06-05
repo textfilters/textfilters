@@ -55,7 +55,7 @@ The parser is split into focused modules for metadata, schemes, defanged dots, d
 
 ## Release
 
-Releases are managed by release-please. When a release is created from `main`, the workflow runs `npm run check` and publishes the package to GitHub Packages.
+Releases are managed by Release Please from Conventional Commit history on `main`. When a Release Please release is created, the workflow runs `npm run check` and publishes the package to GitHub Packages. Release tags keep the `v*` pattern.
 
 The package is prepared for publication to GitHub Packages, not the public npm registry.
 
