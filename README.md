@@ -13,9 +13,9 @@ Textfilters is a small set of composable TypeScript text filtering primitives fo
 | `@textfilters/phone` | `textfilters/phone` | `0.1.0` on GitHub Packages | Phone-like sequence filtering. |
 | `@textfilters/profanity` | `textfilters/profanity` | `0.1.0` on GitHub Packages | Profanity filtering primitives. |
 | `@textfilters/spam` | `textfilters/spam` | `0.1.0` on GitHub Packages | Lightweight in-memory spam guard primitives. |
-| `@textfilters/email` | `textfilters/email` | `0.1.0` on GitHub Packages | Email address and obfuscated-email filtering. |
+| `@textfilters/email` | `textfilters/email` | `0.2.2` on GitHub Packages | Email address and obfuscated-email filtering. |
 
-All current packages are published to GitHub Packages as `0.1.0`.
+All current packages are published to GitHub Packages.
 
 ## Installation
 
@@ -69,7 +69,7 @@ const decision = spam.check({
 
 ## Release Model
 
-Packages use semantic versioning. Packages are published to GitHub Packages first, with GitHub Releases and immutable release tags using `vX.Y.Z`. npmjs.org publication may be added later.
+Packages use semantic versioning and Release Please from Conventional Commit history on `main`. Packages are published to GitHub Packages first, with GitHub Releases and immutable release tags using `vX.Y.Z`. npmjs.org publication may be added later.
 
 ## Support
 
