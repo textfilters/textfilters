@@ -3,9 +3,8 @@
   "include-component-in-tag": false,
   "packages": {
     ".": {
-      "release-type": "node",
       "package-name": "@textfilters/profanity",
-      "initial-version": "0.1.0"
+      "release-type": "node"
     }
   }
 }
