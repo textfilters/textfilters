@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { createUrlFilter, filter, URL_FILTER_NAME, urlFilter } from "./index";
+import {
+  createUrlFilter,
+  filter,
+  URL_FILTER_NAME,
+  urlFilter,
+} from "../src/index.js";
 
 const mask = (s: string, ch = "*") => ch.repeat(Array.from(s).length);
 
@@ -116,6 +121,11 @@ describe("compatibility behavior", () => {
   it("censors domain-only links", () => {
     expect(filter.censor("example.com")).toBe(mask("example.com"));
     expect(filter.censor("www.example.com")).toBe(mask("www.example.com"));
+    expect(filter.censor("sub.domain.co.uk/path")).toBe(
+      mask("sub.domain.co.uk/path"),
+    );
+    expect(filter.censor("bit.ly/abc123")).toBe(mask("bit.ly/abc123"));
+    expect(filter.censor("goo.gl/test")).toBe(mask("goo.gl/test"));
     expect(filter.censor("t.me/example")).toBe(mask("t.me/example"));
     expect(filter.censor("discord.gg/example")).toBe(
       mask("discord.gg/example"),
