@@ -1,4 +1,4 @@
-import { compilePatternSources } from "./compile.js";
+import { compilePatternDefinitions } from "./compile.js";
 import { LOOSE_SEPARATOR } from "./literals.js";
 import { isOptionalSuffixAtom, isWordLikeAtom } from "./rule-classifier.js";
 import { readRuleAtoms, type RuleAtom } from "./rule-reader.js";
@@ -24,16 +24,22 @@ export const createBuiltInProfanityRules = (
 export const compileStrictInternalRulePatterns = (
   rules: readonly InternalProfanityRule[],
 ): CompiledPattern[] =>
-  compilePatternSources(
-    rules.map((rule) => rule.source),
+  compilePatternDefinitions(
+    rules.map((rule) => ({
+      source: rule.source,
+      ruleId: rule.id,
+    })),
     true,
   );
 
 export const compileLooseInternalRulePatterns = (
   rules: readonly InternalProfanityRule[],
 ): CompiledPattern[] =>
-  compilePatternSources(
-    rules.map((rule) => loosenInternalRuleSource(rule.source)),
+  compilePatternDefinitions(
+    rules.map((rule) => ({
+      source: loosenInternalRuleSource(rule.source),
+      ruleId: rule.id,
+    })),
     false,
     {
       trimHyphenTail: true,

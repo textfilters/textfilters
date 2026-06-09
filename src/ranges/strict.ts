@@ -2,6 +2,7 @@ import type { TextRange } from "@textfilters/core";
 import type { StrictPatternSet } from "../matchers/build.js";
 import type { CompiledPattern } from "../matchers/compile.js";
 import { patternMatches } from "../matchers/compile.js";
+import type { CollectedProfanityRange } from "../matches/ranges.js";
 import { nextCodePointEnd } from "../normalization/text.js";
 import { WHITESPACE_RE, WORD_CHAR_RE, WORD_RE } from "../token-ranges.js";
 import { boundaryCheckedRange } from "./boundary.js";
@@ -10,7 +11,7 @@ import { forEachPatternMatch } from "./patterns.js";
 export const collectStrictRanges = (
   normalized: string,
   patterns: StrictPatternSet,
-  ranges: TextRange[],
+  ranges: CollectedProfanityRange[],
 ): void => {
   collectWordRanges(normalized, patterns, ranges);
   collectSymbolRanges(normalized, patterns, ranges);
@@ -20,12 +21,13 @@ export const collectStrictRanges = (
 const collectWordRanges = (
   normalized: string,
   patterns: StrictPatternSet,
-  ranges: TextRange[],
+  ranges: CollectedProfanityRange[],
 ): void => {
   // Strict terms must own the whole word token; embedded prefixes are rejected by
   // boundaryCheckedRange before they become mask ranges.
   for (const match of normalized.matchAll(WORD_RE)) {
-    if (!matchesAnyTokenPattern(patterns.token, match[0])) {
+    const pattern = findMatchingTokenPattern(patterns.token, match[0]);
+    if (pattern === null) {
       continue;
     }
 
@@ -35,7 +37,7 @@ const collectWordRanges = (
       match.index + match[0].length,
     );
     if (range !== null) {
-      ranges.push(range);
+      ranges.push(rangeForPattern(range, pattern));
     }
   }
 };
@@ -43,7 +45,7 @@ const collectWordRanges = (
 const collectSymbolRanges = (
   normalized: string,
   patterns: StrictPatternSet,
-  ranges: TextRange[],
+  ranges: CollectedProfanityRange[],
 ): void => {
   // Symbol-only literals such as "(" or "." never appear in WORD_RE.
   forEachSymbolRun(normalized, (start, end) => {
@@ -56,13 +58,12 @@ const collectSymbolRanges = (
         if (rangeEnd > end) {
           continue;
         }
-        if (
-          matchesAnyTokenPattern(
-            patterns.symbolToken,
-            normalized.slice(rangeStart, rangeEnd),
-          )
-        ) {
-          ranges.push([rangeStart, rangeEnd]);
+        const pattern = findMatchingTokenPattern(
+          patterns.symbolToken,
+          normalized.slice(rangeStart, rangeEnd),
+        );
+        if (pattern !== null) {
+          ranges.push(rangeForPattern([rangeStart, rangeEnd], pattern));
         }
       }
     }
@@ -72,23 +73,38 @@ const collectSymbolRanges = (
 const collectPhraseRanges = (
   normalized: string,
   patterns: StrictPatternSet,
-  ranges: TextRange[],
+  ranges: CollectedProfanityRange[],
 ): void =>
   // Phrase pass is for strict literals that contain punctuation, for example
   // `foo.bar`; plain word literals are already handled by collectWordRanges.
-  forEachPatternMatch(normalized, patterns.phrase, (start, end) => {
+  forEachPatternMatch(normalized, patterns.phrase, (start, end, pattern) => {
     if (
       boundaryCheckedRange(normalized, start, end) !== null ||
       !containsWordChar(normalized, start, end)
     ) {
-      ranges.push([start, end]);
+      ranges.push(rangeForPattern([start, end], pattern));
     }
   });
 
-const matchesAnyTokenPattern = (
+const findMatchingTokenPattern = (
   patterns: readonly CompiledPattern[],
   value: string,
-): boolean => patterns.some((pattern) => patternMatches(pattern, value));
+): CompiledPattern | null => {
+  for (const pattern of patterns) {
+    if (patternMatches(pattern, value)) return pattern;
+  }
+  return null;
+};
+
+const rangeForPattern = (
+  range: TextRange,
+  pattern: CompiledPattern,
+): CollectedProfanityRange =>
+  pattern.ruleId === undefined
+    ? range
+    : Object.assign([range[0], range[1]] as [number, number], {
+        ruleId: pattern.ruleId,
+      });
 
 const containsWordChar = (
   normalized: string,

@@ -1,10 +1,16 @@
 export interface CompiledPattern {
   readonly re: RegExp;
   readonly trimHyphenTail?: boolean;
+  readonly ruleId?: string;
 }
 
 export interface CompilePatternOptions {
   readonly trimHyphenTail?: boolean;
+}
+
+export interface CompilePatternSource {
+  readonly source: string;
+  readonly ruleId?: string;
 }
 
 const GLOBAL_UNICODE_FLAGS = "giu";
@@ -15,11 +21,25 @@ export const compilePatternSources = (
   wholeToken: boolean,
   options: CompilePatternOptions = {},
 ): CompiledPattern[] =>
-  sources
+  compilePatternDefinitions(
+    sources.map((source) => ({ source })),
+    wholeToken,
+    options,
+  );
+
+export const compilePatternDefinitions = (
+  definitions: readonly CompilePatternSource[],
+  wholeToken: boolean,
+  options: CompilePatternOptions = {},
+): CompiledPattern[] =>
+  definitions
     // Whole-token patterns are anchored here so range collectors do not need to
     // know whether a pattern came from strict token matching or global search.
-    .map((source) => (wholeToken ? `^(?:${source})$` : source))
-    .map((source) => compilePattern(source, wholeToken, options))
+    .map((definition) => ({
+      source: wholeToken ? `^(?:${definition.source})$` : definition.source,
+      ruleId: definition.ruleId,
+    }))
+    .map((definition) => compilePattern(definition, wholeToken, options))
     .filter((pattern): pattern is CompiledPattern => pattern !== null)
     .sort((left, right) => right.re.source.length - left.re.source.length);
 
@@ -32,17 +52,18 @@ export const patternMatches = (
 };
 
 const compilePattern = (
-  source: string,
+  definition: CompilePatternSource,
   wholeToken: boolean,
   options: CompilePatternOptions,
 ): CompiledPattern | null => {
   try {
     return {
       re: new RegExp(
-        source,
+        definition.source,
         wholeToken ? ANCHORED_UNICODE_FLAGS : GLOBAL_UNICODE_FLAGS,
       ),
       trimHyphenTail: options.trimHyphenTail,
+      ruleId: definition.ruleId,
     };
   } catch {
     return null;

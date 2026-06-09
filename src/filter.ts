@@ -1,4 +1,3 @@
-import type { TextRange } from "@textfilters/core";
 import { buildLoosePatterns, buildStrictPatterns } from "./matchers/build.js";
 import type { MatcherTerms, StrictPatternSet } from "./matchers/build.js";
 import type { CompiledPattern } from "./matchers/compile.js";
@@ -9,7 +8,10 @@ import {
   PROFANITY_MATCH_MODE,
   textRangesForMode,
 } from "./matches/ranges.js";
-import type { ProfanityMatchRange } from "./matches/ranges.js";
+import type {
+  CollectedProfanityRange,
+  ProfanityMatchRange,
+} from "./matches/ranges.js";
 import { normalizeForMatchSameLen } from "./normalization/text.js";
 import { collectLooseRanges } from "./ranges/loose.js";
 import { collectStrictRanges } from "./ranges/strict.js";
@@ -136,8 +138,8 @@ const collectProfanityMatches = (
   // Normalization is same-length, so ranges collected from the normalized string
   // can be applied directly to the original source string.
   const normalized = normalizeForMatchSameLen(text);
-  const strictRanges: TextRange[] = [];
-  const looseRanges: TextRange[] = [];
+  const strictRanges: CollectedProfanityRange[] = [];
+  const looseRanges: CollectedProfanityRange[] = [];
 
   collectStrictRanges(normalized, state.strictPatterns, strictRanges);
   collectLooseRanges(

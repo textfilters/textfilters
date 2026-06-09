@@ -10,15 +10,25 @@ export type ProfanityMatchMode =
 
 export interface ProfanityMatchRange extends TextRange {
   readonly mode: ProfanityMatchMode;
+  readonly ruleId?: string;
+}
+
+export interface CollectedProfanityRange extends TextRange {
+  readonly ruleId?: string;
 }
 
 export const matchRangesForMode = (
-  ranges: readonly TextRange[],
+  ranges: readonly CollectedProfanityRange[],
   mode: ProfanityMatchMode,
 ): ProfanityMatchRange[] =>
-  ranges.map(([start, end]) =>
-    Object.assign([start, end] as [number, number], { mode }),
-  );
+  ranges.map((range) => {
+    const matchRange = Object.assign([range[0], range[1]] as [number, number], {
+      mode,
+    });
+    return range.ruleId === undefined
+      ? matchRange
+      : Object.assign(matchRange, { ruleId: range.ruleId });
+  });
 
 export const textRangesForMode = (
   ranges: readonly ProfanityMatchRange[],

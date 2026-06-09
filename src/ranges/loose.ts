@@ -1,6 +1,7 @@
 import type { TextRange } from "@textfilters/core";
 import type { StrictPatternSet } from "../matchers/build.js";
 import type { CompiledPattern } from "../matchers/compile.js";
+import type { CollectedProfanityRange } from "../matches/ranges.js";
 import { nextCodePointEnd } from "../normalization/text.js";
 import {
   expandToTokenBounds,
@@ -21,14 +22,14 @@ export const collectLooseRanges = (
   normalized: string,
   loosePatterns: readonly CompiledPattern[],
   strictPatterns: StrictPatternSet,
-  ranges: TextRange[],
+  ranges: CollectedProfanityRange[],
 ): void =>
   forEachPatternMatch(normalized, loosePatterns, (start, end, pattern) => {
     const patterns = { loose: loosePatterns, strict: strictPatterns };
     const range = looseRange(normalized, start, end, pattern, patterns);
 
     if (range !== null) {
-      ranges.push(range);
+      ranges.push(rangeForPattern(range, pattern));
     }
   });
 
@@ -163,3 +164,13 @@ const containsNonSplitWordChar = (
   }
   return false;
 };
+
+const rangeForPattern = (
+  range: TextRange,
+  pattern: CompiledPattern,
+): CollectedProfanityRange =>
+  pattern.ruleId === undefined
+    ? range
+    : Object.assign([range[0], range[1]] as [number, number], {
+        ruleId: pattern.ruleId,
+      });
