@@ -2,6 +2,7 @@ import { compilePatternDefinitions } from "./compile.js";
 import { LOOSE_SEPARATOR } from "./literals.js";
 import { isOptionalSuffixAtom, isWordLikeAtom } from "./rule-classifier.js";
 import { readRuleAtoms, type RuleAtom } from "./rule-reader.js";
+import { ruleIdentityMetadata, ruleSourceMetadata } from "./rule-metadata.js";
 import { splitTopLevelAlternatives } from "./rule-scanner.js";
 import type {
   ProfanityCategory,
@@ -46,8 +47,7 @@ export const compileStrictInternalRulePatterns = (
     rules.map((rule) => ({
       source: rule.source,
       ruleId: rule.id,
-      ...(rule.category === undefined ? {} : { category: rule.category }),
-      ...(rule.severity === undefined ? {} : { severity: rule.severity }),
+      ...ruleIdentityMetadata(rule),
     })),
     true,
   );
@@ -59,8 +59,7 @@ export const compileLooseInternalRulePatterns = (
     rules.map((rule) => ({
       source: loosenInternalRuleSource(rule.source),
       ruleId: rule.id,
-      ...(rule.category === undefined ? {} : { category: rule.category }),
-      ...(rule.severity === undefined ? {} : { severity: rule.severity }),
+      ...ruleIdentityMetadata(rule),
     })),
     false,
     {
@@ -84,15 +83,7 @@ const builtInRuleDefinitionToRule = (
 ): Omit<InternalProfanityRule, "id"> =>
   typeof definition === "string"
     ? { source: definition }
-    : {
-        source: definition.source,
-        ...(definition.category === undefined
-          ? {}
-          : { category: definition.category }),
-        ...(definition.severity === undefined
-          ? {}
-          : { severity: definition.severity }),
-      };
+    : ruleSourceMetadata(definition);
 
 const loosenInternalRuleSource = (source: string): string => {
   if (source === "бля[дт](?:[а-яё]+)?") {

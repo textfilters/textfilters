@@ -2,6 +2,7 @@ import type {
   ProfanityCategory,
   ProfanitySeverity,
 } from "../taxonomy/types.js";
+import { ruleIdentityMetadata } from "./rule-metadata.js";
 
 export interface CompiledPattern {
   readonly re: RegExp;
@@ -46,7 +47,7 @@ export const compilePatternDefinitions = (
     // know whether a pattern came from strict token matching or global search.
     .map((definition) => ({
       source: wholeToken ? `^(?:${definition.source})$` : definition.source,
-      ...patternSourceMetadata(definition),
+      ...ruleIdentityMetadata(definition),
     }))
     .map((definition) => compilePattern(definition, wholeToken, options))
     .filter((pattern): pattern is CompiledPattern => pattern !== null)
@@ -72,21 +73,9 @@ const compilePattern = (
         wholeToken ? ANCHORED_UNICODE_FLAGS : GLOBAL_UNICODE_FLAGS,
       ),
       trimHyphenTail: options.trimHyphenTail,
-      ...patternSourceMetadata(definition),
+      ...ruleIdentityMetadata(definition),
     };
   } catch {
     return null;
   }
 };
-
-const patternSourceMetadata = (
-  definition: CompilePatternSource,
-): Partial<Pick<CompilePatternSource, "ruleId" | "category" | "severity">> => ({
-  ...(definition.ruleId === undefined ? {} : { ruleId: definition.ruleId }),
-  ...(definition.category === undefined
-    ? {}
-    : { category: definition.category }),
-  ...(definition.severity === undefined
-    ? {}
-    : { severity: definition.severity }),
-});
