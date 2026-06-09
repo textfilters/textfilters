@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.1](https://github.com/textfilters/profanity/compare/v0.1.0...v0.1.1) (2026-06-09)
+
+
+### Bug Fixes
+
+* harden profanity matching and test layout ([73f8bfb](https://github.com/textfilters/profanity/commit/73f8bfb524af353deb217a7bfb18e1abdadb15af))
+
 ## 0.1.0 (2026-06-04)
 
 Initial release of `@textfilters/profanity`.
