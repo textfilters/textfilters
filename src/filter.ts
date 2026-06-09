@@ -21,6 +21,11 @@ interface FilterState {
   loosePatterns: CompiledPattern[];
 }
 
+interface ProfanityRanges {
+  readonly strict: TextRange[];
+  readonly loose: TextRange[];
+}
+
 export const createProfanityFilter = (
   strictTerms: ProfanityTermList = STRICT_BASE,
   looseTerms: ProfanityTermList = LOOSE_BASE,
@@ -32,19 +37,19 @@ export const createProfanityFilter = (
     check: (text) => hasProfanity(state, String(text)),
     censor: (text) => censorText(state, String(text)),
     setStrict: (list) => {
-      state.strictTerms = customTerms(list);
+      state.strictTerms = runtimeLiteralTerms(list);
       rebuildStrict(state);
     },
     addStrict: (term) => {
-      state.strictTerms = appendLiteralTerm(state.strictTerms, term);
+      state.strictTerms = appendRuntimeLiteralTerm(state.strictTerms, term);
       rebuildStrict(state);
     },
     setLoose: (list) => {
-      state.looseTerms = customTerms(list);
+      state.looseTerms = runtimeLiteralTerms(list);
       rebuildLoose(state);
     },
     addLoose: (term) => {
-      state.looseTerms = appendLiteralTerm(state.looseTerms, term);
+      state.looseTerms = appendRuntimeLiteralTerm(state.looseTerms, term);
       rebuildLoose(state);
     },
   };
@@ -57,12 +62,12 @@ function createState(
   const state: FilterState = {
     strictTerms:
       strictTerms === STRICT_BASE
-        ? internalTerms(strictTerms)
-        : customTerms(strictTerms),
+        ? builtInRuleTerms(strictTerms)
+        : runtimeLiteralTerms(strictTerms),
     looseTerms:
       looseTerms === LOOSE_BASE
-        ? internalTerms(looseTerms)
-        : customTerms(looseTerms),
+        ? builtInRuleTerms(looseTerms)
+        : runtimeLiteralTerms(looseTerms),
     strictPatterns: {
       token: [],
       symbolToken: [],
@@ -86,17 +91,17 @@ function rebuildLoose(state: FilterState): void {
   state.loosePatterns = buildLoosePatterns(state.looseTerms);
 }
 
-const internalTerms = (terms: ProfanityTermList): MatcherTerms => ({
+const builtInRuleTerms = (terms: ProfanityTermList): MatcherTerms => ({
   internal: normalizeTermList(terms),
   literals: [],
 });
 
-const customTerms = (terms: ProfanityTermList): MatcherTerms => ({
+const runtimeLiteralTerms = (terms: ProfanityTermList): MatcherTerms => ({
   internal: [],
   literals: normalizeTermList(terms),
 });
 
-const appendLiteralTerm = (
+const appendRuntimeLiteralTerm = (
   terms: MatcherTerms,
   term: unknown,
 ): MatcherTerms => ({
@@ -106,19 +111,19 @@ const appendLiteralTerm = (
 });
 
 const hasProfanity = (state: FilterState, text: string): boolean => {
-  const [strictRanges, looseRanges] = collectRanges(state, text);
-  return strictRanges.length > 0 || looseRanges.length > 0;
+  const ranges = collectProfanityRanges(state, text);
+  return ranges.strict.length > 0 || ranges.loose.length > 0;
 };
 
 const censorText = (state: FilterState, text: string): string => {
-  const [strictRanges, looseRanges] = collectRanges(state, text);
-  return maskProfanityRanges(text, strictRanges, looseRanges);
+  const ranges = collectProfanityRanges(state, text);
+  return maskProfanityRanges(text, ranges.strict, ranges.loose);
 };
 
-const collectRanges = (
+const collectProfanityRanges = (
   state: FilterState,
   text: string,
-): [TextRange[], TextRange[]] => {
+): ProfanityRanges => {
   // Normalization is same-length, so ranges collected from the normalized string
   // can be applied directly to the original source string.
   const normalized = normalizeForMatchSameLen(text);
@@ -133,7 +138,10 @@ const collectRanges = (
     looseRanges,
   );
 
-  return [strictRanges, looseRanges];
+  return {
+    strict: strictRanges,
+    loose: looseRanges,
+  };
 };
 
 export const profanityFilter = createProfanityFilter;
