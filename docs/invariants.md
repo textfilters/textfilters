@@ -26,8 +26,8 @@ Runtime dictionary terms from `createProfanityFilter(strict, loose)`,
 `setStrict`, `setLoose`, `addStrict`, and `addLoose` are normalized literals.
 They are not regular expressions.
 
-The built-in corpus is package-owned and may use controlled internal rules.
-Keep user-provided terms out of that internal rule compiler.
+The built-in corpus is package-owned JSON data and may use controlled internal
+rules. Keep user-provided terms out of that internal rule compiler.
 
 ## Strict Token Boundaries
 

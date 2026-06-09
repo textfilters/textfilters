@@ -48,7 +48,7 @@ folding, `ё` to `е` folding, and zero-width replacement with a regular space.
 flowchart LR
   PublicAPI["createProfanityFilter(strict, loose)"] --> RuntimeTerms["runtime terms"]
   RuntimeTerms --> LiteralCompiler["matchers/literals"]
-  DefaultFilter["filter"] --> BuiltInTerms["built-in term lists"]
+  DefaultFilter["filter"] --> BuiltInTerms["built-in JSON term data"]
   BuiltInTerms --> InternalRules["matchers/internal-rules"]
   InternalRules --> Reader["rule-reader and rule-classifier"]
   LiteralCompiler --> Matchers["compiled matcher sets"]
@@ -142,7 +142,8 @@ range modules decide what parts of text can be masked.
 | `src/ranges/patterns.ts`          | Shared global regexp iteration with zero-width protection.            |
 | `src/ranges/boundary.ts`          | Token-boundary validation.                                            |
 | `src/token-ranges.ts`             | Shared UTF-16 token and masking helpers.                              |
-| `src/terms/*.ts`                  | Built-in package-owned rule sources.                                  |
+| `src/terms/*.ts`                  | Typed loaders for built-in package-owned rule data.                   |
+| `src/terms/data/*.json`           | Built-in package-owned rule data.                                     |
 
 The important design decision is that user input never enters the internal rule
 compiler. That keeps the public API stable, prevents user-provided zero-width or
@@ -155,7 +156,7 @@ after text normalization.
 | Change                                     | Start Here                                                       |
 | ------------------------------------------ | ---------------------------------------------------------------- |
 | Add a runtime dictionary behavior          | `src/matchers/literals.ts` and tests.                            |
-| Add a built-in corpus rule                 | `src/terms/*.ts` and corpus tests.                               |
+| Add a built-in corpus rule                 | `src/terms/data/*.json` and corpus tests.                        |
 | Change separator handling for built-ins    | `src/matchers/internal-rules.ts`.                                |
 | Change token acceptance or false positives | `src/ranges/boundary.ts`.                                        |
 | Change masking length behavior             | `src/token-ranges.ts`.                                           |
@@ -163,9 +164,9 @@ after text normalization.
 
 ## Adding New Built-In Rules
 
-1. Add the narrowest rule source to `src/terms/strict-base.ts` or
-   `src/terms/loose-base.ts`.
-2. Add a positive corpus case in `src/index.spec.ts`.
+1. Add the narrowest rule source to `src/terms/data/strict-base.json` or
+   `src/terms/data/loose-base.json`.
+2. Add a positive corpus case in the relevant corpus spec under `tests/`.
 3. Add a false-positive case when the rule could overlap with common neutral
    words.
 4. Run the full package check before publishing the branch.
