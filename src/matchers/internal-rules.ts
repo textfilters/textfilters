@@ -7,16 +7,49 @@ import type { CompiledPattern } from "./compile.js";
 
 const IN_TOKEN_SEPARATOR = String.raw`[^\p{L}\p{N}\s]*`;
 
-export const compileStrictInternalRulePatterns = (
+export interface InternalProfanityRule {
+  readonly id: string;
+  readonly source: string;
+}
+
+export const createBuiltInProfanityRules = (
   sources: readonly string[],
-): CompiledPattern[] => compilePatternSources(sources, true);
+  corpus: "strict" | "loose",
+): InternalProfanityRule[] =>
+  sources.map((source, index) => ({
+    id: `builtin:${corpus}:${index}:${stableRuleSourceHash(source)}`,
+    source,
+  }));
+
+export const compileStrictInternalRulePatterns = (
+  rules: readonly InternalProfanityRule[],
+): CompiledPattern[] =>
+  compilePatternSources(
+    rules.map((rule) => rule.source),
+    true,
+  );
 
 export const compileLooseInternalRulePatterns = (
-  sources: readonly string[],
+  rules: readonly InternalProfanityRule[],
 ): CompiledPattern[] =>
-  compilePatternSources(sources.map(loosenInternalRuleSource), false, {
-    trimHyphenTail: true,
-  });
+  compilePatternSources(
+    rules.map((rule) => loosenInternalRuleSource(rule.source)),
+    false,
+    {
+      trimHyphenTail: true,
+    },
+  );
+
+const stableRuleSourceHash = (source: string): string => {
+  let hash = 0x811c9dc5;
+
+  for (let index = 0; index < source.length; index += 1) {
+    hash ^= source.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193);
+  }
+
+  return (hash >>> 0).toString(36).padStart(7, "0");
+};
 
 const loosenInternalRuleSource = (source: string): string => {
   if (source === "бля[дт](?:[а-яё]+)?") {

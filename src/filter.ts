@@ -2,6 +2,7 @@ import type { TextRange } from "@textfilters/core";
 import { buildLoosePatterns, buildStrictPatterns } from "./matchers/build.js";
 import type { MatcherTerms, StrictPatternSet } from "./matchers/build.js";
 import type { CompiledPattern } from "./matchers/compile.js";
+import { createBuiltInProfanityRules } from "./matchers/internal-rules.js";
 import { appendTerm, normalizeTermList } from "./matchers/terms.js";
 import {
   matchRangesForMode,
@@ -63,11 +64,11 @@ function createState(
   const state: FilterState = {
     strictTerms:
       strictTerms === STRICT_BASE
-        ? builtInRuleTerms(strictTerms)
+        ? builtInRuleTerms(strictTerms, "strict")
         : runtimeLiteralTerms(strictTerms),
     looseTerms:
       looseTerms === LOOSE_BASE
-        ? builtInRuleTerms(looseTerms)
+        ? builtInRuleTerms(looseTerms, "loose")
         : runtimeLiteralTerms(looseTerms),
     strictPatterns: {
       token: [],
@@ -92,8 +93,11 @@ function rebuildLoose(state: FilterState): void {
   state.loosePatterns = buildLoosePatterns(state.looseTerms);
 }
 
-const builtInRuleTerms = (terms: ProfanityTermList): MatcherTerms => ({
-  internal: normalizeTermList(terms),
+const builtInRuleTerms = (
+  terms: ProfanityTermList,
+  corpus: "strict" | "loose",
+): MatcherTerms => ({
+  internal: createBuiltInProfanityRules(normalizeTermList(terms), corpus),
   literals: [],
 });
 

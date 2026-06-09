@@ -2,6 +2,7 @@ import {
   compileLooseInternalRulePatterns,
   compileStrictInternalRulePatterns,
 } from "./internal-rules.js";
+import type { InternalProfanityRule } from "./internal-rules.js";
 import {
   compileLooseLiteralPatterns,
   compileStrictPhraseLiteralPatterns,
@@ -12,7 +13,7 @@ import {
 import type { CompiledPattern } from "./compile.js";
 
 export interface MatcherTerms {
-  readonly internal: readonly string[];
+  readonly internal: readonly InternalProfanityRule[];
   readonly literals: readonly string[];
 }
 
