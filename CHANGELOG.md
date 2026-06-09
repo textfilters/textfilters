@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.2](https://github.com/textfilters/profanity/compare/v0.1.1...v0.1.2) (2026-06-09)
+
+
+### Bug Fixes
+
+* load built-in corpus from JSON data files ([e746524](https://github.com/textfilters/profanity/commit/e74652405c41958e64c6c80b05b182bd5abb6419))
+
 ## [0.1.1](https://github.com/textfilters/profanity/compare/v0.1.0...v0.1.1) (2026-06-09)
 
 
