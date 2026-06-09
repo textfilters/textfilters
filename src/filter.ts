@@ -3,6 +3,12 @@ import { buildLoosePatterns, buildStrictPatterns } from "./matchers/build.js";
 import type { MatcherTerms, StrictPatternSet } from "./matchers/build.js";
 import type { CompiledPattern } from "./matchers/compile.js";
 import { appendTerm, normalizeTermList } from "./matchers/terms.js";
+import {
+  matchRangesForMode,
+  PROFANITY_MATCH_MODE,
+  textRangesForMode,
+} from "./matches/ranges.js";
+import type { ProfanityMatchRange } from "./matches/ranges.js";
 import { normalizeForMatchSameLen } from "./normalization/text.js";
 import { collectLooseRanges } from "./ranges/loose.js";
 import { collectStrictRanges } from "./ranges/strict.js";
@@ -23,18 +29,6 @@ interface FilterState {
 
 interface ProfanityRanges {
   readonly matches: ProfanityMatchRange[];
-}
-
-const PROFANITY_MATCH_MODE = {
-  STRICT: "strict",
-  LOOSE: "loose",
-} as const;
-
-type ProfanityMatchMode =
-  (typeof PROFANITY_MATCH_MODE)[keyof typeof PROFANITY_MATCH_MODE];
-
-interface ProfanityMatchRange extends TextRange {
-  readonly mode: ProfanityMatchMode;
 }
 
 export const createProfanityFilter = (
@@ -160,22 +154,6 @@ const collectProfanityRanges = (
     ],
   };
 };
-
-const matchRangesForMode = (
-  ranges: readonly TextRange[],
-  mode: ProfanityMatchMode,
-): ProfanityMatchRange[] =>
-  ranges.map(([start, end]) =>
-    Object.assign([start, end] as [number, number], { mode }),
-  );
-
-const textRangesForMode = (
-  ranges: readonly ProfanityMatchRange[],
-  mode: ProfanityMatchMode,
-): TextRange[] =>
-  ranges
-    .filter((range) => range.mode === mode)
-    .map(([start, end]) => [start, end]);
 
 export const profanityFilter = createProfanityFilter;
 export const filter = createProfanityFilter(STRICT_BASE, LOOSE_BASE);
