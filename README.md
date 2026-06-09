@@ -9,11 +9,11 @@ Textfilters is a small set of composable TypeScript text filtering primitives fo
 | Package | Repository | Status | Purpose |
 | --- | --- | --- | --- |
 | `@textfilters/core` | `textfilters/core` | `0.1.2` on GitHub Packages | Shared contracts and pipeline utilities. |
-| `@textfilters/url` | `textfilters/url` | `0.1.0` on GitHub Packages | URL and obfuscated-link filtering. |
+| `@textfilters/url` | `textfilters/url` | `0.1.2` on GitHub Packages | URL and obfuscated-link filtering. |
 | `@textfilters/phone` | `textfilters/phone` | `0.1.2` on GitHub Packages | Phone-like sequence filtering. |
-| `@textfilters/profanity` | `textfilters/profanity` | `0.1.0` on GitHub Packages | Profanity filtering primitives. |
+| `@textfilters/profanity` | `textfilters/profanity` | `0.1.2` on GitHub Packages | Profanity filtering primitives. |
 | `@textfilters/spam` | `textfilters/spam` | `0.1.2` on GitHub Packages | Lightweight in-memory spam guard primitives. |
-| `@textfilters/email` | `textfilters/email` | `0.2.2` on GitHub Packages | Email address and obfuscated-email filtering. |
+| `@textfilters/email` | `textfilters/email` | `0.2.4` on GitHub Packages | Email address and obfuscated-email filtering. |
 
 All current packages are published to GitHub Packages.
 
