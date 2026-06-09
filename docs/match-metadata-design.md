@@ -4,6 +4,9 @@ This document records the intended direction for future profanity match metadata
 It is design groundwork only: it does not add a public analysis API, category
 options, severity options, corpus changes, or matcher behavior changes.
 
+The taxonomy metadata rollout plan is tracked separately in
+[Profanity Taxonomy Metadata Plan](profanity-taxonomy-plan.md).
+
 ## Current State
 
 After the structured range refactor, `src/filter.ts` collects internal
