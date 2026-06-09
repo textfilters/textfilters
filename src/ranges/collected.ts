@@ -5,9 +5,14 @@ import type { CollectedProfanityRange } from "../matches/ranges.js";
 export const collectedRangeForPattern = (
   range: TextRange,
   pattern: CompiledPattern,
-): CollectedProfanityRange =>
-  pattern.ruleId === undefined
+): CollectedProfanityRange => {
+  const metadata = {
+    ...(pattern.ruleId === undefined ? {} : { ruleId: pattern.ruleId }),
+    ...(pattern.category === undefined ? {} : { category: pattern.category }),
+    ...(pattern.severity === undefined ? {} : { severity: pattern.severity }),
+  };
+
+  return Object.keys(metadata).length === 0
     ? range
-    : Object.assign([range[0], range[1]] as [number, number], {
-        ruleId: pattern.ruleId,
-      });
+    : Object.assign([range[0], range[1]] as [number, number], metadata);
+};

@@ -118,9 +118,47 @@ describe("internal profanity rules", () => {
     );
   });
 
-  it("carries built-in rule ids into internal strict and loose match ranges", () => {
-    const strictRule = createBuiltInProfanityRules(["bad"], "strict")[0]!;
-    const looseRule = createBuiltInProfanityRules(["bad"], "loose")[0]!;
+  it("preserves object rule taxonomy metadata in compiled strict patterns", () => {
+    const rule = createBuiltInProfanityRules(
+      [{ source: "bad", category: "STRONG_INSULT", severity: "medium" }],
+      "strict",
+    )[0]!;
+    const pattern = compileStrictInternalRulePatterns([rule])[0];
+
+    expect(pattern).toMatchObject({
+      ruleId: rule.id,
+      category: "STRONG_INSULT",
+      severity: "medium",
+    });
+    expect(pattern?.re.source).toBe("^(?:bad)$");
+  });
+
+  it("preserves object rule taxonomy metadata in compiled loose patterns", () => {
+    const rule = createBuiltInProfanityRules(
+      [{ source: "bad", category: "STRONG_INSULT", severity: "medium" }],
+      "loose",
+    )[0]!;
+    const pattern = compileLooseInternalRulePatterns([rule])[0];
+
+    expect(pattern).toMatchObject({
+      ruleId: rule.id,
+      category: "STRONG_INSULT",
+      severity: "medium",
+    });
+    expect(pattern?.re.source).toBe(
+      String.raw`b[^\p{L}\p{N}]*a[^\p{L}\p{N}]*d`,
+    );
+  });
+
+  it("carries built-in rule metadata into internal strict and loose match ranges", () => {
+    const strictRule = createBuiltInProfanityRules(
+      [{ source: "bad", category: "STRONG_INSULT", severity: "medium" }],
+      "strict",
+    )[0]!;
+    const looseRule = createBuiltInProfanityRules(
+      [{ source: "bad", category: "STRONG_INSULT", severity: "medium" }],
+      "loose",
+    )[0]!;
     const strictPatterns = buildStrictPatterns({
       internal: [strictRule],
       literals: [],
@@ -141,6 +179,8 @@ describe("internal profanity rules", () => {
       Object.assign([0, 3], {
         mode: PROFANITY_MATCH_MODE.STRICT,
         ruleId: strictRule.id,
+        category: "STRONG_INSULT",
+        severity: "medium",
       }),
     ]);
     expect(matchRangesForMode(looseRanges, PROFANITY_MATCH_MODE.LOOSE)).toEqual(
@@ -148,17 +188,24 @@ describe("internal profanity rules", () => {
         Object.assign([0, 5], {
           mode: PROFANITY_MATCH_MODE.LOOSE,
           ruleId: looseRule.id,
+          category: "STRONG_INSULT",
+          severity: "medium",
         }),
       ],
     );
   });
 
-  it("leaves runtime literal patterns and public behavior without rule metadata", () => {
-    expect(
-      compileStrictLiteralPatterns(["bad"], true)[0]?.ruleId,
-    ).toBeUndefined();
+  it("leaves runtime literal patterns without taxonomy metadata", () => {
+    const pattern = compileStrictLiteralPatterns(["bad"], true)[0];
 
+    expect(pattern?.ruleId).toBeUndefined();
+    expect(pattern?.category).toBeUndefined();
+    expect(pattern?.severity).toBeUndefined();
+  });
+
+  it("keeps public check and censor behavior unchanged", () => {
     const filter = createProfanityFilter(["bad"], ["evil"]);
+
     expect(filter.check("bad")).toBe(true);
     expect(filter.check("ok")).toBe(false);
     expect(filter.censor("bad e-v-i-l ok")).toBe("*** ******* ok");

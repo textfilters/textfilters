@@ -46,6 +46,8 @@ export const compileStrictInternalRulePatterns = (
     rules.map((rule) => ({
       source: rule.source,
       ruleId: rule.id,
+      ...(rule.category === undefined ? {} : { category: rule.category }),
+      ...(rule.severity === undefined ? {} : { severity: rule.severity }),
     })),
     true,
   );
@@ -57,6 +59,8 @@ export const compileLooseInternalRulePatterns = (
     rules.map((rule) => ({
       source: loosenInternalRuleSource(rule.source),
       ruleId: rule.id,
+      ...(rule.category === undefined ? {} : { category: rule.category }),
+      ...(rule.severity === undefined ? {} : { severity: rule.severity }),
     })),
     false,
     {
