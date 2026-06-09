@@ -25,6 +25,18 @@ describe("public API", () => {
     expect(createProfanityFilter().censor("привет блядь")).toBe("привет *****");
   });
 
+  it("keeps censor and check behavior stable through internal range metadata", () => {
+    const strict = createProfanityFilter(["bad"], []);
+    expect(strict.censor("bad ok")).toBe("*** ok");
+    expect(strict.check("bad ok")).toBe(true);
+    expect(strict.check("ok")).toBe(false);
+
+    const loose = createProfanityFilter([], ["bad"]);
+    expect(loose.censor("b-a-d ok")).toBe("***** ok");
+    expect(loose.check("b-a-d ok")).toBe(true);
+    expect(loose.check("ok")).toBe(false);
+  });
+
   it("supports runtime strict and loose dictionary replacement and extension", () => {
     const strict = createProfanityFilter(["fff"], []);
     expect(strict.censor("fff ggg")).toBe("*** ggg");

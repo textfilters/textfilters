@@ -22,8 +22,19 @@ interface FilterState {
 }
 
 interface ProfanityRanges {
-  readonly strict: TextRange[];
-  readonly loose: TextRange[];
+  readonly matches: ProfanityMatchRange[];
+}
+
+const PROFANITY_MATCH_MODE = {
+  STRICT: "strict",
+  LOOSE: "loose",
+} as const;
+
+type ProfanityMatchMode =
+  (typeof PROFANITY_MATCH_MODE)[keyof typeof PROFANITY_MATCH_MODE];
+
+interface ProfanityMatchRange extends TextRange {
+  readonly mode: ProfanityMatchMode;
 }
 
 export const createProfanityFilter = (
@@ -112,12 +123,16 @@ const appendRuntimeLiteralTerm = (
 
 const hasProfanity = (state: FilterState, text: string): boolean => {
   const ranges = collectProfanityRanges(state, text);
-  return ranges.strict.length > 0 || ranges.loose.length > 0;
+  return ranges.matches.length > 0;
 };
 
 const censorText = (state: FilterState, text: string): string => {
   const ranges = collectProfanityRanges(state, text);
-  return maskProfanityRanges(text, ranges.strict, ranges.loose);
+  return maskProfanityRanges(
+    text,
+    textRangesForMode(ranges.matches, PROFANITY_MATCH_MODE.STRICT),
+    textRangesForMode(ranges.matches, PROFANITY_MATCH_MODE.LOOSE),
+  );
 };
 
 const collectProfanityRanges = (
@@ -139,10 +154,28 @@ const collectProfanityRanges = (
   );
 
   return {
-    strict: strictRanges,
-    loose: looseRanges,
+    matches: [
+      ...matchRangesForMode(strictRanges, PROFANITY_MATCH_MODE.STRICT),
+      ...matchRangesForMode(looseRanges, PROFANITY_MATCH_MODE.LOOSE),
+    ],
   };
 };
+
+const matchRangesForMode = (
+  ranges: readonly TextRange[],
+  mode: ProfanityMatchMode,
+): ProfanityMatchRange[] =>
+  ranges.map(([start, end]) =>
+    Object.assign([start, end] as [number, number], { mode }),
+  );
+
+const textRangesForMode = (
+  ranges: readonly ProfanityMatchRange[],
+  mode: ProfanityMatchMode,
+): TextRange[] =>
+  ranges
+    .filter((range) => range.mode === mode)
+    .map(([start, end]) => [start, end]);
 
 export const profanityFilter = createProfanityFilter;
 export const filter = createProfanityFilter(STRICT_BASE, LOOSE_BASE);
