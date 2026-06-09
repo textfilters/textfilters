@@ -10,6 +10,7 @@ import {
   WORD_CHAR_RE,
 } from "../token-ranges.js";
 import { boundaryCheckedRange } from "./boundary.js";
+import { collectedRangeForPattern } from "./collected.js";
 import { knownHyphenatedSuffixRange } from "./hyphen-tail.js";
 import { forEachPatternMatch } from "./patterns.js";
 
@@ -29,7 +30,7 @@ export const collectLooseRanges = (
     const range = looseRange(normalized, start, end, pattern, patterns);
 
     if (range !== null) {
-      ranges.push(rangeForPattern(range, pattern));
+      ranges.push(collectedRangeForPattern(range, pattern));
     }
   });
 
@@ -164,13 +165,3 @@ const containsNonSplitWordChar = (
   }
   return false;
 };
-
-const rangeForPattern = (
-  range: TextRange,
-  pattern: CompiledPattern,
-): CollectedProfanityRange =>
-  pattern.ruleId === undefined
-    ? range
-    : Object.assign([range[0], range[1]] as [number, number], {
-        ruleId: pattern.ruleId,
-      });

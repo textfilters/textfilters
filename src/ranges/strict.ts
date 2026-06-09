@@ -1,4 +1,3 @@
-import type { TextRange } from "@textfilters/core";
 import type { StrictPatternSet } from "../matchers/build.js";
 import type { CompiledPattern } from "../matchers/compile.js";
 import { patternMatches } from "../matchers/compile.js";
@@ -6,6 +5,7 @@ import type { CollectedProfanityRange } from "../matches/ranges.js";
 import { nextCodePointEnd } from "../normalization/text.js";
 import { WHITESPACE_RE, WORD_CHAR_RE, WORD_RE } from "../token-ranges.js";
 import { boundaryCheckedRange } from "./boundary.js";
+import { collectedRangeForPattern } from "./collected.js";
 import { forEachPatternMatch } from "./patterns.js";
 
 export const collectStrictRanges = (
@@ -37,7 +37,7 @@ const collectWordRanges = (
       match.index + match[0].length,
     );
     if (range !== null) {
-      ranges.push(rangeForPattern(range, pattern));
+      ranges.push(collectedRangeForPattern(range, pattern));
     }
   }
 };
@@ -63,7 +63,9 @@ const collectSymbolRanges = (
           normalized.slice(rangeStart, rangeEnd),
         );
         if (pattern !== null) {
-          ranges.push(rangeForPattern([rangeStart, rangeEnd], pattern));
+          ranges.push(
+            collectedRangeForPattern([rangeStart, rangeEnd], pattern),
+          );
         }
       }
     }
@@ -82,7 +84,7 @@ const collectPhraseRanges = (
       boundaryCheckedRange(normalized, start, end) !== null ||
       !containsWordChar(normalized, start, end)
     ) {
-      ranges.push(rangeForPattern([start, end], pattern));
+      ranges.push(collectedRangeForPattern([start, end], pattern));
     }
   });
 
@@ -95,16 +97,6 @@ const findMatchingTokenPattern = (
   }
   return null;
 };
-
-const rangeForPattern = (
-  range: TextRange,
-  pattern: CompiledPattern,
-): CollectedProfanityRange =>
-  pattern.ruleId === undefined
-    ? range
-    : Object.assign([range[0], range[1]] as [number, number], {
-        ruleId: pattern.ruleId,
-      });
 
 const containsWordChar = (
   normalized: string,
