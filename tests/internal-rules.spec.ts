@@ -17,8 +17,81 @@ import {
   compileStrictInternalRulePatterns,
   createBuiltInProfanityRules,
 } from "../src/matchers/internal-rules.js";
+import { LOOSE_BASE } from "../src/terms/loose-base.js";
+import { STRICT_BASE } from "../src/terms/strict-base.js";
+import type { InternalProfanityRuleDefinition } from "../src/matchers/internal-rules.js";
+import type {
+  ProfanityCategory,
+  ProfanitySeverity,
+} from "../src/taxonomy/types.js";
+
+const ALLOWED_PROFANITY_CATEGORIES = [
+  "OBSCENE_MAT",
+  "STRONG_INSULT",
+  "VULGAR",
+  "EUPHEMISM",
+] as const satisfies readonly ProfanityCategory[];
+
+const ALLOWED_PROFANITY_SEVERITIES = [
+  "high",
+  "medium",
+  "low",
+  "soft",
+] as const satisfies readonly ProfanitySeverity[];
+
+const ALLOWED_PROFANITY_CATEGORY_SET = new Set<unknown>(
+  ALLOWED_PROFANITY_CATEGORIES,
+);
+
+const ALLOWED_PROFANITY_SEVERITY_SET = new Set<unknown>(
+  ALLOWED_PROFANITY_SEVERITIES,
+);
+
+const BUILT_IN_RULE_DEFINITION_SETS = [
+  { corpus: "strict", definitions: STRICT_BASE },
+  { corpus: "loose", definitions: LOOSE_BASE },
+] as const satisfies readonly {
+  readonly corpus: "strict" | "loose";
+  readonly definitions: readonly InternalProfanityRuleDefinition[];
+}[];
+
+const isObjectRuleDefinition = (
+  definition: InternalProfanityRuleDefinition,
+): definition is Extract<InternalProfanityRuleDefinition, { source: string }> =>
+  typeof definition === "object" && definition !== null;
 
 describe("internal profanity rules", () => {
+  it("keeps internal object rule metadata within the allowed taxonomy", () => {
+    const invalidDefinitions = BUILT_IN_RULE_DEFINITION_SETS.flatMap(
+      ({ corpus, definitions }) =>
+        definitions.flatMap((definition, index) => {
+          if (!isObjectRuleDefinition(definition)) {
+            return [];
+          }
+
+          const failures = [];
+
+          if (definition.source.length === 0) {
+            failures.push("source");
+          }
+
+          if (!ALLOWED_PROFANITY_CATEGORY_SET.has(definition.category)) {
+            failures.push("category");
+          }
+
+          if (!ALLOWED_PROFANITY_SEVERITY_SET.has(definition.severity)) {
+            failures.push("severity");
+          }
+
+          return failures.length === 0
+            ? []
+            : [{ corpus, index, failures, definition }];
+        }),
+    );
+
+    expect(invalidDefinitions).toEqual([]);
+  });
+
   it("creates deterministic built-in rule ids from corpus, index, and source", () => {
     const sources = ["first", "second"];
     const firstPass = createBuiltInProfanityRules(sources, "strict");
