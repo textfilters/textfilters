@@ -98,6 +98,8 @@ const looseTailMatchEnd = (
   const range = looseRange(normalized, start, end, pattern, patterns, false);
   if (range !== null) return range[1];
 
+  // Hyphen-tail rescans a suffix slice. If a loose match starts after a split
+  // character, evaluate that segment as if it were the start of the suffix.
   if (start === 0 || SPLIT_TOKEN_CHAR_RE.test(normalized[start - 1] ?? "")) {
     const segmentRange = looseRange(
       normalized.slice(start),

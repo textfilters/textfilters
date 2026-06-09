@@ -43,6 +43,8 @@ export const knownHyphenatedSuffixRange = (
   }
 
   const tailTokenEnd = wordRunEnd(normalized, tailStart);
+  // Scan beyond the immediate tail token so separated profane tails such as
+  // `prefix-e6 ... phrase` stay masked instead of exposing the later words.
   const scanEnd = hyphenTailScanEnd(normalized, tailTokenEnd);
   const profaneTailEnd = profanityTailEnd(
     normalized.slice(tailStart, scanEnd),
@@ -90,6 +92,8 @@ const profanityTailEnd = (
         pattern,
         patterns,
       );
+      // A loose match that starts after the first tail token should not make a
+      // neutral compound tail disappear.
       if (tailEnd !== null && match.index < tailTokenLength) {
         profaneEnd = Math.max(profaneEnd ?? 0, tailTokenLength, tailEnd);
       }

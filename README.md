@@ -18,24 +18,85 @@ npm install @textfilters/core @textfilters/profanity
 
 ## Usage
 
+### Quick Start
+
 ```ts
-import { filter } from "@textfilters/profanity";
+import { createProfanityFilter, filter } from "@textfilters/profanity";
 
 const safeText = filter.censor("message text");
+const hasProfanity = filter.check("message text");
+
+const tenantFilter = createProfanityFilter(["strict-term"], ["loose-term"]);
+const tenantSafeText = tenantFilter.censor("message text");
 ```
+
+The default shared instance is exported as `filter` and uses the built-in strict
+and loose term lists. It is mutable through `setStrict`, `setLoose`,
+`addStrict`, and `addLoose`, so changes affect later calls that use the same
+shared instance.
+
+Use `createProfanityFilter(...)` when per-request, per-tenant, or test-local
+dictionaries must be isolated from the shared mutable `filter`.
+
+## API
+
+### `filter.censor(text): string`
+
+Returns a censored copy of `text`. Matching is performed on a normalized
+same-length copy of the input, and mask ranges are applied back to the original
+UTF-16 string.
+
+### `filter.check(text): boolean`
+
+Returns `true` when the current filter instance would censor at least one range.
+Use this when a boolean moderation decision is enough and the masked text is not
+needed.
+
+### `createProfanityFilter(strict?, loose?): ProfanityFilter`
+
+Creates a new mutable filter instance. Without arguments it uses the built-in
+strict and loose dictionaries. Passing arrays replaces that side with runtime
+dictionary terms:
 
 ```ts
-import { createProfanityFilter } from "@textfilters/profanity";
-
-const profanity = createProfanityFilter(["strict-term"], ["loose-term"]);
-const safeText = profanity.censor("message text");
+const strictOnly = createProfanityFilter(["blocked"], []);
+const looseOnly = createProfanityFilter([], ["banned"]);
+const builtIn = createProfanityFilter();
 ```
 
-The default shared instance is exported as `filter` and uses the built-in strict and loose term lists. It is mutable through `setStrict`, `setLoose`, `addStrict`, and `addLoose`, so create an isolated instance with `createProfanityFilter(...)` when per-request or per-tenant dictionaries are needed. All instances have stable `name: "profanity"`.
+All filter instances expose stable `name: "profanity"` plus `check`, `censor`,
+`setStrict`, `setLoose`, `addStrict`, and `addLoose`.
 
-Use `filter.check(text)` or `createProfanityFilter(...).check(text)` when only a boolean profanity result is needed.
+## Strict Vs Loose
 
-Runtime dictionary terms are normalized literals, not regular expressions. The built-in corpus may use controlled internal rules, but tenant or request-level dictionaries should pass the exact terms they want to match.
+| Mode   | Runtime term example | Matches                          | Does not match              |
+| ------ | -------------------- | -------------------------------- | --------------------------- |
+| Strict | `bad`                | `bad` as a full normalized token | `badminton`, `_bad`, `-bad` |
+| Loose  | `bad`                | `bad`, `b-a-d`, `b a d`          | prefixes inside words       |
+
+Strict matching is token-oriented. Loose matching allows separators between
+letters, then still applies token-boundary checks before masking.
+
+## Runtime Dictionary Terms
+
+Runtime dictionary terms are normalized literals, not regular expressions. A
+term such as `foo|bar` matches the literal text `foo|bar`, not `foo` or `bar`.
+Escaped punctuation from older literal spellings is accepted, so `foo\\.bar`
+matches the literal text `foo.bar`.
+
+The built-in corpus is different: package-owned data may use controlled internal
+rules to represent existing behavior compactly. That internal rule syntax is not
+part of the public API and is not applied to runtime dictionaries.
+
+## Known Limitations And Behavior Notes
+
+- Censored output preserves JavaScript string length, including astral code
+  points.
+- Ranges are UTF-16 offsets into the original source string.
+- Runtime dictionaries do not support caller-provided regular expressions.
+- The shared `filter` instance is mutable; use `createProfanityFilter()` for
+  isolated state.
+- Built-in corpus behavior is intentionally locked by compatibility tests.
 
 ## Compatibility And Intentional Changes
 
@@ -53,6 +114,10 @@ Intentional public-package changes:
 ## Architecture
 
 See [the architecture guide](docs/architecture.md) for the matching pipeline, Mermaid diagrams, and the rationale behind the strict separation between runtime literals and internal corpus rules.
+
+See [the invariants guide](docs/invariants.md) for a short maintenance checklist
+covering normalization, source ranges, boundaries, loose matching, false-positive
+locks, and hyphen-tail behavior.
 
 ## Release
 

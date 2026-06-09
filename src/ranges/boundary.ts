@@ -32,6 +32,8 @@ export const boundaryCheckedRange = (
     return [start, end];
   }
 
+  // Two-token matches are allowed only when both edge tokens are fully covered;
+  // this preserves phrase matches without accepting arbitrary token fragments.
   return coversToken(start, Math.min(end, leftEnd), leftStart, leftEnd) &&
     coversToken(Math.max(start, rightStart), end, rightStart, rightEnd)
     ? [start, end]
