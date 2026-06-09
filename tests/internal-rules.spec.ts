@@ -195,6 +195,69 @@ describe("internal profanity rules", () => {
     );
   });
 
+  it("propagates representative object rule taxonomy metadata through match ranges", () => {
+    const cases = [
+      {
+        mode: PROFANITY_MATCH_MODE.STRICT,
+        input: "alpha",
+        source: "alpha",
+        category: "OBSCENE_MAT",
+        severity: "high",
+        expectedRange: [0, 5],
+      },
+      {
+        mode: PROFANITY_MATCH_MODE.LOOSE,
+        input: "b-e-t-a",
+        source: "beta",
+        category: "EUPHEMISM",
+        severity: "soft",
+        expectedRange: [0, 7],
+      },
+    ] as const;
+
+    for (const testCase of cases) {
+      const rule = createBuiltInProfanityRules(
+        [
+          {
+            source: testCase.source,
+            category: testCase.category,
+            severity: testCase.severity,
+          },
+        ],
+        testCase.mode,
+      )[0]!;
+      const strictPatterns = buildStrictPatterns({
+        internal: testCase.mode === PROFANITY_MATCH_MODE.STRICT ? [rule] : [],
+        literals: [],
+      });
+      const loosePatterns = buildLoosePatterns({
+        internal: testCase.mode === PROFANITY_MATCH_MODE.LOOSE ? [rule] : [],
+        literals: [],
+      });
+      const ranges = [];
+
+      if (testCase.mode === PROFANITY_MATCH_MODE.STRICT) {
+        collectStrictRanges(testCase.input, strictPatterns, ranges);
+      } else {
+        collectLooseRanges(
+          testCase.input,
+          loosePatterns,
+          strictPatterns,
+          ranges,
+        );
+      }
+
+      expect(matchRangesForMode(ranges, testCase.mode)).toEqual([
+        Object.assign([...testCase.expectedRange], {
+          mode: testCase.mode,
+          ruleId: rule.id,
+          category: testCase.category,
+          severity: testCase.severity,
+        }),
+      ]);
+    }
+  });
+
   it("leaves runtime literal patterns without taxonomy metadata", () => {
     const pattern = compileStrictLiteralPatterns(["bad"], true)[0];
 
