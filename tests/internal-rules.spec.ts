@@ -40,6 +40,66 @@ describe("internal profanity rules", () => {
     ]);
   });
 
+  it("keeps string built-in rule definitions compatible with the original rule shape", () => {
+    expect(createBuiltInProfanityRules(["first", "second"], "strict")).toEqual([
+      { id: "builtin:strict:0:0k495j5", source: "first" },
+      { id: "builtin:strict:1:1bps3bx", source: "second" },
+    ]);
+  });
+
+  it("preserves object built-in rule metadata without changing source-based ids", () => {
+    expect(
+      createBuiltInProfanityRules(
+        [
+          {
+            source: "first",
+            category: "OBSCENE_MAT",
+            severity: "high",
+          },
+          {
+            source: "second",
+            category: "VULGAR",
+            severity: "low",
+          },
+        ],
+        "strict",
+      ),
+    ).toEqual([
+      {
+        id: "builtin:strict:0:0k495j5",
+        source: "first",
+        category: "OBSCENE_MAT",
+        severity: "high",
+      },
+      {
+        id: "builtin:strict:1:1bps3bx",
+        source: "second",
+        category: "VULGAR",
+        severity: "low",
+      },
+    ]);
+  });
+
+  it("uses object source values for deterministic ids and compiled match behavior", () => {
+    const stringRule = createBuiltInProfanityRules(["bad"], "strict")[0]!;
+    const objectRule = createBuiltInProfanityRules(
+      [{ source: "bad", category: "STRONG_INSULT", severity: "medium" }],
+      "strict",
+    )[0]!;
+    const objectLooseRule = createBuiltInProfanityRules(
+      [{ source: "bad", category: "STRONG_INSULT", severity: "medium" }],
+      "loose",
+    )[0]!;
+
+    expect(objectRule.id).toBe(stringRule.id);
+    expect(compileStrictInternalRulePatterns([objectRule])[0]?.re.source).toBe(
+      "^(?:bad)$",
+    );
+    expect(
+      compileLooseInternalRulePatterns([objectLooseRule])[0]?.re.source,
+    ).toBe(String.raw`b[^\p{L}\p{N}]*a[^\p{L}\p{N}]*d`);
+  });
+
   it("threads built-in rule ids through compiled strict and loose patterns", () => {
     const strictRule = createBuiltInProfanityRules(["bad"], "strict")[0];
     const looseRule = createBuiltInProfanityRules(["bad"], "loose")[0];

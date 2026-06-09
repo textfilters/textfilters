@@ -18,14 +18,26 @@ export interface InternalProfanityRule {
   readonly severity?: ProfanitySeverity;
 }
 
+export type InternalProfanityRuleDefinition =
+  | string
+  | {
+      readonly source: string;
+      readonly category?: ProfanityCategory;
+      readonly severity?: ProfanitySeverity;
+    };
+
 export const createBuiltInProfanityRules = (
-  sources: readonly string[],
+  definitions: readonly InternalProfanityRuleDefinition[],
   corpus: "strict" | "loose",
 ): InternalProfanityRule[] =>
-  sources.map((source, index) => ({
-    id: `builtin:${corpus}:${index}:${stableRuleSourceHash(source)}`,
-    source,
-  }));
+  definitions.map((definition, index) => {
+    const rule = builtInRuleDefinitionToRule(definition);
+
+    return {
+      id: `builtin:${corpus}:${index}:${stableRuleSourceHash(rule.source)}`,
+      ...rule,
+    };
+  });
 
 export const compileStrictInternalRulePatterns = (
   rules: readonly InternalProfanityRule[],
@@ -62,6 +74,21 @@ const stableRuleSourceHash = (source: string): string => {
 
   return (hash >>> 0).toString(36).padStart(7, "0");
 };
+
+const builtInRuleDefinitionToRule = (
+  definition: InternalProfanityRuleDefinition,
+): Omit<InternalProfanityRule, "id"> =>
+  typeof definition === "string"
+    ? { source: definition }
+    : {
+        source: definition.source,
+        ...(definition.category === undefined
+          ? {}
+          : { category: definition.category }),
+        ...(definition.severity === undefined
+          ? {}
+          : { severity: definition.severity }),
+      };
 
 const loosenInternalRuleSource = (source: string): string => {
   if (source === "бля[дт](?:[а-яё]+)?") {
