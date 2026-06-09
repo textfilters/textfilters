@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.2](https://github.com/textfilters/url/compare/v0.1.1...v0.1.2) (2026-06-09)
+
+
+### Bug Fixes
+
+* expanded URL coverage ([43973f0](https://github.com/textfilters/url/commit/43973f00bfbf44c68ba13c4ef3fa02be7e93e3e1))
+
 ## [0.1.1](https://github.com/textfilters/url/compare/v0.1.0...v0.1.1) (2026-06-08)
 
 
