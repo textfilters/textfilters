@@ -28,8 +28,8 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "test": "vitest run",
-    "lint": "prettier README.md docs package.json src --check",
-    "format": "prettier README.md docs package.json src --write",
+    "lint": "prettier README.md docs package.json src tests --check",
+    "format": "prettier README.md docs package.json src tests --write",
     "pack:dry-run": "npm pack --dry-run",
     "check": "npm run lint && npm test && npm run build && npm run pack:dry-run"
   },

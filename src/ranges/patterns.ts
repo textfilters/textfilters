@@ -4,7 +4,7 @@ import { nextCodePointEnd } from "../normalization/text.js";
 export const forEachPatternMatch = (
   normalized: string,
   patterns: readonly CompiledPattern[],
-  visit: (start: number, end: number) => void,
+  visit: (start: number, end: number, pattern: CompiledPattern) => void,
 ): void => {
   for (const pattern of patterns) {
     pattern.re.lastIndex = 0;
@@ -20,7 +20,7 @@ export const forEachPatternMatch = (
         continue;
       }
 
-      visit(match.index, end);
+      visit(match.index, end, pattern);
     }
   }
 };

@@ -126,7 +126,12 @@ const collectRanges = (
   const looseRanges: TextRange[] = [];
 
   collectStrictRanges(normalized, state.strictPatterns, strictRanges);
-  collectLooseRanges(normalized, state.loosePatterns, looseRanges);
+  collectLooseRanges(
+    normalized,
+    state.loosePatterns,
+    state.strictPatterns,
+    looseRanges,
+  );
 
   return [strictRanges, looseRanges];
 };

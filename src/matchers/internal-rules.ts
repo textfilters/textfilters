@@ -14,7 +14,9 @@ export const compileStrictInternalRulePatterns = (
 export const compileLooseInternalRulePatterns = (
   sources: readonly string[],
 ): CompiledPattern[] =>
-  compilePatternSources(sources.map(loosenInternalRuleSource), false);
+  compilePatternSources(sources.map(loosenInternalRuleSource), false, {
+    trimHyphenTail: true,
+  });
 
 const loosenInternalRuleSource = (source: string): string => {
   if (source === "бля[дт](?:[а-яё]+)?") {
@@ -45,6 +47,10 @@ const loosenInternalRuleSource = (source: string): string => {
 const loosenRuleAtom = (atom: RuleAtom): string => {
   if (isOptionalSuffixAtom(atom)) {
     return loosenOptionalSuffix(atom);
+  }
+
+  if (isRepeatedSingleAtom(atom)) {
+    return `${atom.base}(?:${LOOSE_SEPARATOR}${atom.base})*`;
   }
 
   if (isPlainGroup(atom.base)) {
@@ -79,3 +85,6 @@ const loosenGroup = (atom: RuleAtom): string => {
 
 const isPlainGroup = (source: string): boolean =>
   source.startsWith("(") && !/^\(\?<?[=!]/u.test(source);
+
+const isRepeatedSingleAtom = (atom: RuleAtom): boolean =>
+  atom.source === `${atom.base}+` && Array.from(atom.base).length === 1;
