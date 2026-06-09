@@ -27,10 +27,6 @@ interface FilterState {
   loosePatterns: CompiledPattern[];
 }
 
-interface ProfanityRanges {
-  readonly matches: ProfanityMatchRange[];
-}
-
 export const createProfanityFilter = (
   strictTerms: ProfanityTermList = STRICT_BASE,
   looseTerms: ProfanityTermList = LOOSE_BASE,
@@ -116,23 +112,23 @@ const appendRuntimeLiteralTerm = (
 });
 
 const hasProfanity = (state: FilterState, text: string): boolean => {
-  const ranges = collectProfanityRanges(state, text);
-  return ranges.matches.length > 0;
+  const matches = collectProfanityMatches(state, text);
+  return matches.length > 0;
 };
 
 const censorText = (state: FilterState, text: string): string => {
-  const ranges = collectProfanityRanges(state, text);
+  const matches = collectProfanityMatches(state, text);
   return maskProfanityRanges(
     text,
-    textRangesForMode(ranges.matches, PROFANITY_MATCH_MODE.STRICT),
-    textRangesForMode(ranges.matches, PROFANITY_MATCH_MODE.LOOSE),
+    textRangesForMode(matches, PROFANITY_MATCH_MODE.STRICT),
+    textRangesForMode(matches, PROFANITY_MATCH_MODE.LOOSE),
   );
 };
 
-const collectProfanityRanges = (
+const collectProfanityMatches = (
   state: FilterState,
   text: string,
-): ProfanityRanges => {
+): ProfanityMatchRange[] => {
   // Normalization is same-length, so ranges collected from the normalized string
   // can be applied directly to the original source string.
   const normalized = normalizeForMatchSameLen(text);
@@ -147,12 +143,10 @@ const collectProfanityRanges = (
     looseRanges,
   );
 
-  return {
-    matches: [
-      ...matchRangesForMode(strictRanges, PROFANITY_MATCH_MODE.STRICT),
-      ...matchRangesForMode(looseRanges, PROFANITY_MATCH_MODE.LOOSE),
-    ],
-  };
+  return [
+    ...matchRangesForMode(strictRanges, PROFANITY_MATCH_MODE.STRICT),
+    ...matchRangesForMode(looseRanges, PROFANITY_MATCH_MODE.LOOSE),
+  ];
 };
 
 export const profanityFilter = createProfanityFilter;
