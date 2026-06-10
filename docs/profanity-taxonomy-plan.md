@@ -1,26 +1,61 @@
 # Profanity Taxonomy Metadata Plan
 
-This document records the planned taxonomy metadata work for issue #3 before any
-corpus, schema, or public API changes are made.
+This document records the planned taxonomy metadata work for issue #3 and the
+next public-facing exposure step before any public API changes are made.
 
 It is documentation and design only. It does not change the built-in corpus,
 matcher behavior, public exports, package version, or release contents.
 
 ## Current Internal State
 
-After PRs #17 through #19, the package has the internal groundwork needed to add
-taxonomy metadata without changing the current public behavior:
+After PRs #20 through #27, the package has the internal groundwork needed to
+carry taxonomy metadata without changing the current public behavior:
 
 - accepted match ranges carry the matcher mode that found them;
 - built-in rules have deterministic internal rule ids;
 - internal match ranges can carry the originating rule id;
+- internal taxonomy types define the current category and severity vocabulary;
+- built-in rules can be represented as object definitions with internal
+  taxonomy metadata;
+- compile, collect, and match range helpers preserve rule identity and taxonomy
+  metadata where it is present;
+- internal metadata access is centralized so callers do not need to know the
+  physical rule shape;
+- invariant tests cover the allowed taxonomy values, metadata propagation, and
+  mixed string/object internal rule definitions;
 - shared helpers collect profanity ranges for `check()` and `censor()`;
 - the public API remains limited to the existing boolean, censoring, and mutable
   dictionary methods.
 
 The current internal metadata answers where a match was found, how it was found,
-and which internal rule produced it. It does not yet classify what kind of
-profanity the rule represents.
+which internal rule produced it, and what taxonomy metadata is attached to that
+rule. That metadata is still internal implementation detail: it is not exported
+from the package entrypoint, is not documented as public API, and is not present
+in corpus JSON.
+
+## Proposed Public-Facing Goal
+
+The next public-facing phase should define the smallest stable contract needed
+to expose taxonomy metadata without changing default filtering behavior.
+
+The proposed goal is to make metadata available through a future opt-in analysis
+surface while keeping `check()` and `censor()` behavior unchanged. Public
+exposure should describe facts about accepted matches, not prescribe final
+moderation policy.
+
+The future public scope may include:
+
+- exported metadata types for category, severity, and match mode;
+- documented match range metadata that can carry category and severity for
+  built-in rules;
+- examples showing how callers can inspect taxonomy metadata while preserving
+  their own policy decisions;
+- guidance for runtime literal terms whose metadata is absent or explicitly
+  caller-provided in a later API.
+
+Public exposure should remain separate from corpus conversion. The first public
+implementation should prove the API shape and compatibility behavior before
+moving all built-in terms to public corpus metadata.
 
 ## Why Category And Severity Are Needed
 
@@ -135,6 +170,48 @@ analysis results expose taxonomy fields as always present.
 5. Add public `analyze()` only later, in a separate `feat:` pull request after
    taxonomy shape, runtime literal behavior, sorting, overlap handling, and
    compatibility expectations are settled.
+
+## Compatibility Rules
+
+- Existing `check()` and `censor()` calls must keep their current default
+  behavior and return types.
+- Existing mutable dictionary methods must keep accepting the same string term
+  inputs.
+- Taxonomy metadata must stay additive and opt-in until a public analysis API is
+  introduced.
+- Public names must be stable once exported. Renaming categories, severities, or
+  match metadata fields after export should be treated as a breaking change.
+- Match ranges exposed publicly must continue to use UTF-16 offsets into the
+  caller's original input.
+- Runtime literal terms must not be silently assigned misleading taxonomy
+  metadata. If metadata is unavailable, the public contract should say so
+  explicitly.
+
+## Semver And Release Implications
+
+The current documentation-only plan does not require a package version change,
+lockfile update, or release.
+
+A later implementation that exports new metadata types or adds a new opt-in
+analysis API should be released as a minor version, provided existing behavior
+and exports remain backward compatible.
+
+Any implementation that changes existing return types, narrows default matching,
+changes `censor()` output, renames already exported metadata values, or requires
+callers to pass new options for current behavior would be a breaking change.
+
+## Non-Goals For The Next Implementation PR
+
+The next implementation PR should not:
+
+- change `check()` or `censor()` runtime behavior;
+- change the existing public mutable dictionary methods;
+- convert the corpus JSON to public metadata objects;
+- change package version, lockfile, or release configuration;
+- expose package internals that are not part of the intended public contract;
+- solve final policy decisions for slurs, ambiguous terms, or product-specific
+  moderation thresholds;
+- make release or publication changes.
 
 ## Relationship To Match Metadata
 
