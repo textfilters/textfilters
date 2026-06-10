@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0](https://github.com/textfilters/profanity/compare/v0.2.0...v0.3.0) (2026-06-10)
+
+
+### Features
+
+* expose taxonomy metadata on matches ([da19dce](https://github.com/textfilters/profanity/commit/da19dce74ec420844067bb49f833a9416dbb0a7e))
+
 ## [0.2.0](https://github.com/textfilters/profanity/compare/v0.1.2...v0.2.0) (2026-06-10)
 
 
