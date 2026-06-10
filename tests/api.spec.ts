@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, expectTypeOf, it } from "vitest";
 
 import {
   createProfanityFilter,
@@ -6,10 +6,24 @@ import {
   PROFANITY_FILTER_NAME,
   profanityFilter,
 } from "../src/index.js";
+import type {
+  ProfanityCategory,
+  ProfanitySeverity,
+  ProfanityTaxonomyMetadata,
+} from "../src/index.js";
 
 import { mask } from "./helpers.js";
 
 describe("public API", () => {
+  it("exports taxonomy metadata types from the public entrypoint", () => {
+    expectTypeOf<"OBSCENE_MAT">().toExtend<ProfanityCategory>();
+    expectTypeOf<"soft">().toExtend<ProfanitySeverity>();
+    expectTypeOf<ProfanityTaxonomyMetadata>().toEqualTypeOf<{
+      readonly category?: ProfanityCategory;
+      readonly severity?: ProfanitySeverity;
+    }>();
+  });
+
   it("exposes the default instance and the compatible factory alias", () => {
     expect(filter.name).toBe(PROFANITY_FILTER_NAME);
     expect(profanityFilter(["fff"], []).censor("fff ggg")).toBe("*** ggg");

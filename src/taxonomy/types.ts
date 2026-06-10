@@ -1,7 +1,5 @@
-export type ProfanityCategory =
-  | "OBSCENE_MAT"
-  | "STRONG_INSULT"
-  | "VULGAR"
-  | "EUPHEMISM";
-
-export type ProfanitySeverity = "high" | "medium" | "low" | "soft";
+export type {
+  ProfanityCategory,
+  ProfanitySeverity,
+  ProfanityTaxonomyMetadata,
+} from "../types.js";
