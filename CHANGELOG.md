@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.0](https://github.com/textfilters/profanity/compare/v0.1.2...v0.2.0) (2026-06-10)
+
+
+### Features
+
+* export taxonomy metadata types ([da612be](https://github.com/textfilters/profanity/commit/da612be785f510b679dbe593cc2c081121ac4795))
+
 ## [0.1.2](https://github.com/textfilters/profanity/compare/v0.1.1...v0.1.2) (2026-06-09)
 
 
