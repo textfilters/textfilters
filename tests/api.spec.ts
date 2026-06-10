@@ -87,15 +87,33 @@ describe("public API", () => {
   });
 
   it("keeps legacy string-backed public match output compatible", () => {
-    const strict = createProfanityFilter(["абв"], []);
-    const match = strict.analyze("абв ok")[0];
+    const cases = [
+      {
+        filter: createProfanityFilter(["абв"], []),
+        input: "абв ok",
+        expectedMatch: Object.assign([0, 3], { mode: "strict" }),
+        expectedCensored: "*** ok",
+      },
+      {
+        filter: createProfanityFilter([], ["абв"]),
+        input: "а-б-в ok",
+        expectedMatch: Object.assign([0, 5], { mode: "loose" }),
+        expectedCensored: "***** ok",
+      },
+    ] as const;
 
-    expect(match).toEqual(Object.assign([0, 3], { mode: "strict" }));
-    expect(match?.ruleId).toBeUndefined();
-    expect(match?.category).toBeUndefined();
-    expect(match?.severity).toBeUndefined();
-    expect(strict.censor("абв ok")).toBe("*** ok");
-    expect(strict.check("абв ok")).toBe(true);
+    for (const testCase of cases) {
+      const match = testCase.filter.analyze(testCase.input)[0];
+
+      expect(match).toEqual(testCase.expectedMatch);
+      expect(match?.ruleId).toBeUndefined();
+      expect(match?.category).toBeUndefined();
+      expect(match?.severity).toBeUndefined();
+      expect(testCase.filter.censor(testCase.input)).toBe(
+        testCase.expectedCensored,
+      );
+      expect(testCase.filter.check(testCase.input)).toBe(true);
+    }
   });
 
   it("supports object-backed terms through mutable dictionary methods", () => {
