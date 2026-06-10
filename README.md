@@ -59,6 +59,22 @@ for (const match of matches) {
 `category` and `severity` are present when the matched rule has taxonomy
 metadata. Runtime string terms remain unclassified and omit those fields.
 
+For taxonomy-backed rules, runtime match output includes the available metadata:
+
+```ts
+const strict = createProfanityFilter(
+  [{ source: "абв", category: "STRONG_INSULT", severity: "medium" }],
+  [],
+);
+
+strict.analyze("абв ok");
+// [Object.assign([0, 3], {
+//   mode: "strict",
+//   category: "STRONG_INSULT",
+//   severity: "medium",
+// })]
+```
+
 ### `filter.censor(text): string`
 
 Returns a censored copy of `text`. Matching is performed on a normalized
