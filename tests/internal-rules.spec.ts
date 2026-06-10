@@ -153,6 +153,80 @@ describe("internal profanity rules", () => {
     ]);
   });
 
+  it("keeps mixed string and object rule definitions compatible through match ranges", () => {
+    const cases = [
+      {
+        mode: PROFANITY_MATCH_MODE.STRICT,
+        input: "legacy meta",
+        expectedRanges: [
+          [0, 6],
+          [7, 11],
+        ],
+      },
+      {
+        mode: PROFANITY_MATCH_MODE.LOOSE,
+        input: "l-e-g-a-c-y m-e-t-a",
+        expectedRanges: [
+          [0, 11],
+          [12, 19],
+        ],
+      },
+    ] as const;
+
+    for (const testCase of cases) {
+      const [legacyRule, objectRule] = createBuiltInProfanityRules(
+        [
+          "legacy",
+          {
+            source: "meta",
+            category: "OBSCENE_MAT",
+            severity: "high",
+          },
+        ],
+        testCase.mode,
+      );
+      const strictPatterns = buildStrictPatterns({
+        internal:
+          testCase.mode === PROFANITY_MATCH_MODE.STRICT
+            ? [legacyRule!, objectRule!]
+            : [],
+        literals: [],
+      });
+      const loosePatterns = buildLoosePatterns({
+        internal:
+          testCase.mode === PROFANITY_MATCH_MODE.LOOSE
+            ? [legacyRule!, objectRule!]
+            : [],
+        literals: [],
+      });
+      const ranges = [];
+
+      if (testCase.mode === PROFANITY_MATCH_MODE.STRICT) {
+        collectStrictRanges(testCase.input, strictPatterns, ranges);
+      } else {
+        collectLooseRanges(
+          testCase.input,
+          loosePatterns,
+          strictPatterns,
+          ranges,
+        );
+      }
+
+      expect(matchRangesForMode(ranges, testCase.mode)).toEqual([
+        Object.assign([...testCase.expectedRanges[0]], {
+          mode: testCase.mode,
+          ruleId: legacyRule!.id,
+        }),
+        Object.assign([...testCase.expectedRanges[1]], {
+          mode: testCase.mode,
+          ruleId: objectRule!.id,
+          category: "OBSCENE_MAT",
+          severity: "high",
+        }),
+      ]);
+    }
+  });
+
   it("uses object source values for deterministic ids and compiled match behavior", () => {
     const stringRule = createBuiltInProfanityRules(["bad"], "strict")[0]!;
     const objectRule = createBuiltInProfanityRules(
