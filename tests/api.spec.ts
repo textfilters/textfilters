@@ -67,14 +67,21 @@ describe("public API", () => {
       [{ source: "абв", category: "STRONG_INSULT", severity: "medium" }],
       [],
     );
+    const match = strict.analyze("абв ok")[0];
+    const metadata: ProfanityTaxonomyMetadata = {
+      category: match?.category,
+      severity: match?.severity,
+    };
 
-    expect(strict.analyze("абв ok")).toEqual([
-      Object.assign([0, 3], {
-        mode: "strict",
-        category: "STRONG_INSULT",
-        severity: "medium",
-      }),
-    ]);
+    expect(match?.[0]).toBe(0);
+    expect(match?.[1]).toBe(3);
+    expect(match?.mode).toBe("strict");
+    expect(match?.category).toBe("STRONG_INSULT");
+    expect(match?.severity).toBe("medium");
+    expect(metadata).toEqual({
+      category: "STRONG_INSULT",
+      severity: "medium",
+    });
     expect(strict.censor("абв ok")).toBe("*** ok");
     expect(strict.check("абв ok")).toBe(true);
   });
