@@ -67,6 +67,31 @@ const builtIn = createProfanityFilter();
 All filter instances expose stable `name: "profanity"` plus `check`, `censor`,
 `setStrict`, `setLoose`, `addStrict`, and `addLoose`.
 
+### Taxonomy Metadata Types
+
+The package also exports type-only taxonomy metadata names for callers that need
+to type local metadata alongside profanity filtering code:
+
+```ts
+import type {
+  ProfanityCategory,
+  ProfanitySeverity,
+  ProfanityTaxonomyMetadata,
+} from "@textfilters/profanity";
+
+const category: ProfanityCategory = "VULGAR";
+const severity: ProfanitySeverity = "high";
+
+const metadata: ProfanityTaxonomyMetadata = {
+  category,
+  severity,
+};
+```
+
+This is currently a type-only taxonomy metadata surface. It does not add runtime
+taxonomy metadata to `check()` results, `censor()` output, or mutable dictionary
+methods.
+
 ## Strict Vs Loose
 
 | Mode   | Runtime term example | Matches                          | Does not match              |
