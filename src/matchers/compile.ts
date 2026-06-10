@@ -1,26 +1,19 @@
-import type {
-  ProfanityCategory,
-  ProfanitySeverity,
-} from "../taxonomy/types.js";
+import type { ProfanityTaxonomyMetadata } from "../types.js";
 import { ruleIdentityMetadata } from "./rule-metadata.js";
 
-export interface CompiledPattern {
+export interface CompiledPattern extends ProfanityTaxonomyMetadata {
   readonly re: RegExp;
   readonly trimHyphenTail?: boolean;
   readonly ruleId?: string;
-  readonly category?: ProfanityCategory;
-  readonly severity?: ProfanitySeverity;
 }
 
 export interface CompilePatternOptions {
   readonly trimHyphenTail?: boolean;
 }
 
-export interface CompilePatternSource {
+export interface CompilePatternSource extends ProfanityTaxonomyMetadata {
   readonly source: string;
   readonly ruleId?: string;
-  readonly category?: ProfanityCategory;
-  readonly severity?: ProfanitySeverity;
 }
 
 const GLOBAL_UNICODE_FLAGS = "giu";

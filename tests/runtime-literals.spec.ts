@@ -52,4 +52,84 @@ describe("runtime literals", () => {
     expect(createProfanityFilter([], ["!"]).censor("!")).toBe("*");
     expect(createProfanityFilter([], ["(?=𐐀)", "𐐀"]).censor("𐐀")).toBe("**");
   });
+
+  it("keeps metadata-backed runtime terms literal-safe", () => {
+    const strict = createProfanityFilter(
+      [
+        {
+          source: "foo|bar",
+          category: "VULGAR",
+          severity: "low",
+        },
+        {
+          source: "[ｂ]oo",
+          category: "VULGAR",
+          severity: "low",
+        },
+      ],
+      [
+        {
+          source: "(?=a)",
+          category: "EUPHEMISM",
+          severity: "soft",
+        },
+      ],
+    );
+
+    expect(strict.censor("bar")).toBe("bar");
+    expect(strict.censor("foo|bar")).toBe("*******");
+    expect(strict.analyze("foo|bar")).toEqual([
+      Object.assign([0, 7], {
+        mode: "strict",
+        category: "VULGAR",
+        severity: "low",
+      }),
+    ]);
+    expect(strict.censor("boo ｂoo")).toBe("boo ｂoo");
+    expect(strict.censor("a")).toBe("a");
+    expect(strict.censor("(?=a)")).toBe("*****");
+    expect(strict.analyze("(?=a)")).toEqual([
+      Object.assign([0, 5], {
+        mode: "loose",
+        category: "EUPHEMISM",
+        severity: "soft",
+      }),
+    ]);
+  });
+
+  it("deduplicates metadata-backed runtime literals by normalized source", () => {
+    const strict = createProfanityFilter(
+      [
+        {
+          source: "foo\\.bar",
+          category: "VULGAR",
+          severity: "low",
+        },
+        "foo.bar",
+      ],
+      [
+        {
+          source: "абв",
+          category: "EUPHEMISM",
+          severity: "soft",
+        },
+        "абв",
+      ],
+    );
+
+    expect(strict.analyze("foo.bar")).toEqual([
+      Object.assign([0, 7], {
+        mode: "strict",
+        category: "VULGAR",
+        severity: "low",
+      }),
+    ]);
+    expect(strict.analyze("а-б-в")).toEqual([
+      Object.assign([0, 5], {
+        mode: "loose",
+        category: "EUPHEMISM",
+        severity: "soft",
+      }),
+    ]);
+  });
 });

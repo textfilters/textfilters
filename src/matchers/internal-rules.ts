@@ -4,28 +4,21 @@ import { isOptionalSuffixAtom, isWordLikeAtom } from "./rule-classifier.js";
 import { readRuleAtoms, type RuleAtom } from "./rule-reader.js";
 import { ruleIdentityMetadata, ruleSourceMetadata } from "./rule-metadata.js";
 import { splitTopLevelAlternatives } from "./rule-scanner.js";
-import type {
-  ProfanityCategory,
-  ProfanitySeverity,
-} from "../taxonomy/types.js";
+import type { ProfanityTaxonomyMetadata } from "../types.js";
 import type { CompiledPattern } from "./compile.js";
 
 const IN_TOKEN_SEPARATOR = String.raw`[^\p{L}\p{N}\s]*`;
 
-export interface InternalProfanityRule {
+export interface InternalProfanityRule extends ProfanityTaxonomyMetadata {
   readonly id: string;
   readonly source: string;
-  readonly category?: ProfanityCategory;
-  readonly severity?: ProfanitySeverity;
 }
 
 export type InternalProfanityRuleDefinition =
   | string
-  | {
+  | (ProfanityTaxonomyMetadata & {
       readonly source: string;
-      readonly category?: ProfanityCategory;
-      readonly severity?: ProfanitySeverity;
-    };
+    });
 
 export const createBuiltInProfanityRules = (
   definitions: readonly InternalProfanityRuleDefinition[],

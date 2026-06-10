@@ -1,23 +1,15 @@
 import type { TextRange } from "@textfilters/core";
 import type {
   ProfanityCategory,
+  ProfanityMatchMode,
+  ProfanityMatchRange,
   ProfanitySeverity,
-} from "../taxonomy/types.js";
+} from "../types.js";
 
 export const PROFANITY_MATCH_MODE = {
   STRICT: "strict",
   LOOSE: "loose",
 } as const;
-
-export type ProfanityMatchMode =
-  (typeof PROFANITY_MATCH_MODE)[keyof typeof PROFANITY_MATCH_MODE];
-
-export interface ProfanityMatchRange extends TextRange {
-  readonly mode: ProfanityMatchMode;
-  readonly ruleId?: string;
-  readonly category?: ProfanityCategory;
-  readonly severity?: ProfanitySeverity;
-}
 
 export interface CollectedProfanityRange extends TextRange {
   readonly ruleId?: string;

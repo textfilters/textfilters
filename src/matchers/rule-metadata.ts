@@ -1,12 +1,6 @@
-import type {
-  ProfanityCategory,
-  ProfanitySeverity,
-} from "../taxonomy/types.js";
+import type { ProfanityTaxonomyMetadata } from "../types.js";
 
-export interface RuleTaxonomyMetadata {
-  readonly category?: ProfanityCategory;
-  readonly severity?: ProfanitySeverity;
-}
+export interface RuleTaxonomyMetadata extends ProfanityTaxonomyMetadata {}
 
 export interface RuleSourceMetadata extends RuleTaxonomyMetadata {
   readonly source: string;

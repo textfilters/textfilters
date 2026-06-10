@@ -2,16 +2,13 @@ import { buildLoosePatterns, buildStrictPatterns } from "./matchers/build.js";
 import type { MatcherTerms, StrictPatternSet } from "./matchers/build.js";
 import type { CompiledPattern } from "./matchers/compile.js";
 import { createBuiltInProfanityRules } from "./matchers/internal-rules.js";
-import { appendTerm, normalizeTermList } from "./matchers/terms.js";
+import { normalizeTermList } from "./matchers/terms.js";
 import {
   matchRangesForMode,
   PROFANITY_MATCH_MODE,
   textRangesForMode,
 } from "./matches/ranges.js";
-import type {
-  CollectedProfanityRange,
-  ProfanityMatchRange,
-} from "./matches/ranges.js";
+import type { CollectedProfanityRange } from "./matches/ranges.js";
 import { normalizeForMatchSameLen } from "./normalization/text.js";
 import { collectLooseRanges } from "./ranges/loose.js";
 import { collectStrictRanges } from "./ranges/strict.js";
@@ -19,7 +16,16 @@ import { maskProfanityRanges } from "./token-ranges.js";
 import { LOOSE_BASE } from "./terms/loose-base.js";
 import { STRICT_BASE } from "./terms/strict-base.js";
 import { PROFANITY_FILTER_NAME } from "./types.js";
-import type { ProfanityFilter, ProfanityTermList } from "./types.js";
+import type {
+  ProfanityFilter,
+  ProfanityMatchRange,
+  ProfanityTermList,
+} from "./types.js";
+import type { InternalProfanityRuleDefinition } from "./matchers/internal-rules.js";
+import {
+  normalizeLiteralTerm,
+  type LiteralTermDefinition,
+} from "./matchers/literals.js";
 
 interface FilterState {
   // Built-in rules and runtime literals are stored separately so appending a
@@ -38,6 +44,7 @@ export const createProfanityFilter = (
 
   return {
     name: PROFANITY_FILTER_NAME,
+    analyze: (text) => collectProfanityMatches(state, String(text)),
     check: (text) => hasProfanity(state, String(text)),
     censor: (text) => censorText(state, String(text)),
     setStrict: (list) => {
@@ -67,11 +74,11 @@ function createState(
     strictTerms:
       strictTerms === STRICT_BASE
         ? builtInRuleTerms(strictTerms, "strict")
-        : runtimeLiteralTerms(strictTerms),
+        : customRuleAndLiteralTerms(strictTerms),
     looseTerms:
       looseTerms === LOOSE_BASE
         ? builtInRuleTerms(looseTerms, "loose")
-        : runtimeLiteralTerms(looseTerms),
+        : customRuleAndLiteralTerms(looseTerms),
     strictPatterns: {
       token: [],
       symbolToken: [],
@@ -99,13 +106,45 @@ const builtInRuleTerms = (
   terms: ProfanityTermList,
   corpus: "strict" | "loose",
 ): MatcherTerms => ({
-  internal: createBuiltInProfanityRules(normalizeTermList(terms), corpus),
+  internal: createBuiltInProfanityRules(builtInRuleDefinitions(terms), corpus),
   literals: [],
 });
 
+const customRuleAndLiteralTerms = (terms: ProfanityTermList): MatcherTerms => ({
+  internal: [],
+  literals: literalDefinitions(terms),
+});
+
+const builtInRuleDefinitions = (
+  terms: ProfanityTermList,
+): InternalProfanityRuleDefinition[] =>
+  Array.isArray(terms)
+    ? terms.flatMap((term): InternalProfanityRuleDefinition[] =>
+        isRuleDefinition(term)
+          ? [normalizedRuleDefinition(term)]
+          : normalizeTermList([term]),
+      )
+    : [];
+
+const normalizedRuleDefinition = (
+  definition: Extract<InternalProfanityRuleDefinition, { source: string }>,
+): Extract<InternalProfanityRuleDefinition, { source: string }> => ({
+  ...definition,
+  source: definition.source.trim(),
+});
+
+const isRuleDefinition = (
+  term: unknown,
+): term is Extract<InternalProfanityRuleDefinition, { source: string }> =>
+  typeof term === "object" &&
+  term !== null &&
+  "source" in term &&
+  typeof term.source === "string" &&
+  term.source.trim().length > 0;
+
 const runtimeLiteralTerms = (terms: ProfanityTermList): MatcherTerms => ({
   internal: [],
-  literals: normalizeTermList(terms),
+  literals: literalDefinitions(terms),
 });
 
 const appendRuntimeLiteralTerm = (
@@ -114,8 +153,64 @@ const appendRuntimeLiteralTerm = (
 ): MatcherTerms => ({
   // Keep the existing internal rules intact and append only to the literal side.
   internal: terms.internal,
-  literals: appendTerm(terms.literals, term),
+  literals: appendLiteralTerm(terms.literals, term),
 });
+
+const literalDefinitions = (
+  terms: ProfanityTermList,
+): LiteralTermDefinition[] => {
+  if (!Array.isArray(terms)) {
+    return [];
+  }
+
+  const seen = new Set<string>();
+  const definitions: LiteralTermDefinition[] = [];
+
+  for (const term of terms) {
+    const definition = literalDefinition(term);
+    if (definition === null) {
+      continue;
+    }
+
+    const key = normalizeLiteralTerm(definition.source);
+    if (seen.has(key)) {
+      continue;
+    }
+
+    seen.add(key);
+    definitions.push(definition);
+  }
+
+  return definitions;
+};
+
+const appendLiteralTerm = (
+  terms: readonly LiteralTermDefinition[],
+  term: unknown,
+): LiteralTermDefinition[] => {
+  const definition = literalDefinition(term);
+  if (definition === null) {
+    return [...terms];
+  }
+
+  const key = normalizeLiteralTerm(definition.source);
+
+  return terms.some((term) => normalizeLiteralTerm(term.source) === key)
+    ? [...terms]
+    : [...terms, definition];
+};
+
+const literalDefinition = (term: unknown): LiteralTermDefinition | null => {
+  if (isRuleDefinition(term)) {
+    return {
+      ...term,
+      source: term.source.trim(),
+    };
+  }
+
+  const [source] = normalizeTermList([term]);
+  return source === undefined ? null : { source };
+};
 
 const hasProfanity = (state: FilterState, text: string): boolean => {
   const matches = collectProfanityMatches(state, text);

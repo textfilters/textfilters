@@ -25,6 +25,7 @@ import { createProfanityFilter, filter } from "@textfilters/profanity";
 
 const safeText = filter.censor("message text");
 const hasProfanity = filter.check("message text");
+const matches = filter.analyze("message text");
 
 const tenantFilter = createProfanityFilter(["strict-term"], ["loose-term"]);
 const tenantSafeText = tenantFilter.censor("message text");
@@ -39,6 +40,24 @@ Use `createProfanityFilter(...)` when per-request, per-tenant, or test-local
 dictionaries must be isolated from the shared mutable `filter`.
 
 ## API
+
+### `filter.analyze(text): ProfanityMatchRange[]`
+
+Returns accepted match ranges as UTF-16 offsets into the original input. Each
+range is an array-like `[start, end]` value with `mode` and optional rule
+metadata:
+
+```ts
+const matches = filter.analyze("blocked text");
+
+for (const match of matches) {
+  console.log(match[0], match[1], match.mode);
+  console.log(match.category, match.severity);
+}
+```
+
+`category` and `severity` are present when the matched rule has taxonomy
+metadata. Runtime string terms remain unclassified and omit those fields.
 
 ### `filter.censor(text): string`
 
@@ -65,7 +84,7 @@ const builtIn = createProfanityFilter();
 ```
 
 All filter instances expose stable `name: "profanity"` plus `check`, `censor`,
-`setStrict`, `setLoose`, `addStrict`, and `addLoose`.
+`analyze`, `setStrict`, `setLoose`, `addStrict`, and `addLoose`.
 
 ### Taxonomy Metadata Types
 
@@ -75,10 +94,12 @@ to type local metadata alongside profanity filtering code:
 ```ts
 import type {
   ProfanityCategory,
+  ProfanityMatchRange,
   ProfanitySeverity,
   ProfanityTaxonomyMetadata,
 } from "@textfilters/profanity";
 
+const ranges: ProfanityMatchRange[] = filter.analyze("message text");
 const category: ProfanityCategory = "VULGAR";
 const severity: ProfanitySeverity = "high";
 
@@ -88,9 +109,9 @@ const metadata: ProfanityTaxonomyMetadata = {
 };
 ```
 
-This is currently a type-only taxonomy metadata surface. It does not add runtime
-taxonomy metadata to `check()` results, `censor()` output, or mutable dictionary
-methods.
+`filter.analyze()` exposes taxonomy metadata on match ranges when the matched
+rule carries it. `check()` results, `censor()` output, and mutable dictionary
+methods keep their existing behavior.
 
 ## Strict Vs Loose
 
@@ -119,6 +140,7 @@ part of the public API and is not applied to runtime dictionaries.
   points.
 - Ranges are UTF-16 offsets into the original source string.
 - Runtime dictionaries do not support caller-provided regular expressions.
+- Runtime string terms do not receive taxonomy metadata.
 - The shared `filter` instance is mutable; use `createProfanityFilter()` for
   isolated state.
 - Built-in corpus behavior is intentionally locked by compatibility tests.
@@ -132,6 +154,7 @@ Intentional public-package changes:
 - Runtime dictionary terms are treated as normalized literals, not arbitrary regular expressions.
 - Built-in package-owned rules use an internal rule compiler that is not exposed to callers.
 - The filter exposes stable `name: "profanity"`.
+- The filter exposes `analyze(text): ProfanityMatchRange[]` for accepted match ranges and optional taxonomy metadata.
 - The filter exposes `check(text): boolean` for boolean-only detection.
 - `createProfanityFilter()` without arguments creates an instance with the built-in package dictionaries.
 - Masking preserves JavaScript string length for astral code points.

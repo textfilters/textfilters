@@ -1,56 +1,79 @@
 import { esc, normalizeForMatchSameLen } from "../normalization/text.js";
-import { compilePatternSources } from "./compile.js";
+import { compilePatternDefinitions } from "./compile.js";
 import type { CompiledPattern } from "./compile.js";
+import type { ProfanityTaxonomyMetadata } from "../types.js";
+
+export interface LiteralTermDefinition extends ProfanityTaxonomyMetadata {
+  readonly source: string;
+}
+
+type LiteralTermInput = string | LiteralTermDefinition;
 
 export const LOOSE_SEPARATOR = String.raw`[^\p{L}\p{N}]*`;
 
 const LITERAL_ESCAPE_RE = /\\([\\^$.*+?()[\]{}|/])/g;
 
 export const compileStrictLiteralPatterns = (
-  terms: readonly string[],
+  terms: readonly LiteralTermInput[],
   wholeToken: boolean,
 ): CompiledPattern[] =>
-  compilePatternSources(
-    terms.map((term) => literalSource(term)),
+  compilePatternDefinitions(
+    terms.map(toLiteralTermDefinition).map((term) => ({
+      source: literalSource(term.source),
+      ...literalMetadata(term),
+    })),
     wholeToken,
   );
 
 export const compileStrictPhraseLiteralPatterns = (
-  terms: readonly string[],
+  terms: readonly LiteralTermInput[],
 ): CompiledPattern[] =>
-  compilePatternSources(
-    // The phrase pass is needed when a literal mixes token characters with
-    // punctuation, or when a symbol-only literal contains whitespace and cannot
-    // be found in one consecutive symbol run.
-    terms.filter(needsPhrasePass).map((term) => literalSource(term)),
+  compilePatternDefinitions(
+    terms
+      .map(toLiteralTermDefinition)
+      .filter(needsPhrasePass)
+      .map((term) => ({
+        source: literalSource(term.source),
+        ...literalMetadata(term),
+      })),
     false,
   );
 
 export const compileStrictSymbolLiteralPatterns = (
-  terms: readonly string[],
+  terms: readonly LiteralTermInput[],
 ): CompiledPattern[] =>
-  compilePatternSources(
-    terms.filter(isSymbolOnlyLiteral).map((term) => literalSource(term)),
+  compilePatternDefinitions(
+    terms
+      .map(toLiteralTermDefinition)
+      .filter(isSymbolOnlyLiteral)
+      .map((term) => ({
+        source: literalSource(term.source),
+        ...literalMetadata(term),
+      })),
     true,
   );
 
 export const strictSymbolLiteralLengths = (
-  terms: readonly string[],
+  terms: readonly LiteralTermInput[],
 ): readonly number[] =>
   Array.from(
     new Set(
       terms
-        .map(normalizeLiteralTerm)
+        .map(toLiteralTermDefinition)
+        .map((term) => normalizeLiteralTerm(term.source))
         .filter(isSymbolRunLiteral)
         .map((term) => term.length),
     ),
   ).sort((left, right) => right - left);
 
 export const compileLooseLiteralPatterns = (
-  terms: readonly string[],
+  terms: readonly LiteralTermInput[],
 ): CompiledPattern[] =>
-  compilePatternSources(
-    terms.map((term) => looseLiteralSource(term)),
+  compilePatternDefinitions(
+    terms.map(toLiteralTermDefinition).map((term) => ({
+      source: looseLiteralSource(term.source),
+      ...literalMetadata(term),
+    })),
     false,
   );
 
@@ -64,16 +87,28 @@ const looseLiteralSource = (term: string): string =>
 export const normalizeLiteralTerm = (term: string): string =>
   normalizeForMatchSameLen(term.replace(LITERAL_ESCAPE_RE, "$1"));
 
-const needsPhrasePass = (term: string): boolean => {
-  const normalized = normalizeLiteralTerm(term);
+const needsPhrasePass = (term: LiteralTermDefinition): boolean => {
+  const normalized = normalizeLiteralTerm(term.source);
   return (
     NON_WORD_CHAR_RE.test(normalized) &&
     (WORD_CHAR_RE.test(normalized) || WHITESPACE_RE.test(normalized))
   );
 };
 
-const isSymbolOnlyLiteral = (term: string): boolean =>
-  isSymbolRunLiteral(normalizeLiteralTerm(term));
+const isSymbolOnlyLiteral = (term: LiteralTermDefinition): boolean =>
+  isSymbolRunLiteral(normalizeLiteralTerm(term.source));
+
+const literalMetadata = (
+  term: LiteralTermDefinition,
+): Partial<Pick<LiteralTermDefinition, "category" | "severity">> => ({
+  ...(term.category === undefined ? {} : { category: term.category }),
+  ...(term.severity === undefined ? {} : { severity: term.severity }),
+});
+
+const toLiteralTermDefinition = (
+  term: LiteralTermInput,
+): LiteralTermDefinition =>
+  typeof term === "string" ? { source: term } : term;
 
 const isSymbolRunLiteral = (term: string): boolean =>
   term.length > 0 && !WORD_CHAR_RE.test(term) && !WHITESPACE_RE.test(term);

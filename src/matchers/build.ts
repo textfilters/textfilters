@@ -10,11 +10,12 @@ import {
   compileStrictSymbolLiteralPatterns,
   strictSymbolLiteralLengths,
 } from "./literals.js";
+import type { LiteralTermDefinition } from "./literals.js";
 import type { CompiledPattern } from "./compile.js";
 
 export interface MatcherTerms {
   readonly internal: readonly InternalProfanityRule[];
-  readonly literals: readonly string[];
+  readonly literals: readonly LiteralTermDefinition[];
 }
 
 export interface StrictPatternSet {

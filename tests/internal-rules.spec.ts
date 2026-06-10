@@ -20,10 +20,7 @@ import {
 import { LOOSE_BASE } from "../src/terms/loose-base.js";
 import { STRICT_BASE } from "../src/terms/strict-base.js";
 import type { InternalProfanityRuleDefinition } from "../src/matchers/internal-rules.js";
-import type {
-  ProfanityCategory,
-  ProfanitySeverity,
-} from "../src/taxonomy/types.js";
+import type { ProfanityCategory, ProfanitySeverity } from "../src/index.js";
 
 const ALLOWED_PROFANITY_CATEGORIES = [
   "OBSCENE_MAT",

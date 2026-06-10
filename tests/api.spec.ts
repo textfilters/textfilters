@@ -8,6 +8,8 @@ import {
 } from "../src/index.js";
 import type {
   ProfanityCategory,
+  ProfanityMatchMode,
+  ProfanityMatchRange,
   ProfanitySeverity,
   ProfanityTaxonomyMetadata,
 } from "../src/index.js";
@@ -22,6 +24,15 @@ describe("public API", () => {
       readonly category?: ProfanityCategory;
       readonly severity?: ProfanitySeverity;
     }>();
+    expectTypeOf<"strict">().toExtend<ProfanityMatchMode>();
+    expectTypeOf<ProfanityMatchRange>().toMatchTypeOf<
+      Readonly<[start: number, end: number]> & {
+        readonly mode: ProfanityMatchMode;
+        readonly ruleId?: string;
+        readonly category?: ProfanityCategory;
+        readonly severity?: ProfanitySeverity;
+      }
+    >();
   });
 
   it("exposes the default instance and the compatible factory alias", () => {
@@ -49,6 +60,67 @@ describe("public API", () => {
     expect(loose.censor("b-a-d ok")).toBe("***** ok");
     expect(loose.check("b-a-d ok")).toBe(true);
     expect(loose.check("ok")).toBe(false);
+  });
+
+  it("exposes taxonomy metadata on public object-backed match output", () => {
+    const strict = createProfanityFilter(
+      [{ source: "абв", category: "STRONG_INSULT", severity: "medium" }],
+      [],
+    );
+
+    expect(strict.analyze("абв ok")).toEqual([
+      Object.assign([0, 3], {
+        mode: "strict",
+        category: "STRONG_INSULT",
+        severity: "medium",
+      }),
+    ]);
+    expect(strict.censor("абв ok")).toBe("*** ok");
+    expect(strict.check("абв ok")).toBe(true);
+  });
+
+  it("keeps legacy string-backed public match output compatible", () => {
+    const strict = createProfanityFilter(["абв"], []);
+    const match = strict.analyze("абв ok")[0];
+
+    expect(match).toEqual(Object.assign([0, 3], { mode: "strict" }));
+    expect(match?.ruleId).toBeUndefined();
+    expect(match?.category).toBeUndefined();
+    expect(match?.severity).toBeUndefined();
+    expect(strict.censor("абв ok")).toBe("*** ok");
+    expect(strict.check("абв ok")).toBe(true);
+  });
+
+  it("supports object-backed terms through mutable dictionary methods", () => {
+    const strict = createProfanityFilter([], []);
+    strict.setStrict([
+      { source: "абв", category: "STRONG_INSULT", severity: "medium" },
+    ]);
+
+    expect(strict.analyze("абв ok")).toEqual([
+      Object.assign([0, 3], {
+        mode: "strict",
+        category: "STRONG_INSULT",
+        severity: "medium",
+      }),
+    ]);
+    expect(strict.censor("абв ok")).toBe("*** ok");
+
+    const loose = createProfanityFilter([], []);
+    loose.addLoose({
+      source: "абв",
+      category: "EUPHEMISM",
+      severity: "soft",
+    });
+
+    expect(loose.analyze("а-б-в ok")).toEqual([
+      Object.assign([0, 5], {
+        mode: "loose",
+        category: "EUPHEMISM",
+        severity: "soft",
+      }),
+    ]);
+    expect(loose.check("а-б-в ok")).toBe(true);
   });
 
   it("supports runtime strict and loose dictionary replacement and extension", () => {
