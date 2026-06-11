@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.0](https://github.com/textfilters/profanity/compare/v0.7.0...v0.8.0) (2026-06-11)
+
+
+### Features
+
+* expose profanity language dictionary API ([a1f58ed](https://github.com/textfilters/profanity/commit/a1f58ede25d0a0b1a685af6ee6e02c228b46bb39))
+
 ## [0.7.0](https://github.com/textfilters/profanity/compare/v0.6.0...v0.7.0) (2026-06-11)
 
 
