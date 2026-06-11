@@ -2,6 +2,7 @@ export { PROFANITY_FILTER_NAME } from "./types.js";
 export type {
   ProfanityCategory,
   ProfanityFilter,
+  ProfanityMatchOptions,
   ProfanityMatchMode,
   ProfanityMatchRange,
   ProfanitySeverity,

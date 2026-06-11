@@ -18,6 +18,7 @@ import { STRICT_BASE } from "./terms/strict-base.js";
 import { PROFANITY_FILTER_NAME } from "./types.js";
 import type {
   ProfanityFilter,
+  ProfanityMatchOptions,
   ProfanityMatchRange,
   ProfanityTermList,
 } from "./types.js";
@@ -44,9 +45,10 @@ export const createProfanityFilter = (
 
   return {
     name: PROFANITY_FILTER_NAME,
-    analyze: (text) => collectProfanityMatches(state, String(text)),
-    check: (text) => hasProfanity(state, String(text)),
-    censor: (text) => censorText(state, String(text)),
+    analyze: (text, options) =>
+      collectProfanityMatches(state, String(text), options),
+    check: (text, options) => hasProfanity(state, String(text), options),
+    censor: (text, options) => censorText(state, String(text), options),
     setStrict: (list) => {
       state.strictTerms = runtimeLiteralTerms(list);
       rebuildStrict(state);
@@ -212,13 +214,21 @@ const literalDefinition = (term: unknown): LiteralTermDefinition | null => {
   return source === undefined ? null : { source };
 };
 
-const hasProfanity = (state: FilterState, text: string): boolean => {
-  const matches = collectProfanityMatches(state, text);
+const hasProfanity = (
+  state: FilterState,
+  text: string,
+  options?: ProfanityMatchOptions,
+): boolean => {
+  const matches = collectProfanityMatches(state, text, options);
   return matches.length > 0;
 };
 
-const censorText = (state: FilterState, text: string): string => {
-  const matches = collectProfanityMatches(state, text);
+const censorText = (
+  state: FilterState,
+  text: string,
+  options?: ProfanityMatchOptions,
+): string => {
+  const matches = collectProfanityMatches(state, text, options);
   return maskProfanityRanges(
     text,
     textRangesForMode(matches, PROFANITY_MATCH_MODE.STRICT),
@@ -229,6 +239,7 @@ const censorText = (state: FilterState, text: string): string => {
 const collectProfanityMatches = (
   state: FilterState,
   text: string,
+  options?: ProfanityMatchOptions,
 ): ProfanityMatchRange[] => {
   // Normalization is same-length, so ranges collected from the normalized string
   // can be applied directly to the original source string.
@@ -244,10 +255,39 @@ const collectProfanityMatches = (
     looseRanges,
   );
 
-  return [
-    ...matchRangesForMode(strictRanges, PROFANITY_MATCH_MODE.STRICT),
-    ...matchRangesForMode(looseRanges, PROFANITY_MATCH_MODE.LOOSE),
-  ];
+  return filterMatchesByTaxonomy(
+    [
+      ...matchRangesForMode(strictRanges, PROFANITY_MATCH_MODE.STRICT),
+      ...matchRangesForMode(looseRanges, PROFANITY_MATCH_MODE.LOOSE),
+    ],
+    options,
+  );
+};
+
+const filterMatchesByTaxonomy = (
+  matches: ProfanityMatchRange[],
+  options: ProfanityMatchOptions | undefined,
+): ProfanityMatchRange[] => {
+  if (options === undefined) {
+    return matches;
+  }
+
+  const categories =
+    options.categories === undefined ? undefined : new Set(options.categories);
+  const severities =
+    options.severities === undefined ? undefined : new Set(options.severities);
+
+  if (categories === undefined && severities === undefined) {
+    return matches;
+  }
+
+  return matches.filter(
+    (match) =>
+      (categories === undefined ||
+        (match.category !== undefined && categories.has(match.category))) &&
+      (severities === undefined ||
+        (match.severity !== undefined && severities.has(match.severity))),
+  );
 };
 
 export const profanityFilter = createProfanityFilter;

@@ -41,7 +41,7 @@ dictionaries must be isolated from the shared mutable `filter`.
 
 ## API
 
-### `filter.analyze(text): ProfanityMatchRange[]`
+### `filter.analyze(text, options?): ProfanityMatchRange[]`
 
 Returns accepted match ranges as UTF-16 offsets into the original input. Each
 range is an array-like `[start, end]` value with `mode` and optional rule
@@ -59,6 +59,23 @@ for (const match of matches) {
 `category` and `severity` are present when the matched rule has taxonomy
 metadata. Runtime string terms remain unclassified and omit those fields.
 
+Taxonomy options can narrow matches to rules with specific metadata:
+
+```ts
+const vulgarMatches = filter.analyze("blocked text", {
+  categories: ["VULGAR"],
+});
+
+const highSeverityMatches = filter.analyze("blocked text", {
+  severities: ["high"],
+});
+```
+
+When both `categories` and `severities` are provided, a match must satisfy both
+filters. Taxonomy metadata-backed filters only match rules where the requested
+metadata is available. Omitting taxonomy options preserves the default matching
+behavior.
+
 For taxonomy-backed rules, runtime match output includes the available metadata:
 
 ```ts
@@ -75,17 +92,17 @@ strict.analyze("абв ok");
 // })]
 ```
 
-### `filter.censor(text): string`
+### `filter.censor(text, options?): string`
 
 Returns a censored copy of `text`. Matching is performed on a normalized
 same-length copy of the input, and mask ranges are applied back to the original
-UTF-16 string.
+UTF-16 string. Taxonomy options censor only matching metadata-backed ranges.
 
-### `filter.check(text): boolean`
+### `filter.check(text, options?): boolean`
 
 Returns `true` when the current filter instance would censor at least one range.
 Use this when a boolean moderation decision is enough and the masked text is not
-needed.
+needed. Taxonomy options apply the same match narrowing as `analyze()`.
 
 ### `createProfanityFilter(strict?, loose?): ProfanityFilter`
 
@@ -126,8 +143,9 @@ const metadata: ProfanityTaxonomyMetadata = {
 ```
 
 `filter.analyze()` exposes taxonomy metadata on match ranges when the matched
-rule carries it. `check()` results, `censor()` output, and mutable dictionary
-methods keep their existing behavior.
+rule carries it. Taxonomy options are optional, so `check()` results,
+`censor()` output, and mutable dictionary methods keep their existing behavior
+when those options are omitted.
 
 ## Strict Vs Loose
 

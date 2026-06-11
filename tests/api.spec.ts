@@ -8,6 +8,7 @@ import {
 } from "../src/index.js";
 import type {
   ProfanityCategory,
+  ProfanityMatchOptions,
   ProfanityMatchMode,
   ProfanityMatchRange,
   ProfanitySeverity,
@@ -23,6 +24,10 @@ describe("public API", () => {
     expectTypeOf<ProfanityTaxonomyMetadata>().toEqualTypeOf<{
       readonly category?: ProfanityCategory;
       readonly severity?: ProfanitySeverity;
+    }>();
+    expectTypeOf<ProfanityMatchOptions>().toEqualTypeOf<{
+      readonly categories?: readonly ProfanityCategory[];
+      readonly severities?: readonly ProfanitySeverity[];
     }>();
     expectTypeOf<"strict">().toExtend<ProfanityMatchMode>();
     expectTypeOf<ProfanityMatchRange>().toMatchTypeOf<
@@ -114,6 +119,90 @@ describe("public API", () => {
       );
       expect(testCase.filter.check(testCase.input)).toBe(true);
     }
+  });
+
+  it("filters match output by taxonomy category and severity options", () => {
+    const strict = createProfanityFilter(
+      [
+        { source: "alpha", category: "OBSCENE_MAT", severity: "high" },
+        { source: "beta", category: "VULGAR", severity: "low" },
+        { source: "gamma", category: "VULGAR", severity: "medium" },
+        "delta",
+      ],
+      [],
+    );
+    const input = "alpha beta gamma delta";
+
+    expect(strict.analyze(input).map((match) => match.category)).toEqual([
+      "OBSCENE_MAT",
+      "VULGAR",
+      "VULGAR",
+      undefined,
+    ]);
+    expect(
+      strict
+        .analyze(input, { categories: ["VULGAR"] })
+        .map((match) => input.slice(match[0], match[1])),
+    ).toEqual(["beta", "gamma"]);
+    expect(
+      strict
+        .analyze(input, { severities: ["low"] })
+        .map((match) => input.slice(match[0], match[1])),
+    ).toEqual(["beta"]);
+    expect(
+      strict
+        .analyze(input, {
+          categories: ["VULGAR"],
+          severities: ["medium"],
+        })
+        .map((match) => input.slice(match[0], match[1])),
+    ).toEqual(["gamma"]);
+    expect(strict.analyze(input, { categories: ["EUPHEMISM"] })).toEqual([]);
+  });
+
+  it("applies taxonomy options to check and censor without mutating matches", () => {
+    const strict = createProfanityFilter(
+      [
+        { source: "alpha", category: "OBSCENE_MAT", severity: "high" },
+        { source: "beta", category: "VULGAR", severity: "low" },
+        "delta",
+      ],
+      [],
+    );
+    const input = "alpha beta delta";
+    const matches = strict.analyze(input);
+    const firstMatch = matches[0];
+
+    expect(strict.check(input, { severities: ["soft"] })).toBe(false);
+    expect(strict.check(input, { categories: ["OBSCENE_MAT"] })).toBe(true);
+    expect(strict.censor(input, { categories: ["VULGAR"] })).toBe(
+      "alpha **** delta",
+    );
+    expect(strict.censor(input, { severities: ["high"] })).toBe(
+      "***** beta delta",
+    );
+    expect(firstMatch).toEqual(
+      Object.assign([0, 5], {
+        mode: "strict",
+        category: "OBSCENE_MAT",
+        severity: "high",
+      }),
+    );
+  });
+
+  it("accepts taxonomy options through the public entrypoint types", () => {
+    const options: ProfanityMatchOptions = {
+      categories: ["OBSCENE_MAT"],
+      severities: ["high"],
+    };
+    const strict = createProfanityFilter(
+      [{ source: "alpha", category: "OBSCENE_MAT", severity: "high" }],
+      [],
+    );
+
+    expect(strict.analyze("alpha", options)).toHaveLength(1);
+    expect(strict.check("alpha", options)).toBe(true);
+    expect(strict.censor("alpha", options)).toBe("*****");
   });
 
   it("supports object-backed terms through mutable dictionary methods", () => {

@@ -13,6 +13,11 @@ export interface ProfanityTaxonomyMetadata {
   readonly severity?: ProfanitySeverity;
 }
 
+export interface ProfanityMatchOptions {
+  readonly categories?: readonly ProfanityCategory[];
+  readonly severities?: readonly ProfanitySeverity[];
+}
+
 export type ProfanityMatchMode = "strict" | "loose";
 
 export interface ProfanityMatchRange extends Readonly<
@@ -28,9 +33,9 @@ export const PROFANITY_FILTER_NAME = "profanity";
 
 export interface ProfanityFilter {
   readonly name: typeof PROFANITY_FILTER_NAME;
-  analyze(text: string): ProfanityMatchRange[];
-  check(text: string): boolean;
-  censor(text: string): string;
+  analyze(text: string, options?: ProfanityMatchOptions): ProfanityMatchRange[];
+  check(text: string, options?: ProfanityMatchOptions): boolean;
+  censor(text: string, options?: ProfanityMatchOptions): string;
   setStrict(list: ProfanityTermList): void;
   setLoose(list: ProfanityTermList): void;
   addStrict(term: unknown): void;
