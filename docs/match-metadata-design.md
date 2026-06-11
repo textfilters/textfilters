@@ -1,23 +1,24 @@
 # Match Metadata Design
 
 This document records the intended direction for future profanity match metadata.
-It is design groundwork only: it does not add a public analysis API, category
-options, severity options, corpus changes, or matcher behavior changes.
+It is design and status documentation only: it does not add category options,
+severity options, corpus changes, or matcher behavior changes.
 
 The taxonomy metadata rollout plan is tracked separately in
 [Profanity Taxonomy Metadata Plan](profanity-taxonomy-plan.md).
 
 ## Current State
 
-After the structured range refactor, `src/filter.ts` collects internal
-`ProfanityRanges` with two range lists:
+`src/filter.ts` exposes `analyze(text): ProfanityMatchRange[]` and collects
+internal range metadata from two matcher paths:
 
 - `strict`: ranges found by the strict token-oriented matcher.
 - `loose`: ranges found by the loose matcher that tolerates separators and other
   evasion-like spellings.
 
-The public API remains unchanged:
+The public API includes:
 
+- `analyze(text): ProfanityMatchRange[]`
 - `check(text): boolean`
 - `censor(text): string`
 - `setStrict(list): void`
@@ -25,9 +26,10 @@ The public API remains unchanged:
 - `addStrict(term): void`
 - `addLoose(term): void`
 
-The matcher still runs on a same-length normalized copy of the input and keeps
-accepted ranges as UTF-16 offsets into the original input. `censor()` applies
-those original-input ranges when masking.
+The matcher runs on a same-length normalized copy of the input and keeps
+accepted ranges as UTF-16 offsets into the original input. `analyze()` returns
+those original-input ranges with `mode` and optional rule metadata. `censor()`
+applies those original-input ranges when masking.
 
 ## Match Mode Is Not Severity
 
@@ -45,18 +47,15 @@ euphemistic, or product-specific. A severe obscene term can be found in strict
 mode or loose mode. A mild euphemism can also be found in strict mode or loose
 mode. The mode only explains how the matcher found the range.
 
-## Future Internal Model
+## Match Range Model
 
-A future implementation should move from raw mode buckets toward an internal
-range record that can carry rule identity and taxonomy metadata without changing
-the current matching semantics.
-
-One possible internal shape:
+The public match range shape carries rule identity and taxonomy metadata without
+changing matching semantics:
 
 ```ts
 interface ProfanityMatchRange {
-  readonly start: number;
-  readonly end: number;
+  readonly [0]: number;
+  readonly [1]: number;
   readonly mode: "strict" | "loose";
   readonly ruleId?: string;
   readonly category?: ProfanityCategory;
@@ -64,35 +63,28 @@ interface ProfanityMatchRange {
 }
 ```
 
-`start` and `end` must remain UTF-16 offsets into the original input. The
-internal collector may still group ranges by mode while the code is migrated, but
-the long-term model should allow a single list of accepted match ranges with
-explicit metadata.
+The tuple positions are UTF-16 offsets into the original input. The internal
+collector may still group ranges by mode, but public output is a single list of
+accepted match ranges with explicit metadata.
 
-The internal model should preserve enough information for `censor()` to keep its
-current behavior and for a later analysis API to expose structured facts.
+The model preserves enough information for `censor()` to keep its current
+behavior and for callers to inspect structured match facts.
 
-## Future Public Model
+## Future Taxonomy-Driven Options
 
-A later public API can expose a normalized, documented match object. One possible
-shape:
+A later public API can add category- or severity-aware filtering options. One
+possible options shape:
 
 ```ts
-interface ProfanityMatch {
-  readonly start: number;
-  readonly end: number;
-  readonly value: string;
-  readonly normalizedValue: string;
-  readonly mode: "strict" | "loose";
-  readonly category: ProfanityCategory;
-  readonly severity: ProfanitySeverity;
-  readonly ruleId?: string;
+interface ProfanityAnalyzeOptions {
+  readonly categories?: readonly ProfanityCategory[];
+  readonly severities?: readonly ProfanitySeverity[];
 }
 ```
 
-The public object should describe facts about the match, not the final moderation
-decision. Callers can then decide whether to block, warn, censor, log, or ignore
-a match based on their own product policy.
+Any future options API should describe caller-selected filtering, not final
+moderation policy. Callers can decide whether to block, warn, censor, log, or
+ignore a match based on their own product policy.
 
 ## Category And Severity Ownership
 
@@ -104,16 +96,18 @@ separator evasion, or another normalization path. Those input forms should not
 change the underlying taxonomy of the matched rule. If a rule represents an
 obscene term, a loose/evasive match of that rule is still the same category.
 
-This means future corpus or rule definitions should carry explicit taxonomy
-metadata, for example:
+This means corpus or rule definitions can carry explicit taxonomy metadata, for
+example:
 
 - a stable rule id;
 - a category such as `OBSCENE_MAT`, `STRONG_INSULT`, `VULGAR`, or `EUPHEMISM`;
 - a severity such as `high`, `medium`, `low`, or `soft`;
 - any language- or corpus-specific review notes that are needed before exposure.
 
-Runtime literal terms will need a separate design decision: either callers
-provide metadata for them, or the package assigns a conservative default.
+Runtime string terms remain unclassified and omit taxonomy metadata. Object terms
+can carry metadata. A future options API should decide whether callers can
+provide metadata through a dedicated public shape or whether runtime strings stay
+unclassified permanently.
 
 ## Evasion Is Orthogonal To Category
 
@@ -142,31 +136,27 @@ correct ranges.
 
 `check()` and `censor()` must keep their current default behavior.
 
-The future metadata pipeline should be an implementation detail until a separate
-public API is added. Existing callers should not need to pass category or
-severity options to preserve today's boolean and masking behavior.
+Metadata remains additive on `analyze()` output. Existing callers should not need
+to pass category or severity options to preserve today's boolean and masking
+behavior.
 
 If category-aware options are added later, they should be opt-in and should not
 silently narrow the default behavior of current calls.
 
-## Future `analyze()`
+## Future Options API
 
-A public `analyze()` API should be a separate future pull request after design
-and code groundwork are in place.
-
-That future pull request should define the exact public types, option names,
-runtime literal metadata behavior, sorting and de-duplication rules, and tests
-for direct and obfuscated matches. This document intentionally avoids adding
-`analyze()` to the current public API.
+A future options API should be a separate pull request after its behavior is
+designed. That pull request should define option names, runtime literal metadata
+behavior, sorting and de-duplication rules, and tests for direct and obfuscated
+matches.
 
 ## Open Questions
 
-The taxonomy work from issue #3 still needs product and implementation decisions:
+Future taxonomy-driven filtering still needs product and implementation
+decisions:
 
-- Should `severity` be derived from `category`, or should both be stored
-  explicitly?
 - Should category names be language-neutral, Russian-specific, or
-  package-specific?
+  package-specific if more categories are added?
 - Should strong slurs and general strong insults be separate categories?
 - Should deprecated or ambiguous terms get a review state before they are enabled
   by default?
