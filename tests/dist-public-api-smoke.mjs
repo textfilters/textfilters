@@ -26,6 +26,10 @@ if (strict.check(input, { severities: ["low"] })) {
   throw new Error("Dist taxonomy severity filtering failed.");
 }
 
+if (strict.censor(input, { minSeverity: "high" }) !== "***** beta") {
+  throw new Error("Dist minimum taxonomy severity filtering failed.");
+}
+
 if (strict.analyze(input, { categories: [] }).length !== 0) {
   throw new Error("Dist empty taxonomy filter handling failed.");
 }

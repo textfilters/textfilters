@@ -69,12 +69,22 @@ const vulgarMatches = filter.analyze("blocked text", {
 const highSeverityMatches = filter.analyze("blocked text", {
   severities: ["high"],
 });
+
+const mediumOrHigherMatches = filter.analyze("blocked text", {
+  minSeverity: "medium",
+});
 ```
 
-When both `categories` and `severities` are provided, a match must satisfy both
-filters. Taxonomy metadata-backed filters only match rules where the requested
-metadata is available. Omitting taxonomy options preserves the default matching
-behavior.
+Severity thresholds use this package-defined order:
+`soft < low < medium < high`. `minSeverity` matches rules whose severity is
+equal to or stronger than the requested threshold, and applies only to
+taxonomy-metadata-backed rules. When both `severities` and `minSeverity` are
+provided, a match must satisfy the exact severity set and the threshold
+intersection. When `categories` is combined with severity filters, a match must
+satisfy every requested taxonomy filter.
+
+Taxonomy metadata-backed filters only match rules where the requested metadata
+is available. Omitting taxonomy options preserves the default matching behavior.
 
 For taxonomy-backed rules, runtime match output includes the available metadata:
 

@@ -19,6 +19,8 @@ The taxonomy metadata exposure work is complete for the current public contract:
 - runtime string terms remain backward-compatible and omit taxonomy metadata;
 - `check()` and `censor()` behavior remains unchanged;
 - README and API tests document the public metadata contract.
+- taxonomy filtering options support category, exact severity, and minimum
+  severity filtering with intersection semantics when options are combined.
 
 The package version is still managed by Release Please from Conventional Commit
 history. This plan does not require a manual version bump or manual release.
@@ -41,6 +43,7 @@ metadata without changing the existing boolean or censoring behavior:
 - invariant tests cover the allowed taxonomy values, metadata propagation, and
   mixed string/object internal rule definitions;
 - shared helpers collect profanity ranges for `check()` and `censor()`;
+- shared taxonomy filtering applies to `analyze()`, `check()`, and `censor()`;
 - the public API includes `analyze()` for match ranges with optional taxonomy
   metadata.
 
@@ -227,14 +230,14 @@ Follow-up taxonomy work should not:
   moderation thresholds;
 - make release or publication changes.
 
-The next meaningful milestone is a separate taxonomy-driven filtering/options
-API. That work should define option names, default behavior, runtime term
-metadata semantics, sorting, and overlap handling before implementation.
+The taxonomy-driven filtering/options API now supports category filtering,
+exact severity filtering, and minimum severity threshold filtering. Runtime
+terms without taxonomy metadata remain excluded from taxonomy-backed filters.
 
 Severity threshold filtering has a separate design audit in
 [Severity Ordering Design](severity-ordering-design.md). That document records
-why current `severities` filtering is exact-match only and what compatibility
-questions a future `minSeverity` implementation must settle.
+why `severities` filtering remains exact-match only and how `minSeverity`
+settled the severity ordering and combined-filter compatibility behavior.
 
 ## Relationship To Match Metadata
 

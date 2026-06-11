@@ -28,6 +28,7 @@ describe("public API", () => {
     expectTypeOf<ProfanityMatchOptions>().toEqualTypeOf<{
       readonly categories?: readonly ProfanityCategory[];
       readonly severities?: readonly ProfanitySeverity[];
+      readonly minSeverity?: ProfanitySeverity;
     }>();
     expectTypeOf<"strict">().toExtend<ProfanityMatchMode>();
     expectTypeOf<ProfanityMatchRange>().toMatchTypeOf<
@@ -160,6 +161,45 @@ describe("public API", () => {
     expect(strict.analyze(input, { categories: ["EUPHEMISM"] })).toEqual([]);
   });
 
+  it("filters match output by minimum taxonomy severity", () => {
+    const strict = createProfanityFilter(
+      [
+        { source: "alpha", category: "EUPHEMISM", severity: "soft" },
+        { source: "beta", category: "VULGAR", severity: "low" },
+        { source: "gamma", category: "VULGAR", severity: "medium" },
+        { source: "delta", category: "OBSCENE_MAT", severity: "high" },
+        "epsilon",
+      ],
+      [],
+    );
+    const input = "alpha beta gamma delta epsilon";
+    const matchedTerms = (options: ProfanityMatchOptions) =>
+      strict
+        .analyze(input, options)
+        .map((match) => input.slice(match[0], match[1]));
+
+    expect(matchedTerms({ minSeverity: "medium" })).toEqual(["gamma", "delta"]);
+    expect(matchedTerms({ minSeverity: "soft" })).toEqual([
+      "alpha",
+      "beta",
+      "gamma",
+      "delta",
+    ]);
+    expect(matchedTerms({ minSeverity: "high" })).toEqual(["delta"]);
+    expect(
+      matchedTerms({
+        categories: ["VULGAR"],
+        minSeverity: "medium",
+      }),
+    ).toEqual(["gamma"]);
+    expect(
+      matchedTerms({
+        severities: ["low", "medium"],
+        minSeverity: "medium",
+      }),
+    ).toEqual(["gamma"]);
+  });
+
   it("treats empty taxonomy option arrays as empty filters", () => {
     const strict = createProfanityFilter(
       [{ source: "alpha", category: "OBSCENE_MAT", severity: "high" }],
@@ -168,6 +208,12 @@ describe("public API", () => {
 
     expect(strict.analyze("alpha", { categories: [] })).toEqual([]);
     expect(strict.analyze("alpha", { severities: [] })).toEqual([]);
+    expect(
+      strict.analyze("alpha", {
+        severities: [],
+        minSeverity: "soft",
+      }),
+    ).toEqual([]);
     expect(
       strict.analyze("alpha", {
         categories: [],
@@ -190,9 +236,11 @@ describe("public API", () => {
         .analyze(input, {
           categories: ["OBSCENE_MAT"],
           severities: ["high"],
+          minSeverity: "soft",
         })
         .map((match) => input.slice(match[0], match[1])),
     ).toEqual(["alpha"]);
+    expect(strict.analyze(input, { minSeverity: "soft" })).toHaveLength(1);
     expect(strict.check(input, { severities: ["low"] })).toBe(false);
     expect(strict.censor(input, { categories: ["VULGAR"] })).toBe(input);
   });
@@ -211,9 +259,13 @@ describe("public API", () => {
     const firstMatch = matches[0];
 
     expect(strict.check(input, { severities: ["soft"] })).toBe(false);
+    expect(strict.check(input, { minSeverity: "high" })).toBe(true);
     expect(strict.check(input, { categories: ["OBSCENE_MAT"] })).toBe(true);
     expect(strict.censor(input, { categories: ["VULGAR"] })).toBe(
       "alpha **** delta",
+    );
+    expect(strict.censor(input, { minSeverity: "high" })).toBe(
+      "***** beta delta",
     );
     expect(strict.censor(input, { severities: ["high"] })).toBe(
       "***** beta delta",
@@ -231,6 +283,7 @@ describe("public API", () => {
     const options: ProfanityMatchOptions = {
       categories: ["OBSCENE_MAT"],
       severities: ["high"],
+      minSeverity: "medium",
     };
     const strict = createProfanityFilter(
       [{ source: "alpha", category: "OBSCENE_MAT", severity: "high" }],

@@ -20,6 +20,7 @@ import type {
   ProfanityFilter,
   ProfanityMatchOptions,
   ProfanityMatchRange,
+  ProfanitySeverity,
   ProfanityTermList,
 } from "./types.js";
 import type { InternalProfanityRuleDefinition } from "./matchers/internal-rules.js";
@@ -276,8 +277,13 @@ const filterMatchesByTaxonomy = (
     options.categories === undefined ? undefined : new Set(options.categories);
   const severities =
     options.severities === undefined ? undefined : new Set(options.severities);
+  const minSeverity = options.minSeverity;
 
-  if (categories === undefined && severities === undefined) {
+  if (
+    categories === undefined &&
+    severities === undefined &&
+    minSeverity === undefined
+  ) {
     return matches;
   }
 
@@ -286,9 +292,25 @@ const filterMatchesByTaxonomy = (
       (categories === undefined ||
         (match.category !== undefined && categories.has(match.category))) &&
       (severities === undefined ||
-        (match.severity !== undefined && severities.has(match.severity))),
+        (match.severity !== undefined && severities.has(match.severity))) &&
+      (minSeverity === undefined ||
+        (match.severity !== undefined &&
+          isAtLeastSeverity(match.severity, minSeverity))),
   );
 };
+
+const PROFANITY_SEVERITY_RANK: Record<ProfanitySeverity, number> = {
+  soft: 0,
+  low: 1,
+  medium: 2,
+  high: 3,
+};
+
+const isAtLeastSeverity = (
+  severity: ProfanitySeverity,
+  minSeverity: ProfanitySeverity,
+): boolean =>
+  PROFANITY_SEVERITY_RANK[severity] >= PROFANITY_SEVERITY_RANK[minSeverity];
 
 export const profanityFilter = createProfanityFilter;
 export const filter = createProfanityFilter(STRICT_BASE, LOOSE_BASE);

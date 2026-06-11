@@ -16,6 +16,7 @@ export interface ProfanityTaxonomyMetadata {
 export interface ProfanityMatchOptions {
   readonly categories?: readonly ProfanityCategory[];
   readonly severities?: readonly ProfanitySeverity[];
+  readonly minSeverity?: ProfanitySeverity;
 }
 
 export type ProfanityMatchMode = "strict" | "loose";

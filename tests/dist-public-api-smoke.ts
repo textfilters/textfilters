@@ -15,6 +15,7 @@ const severity: ProfanitySeverity = "high";
 const options: ProfanityMatchOptions = {
   categories: [category],
   severities: [severity],
+  minSeverity: "medium",
 };
 const metadata: ProfanityTaxonomyMetadata = {
   category,
