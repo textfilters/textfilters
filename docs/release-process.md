@@ -19,7 +19,7 @@ can be copied from the PR.
 Examples:
 
 ```text
-fix: include corpus JSON in package build
+fix: include language dictionary JSON in package build
 fix(email): reject ambiguous bare-word domains
 feat: expose analysis result metadata
 docs: clarify runtime literal behavior

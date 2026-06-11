@@ -18,6 +18,7 @@ export interface InternalProfanityRule extends ProfanityTaxonomyMetadata {
 export type InternalProfanityRuleDefinition =
   | string
   | (ProfanityTaxonomyMetadata & {
+      readonly id?: string;
       readonly source: string;
       readonly loose?: InternalProfanityRuleLooseOptions;
     });
@@ -34,7 +35,9 @@ export const createBuiltInProfanityRules = (
     const rule = builtInRuleDefinitionToRule(definition);
 
     return {
-      id: `builtin:${corpus}:${index}:${stableRuleSourceHash(rule.source)}`,
+      id:
+        rule.id ??
+        `builtin:${corpus}:${index}:${stableRuleSourceHash(rule.source)}`,
       ...rule,
     };
   });
@@ -79,10 +82,11 @@ const stableRuleSourceHash = (source: string): string => {
 
 const builtInRuleDefinitionToRule = (
   definition: InternalProfanityRuleDefinition,
-): Omit<InternalProfanityRule, "id"> =>
+): Omit<InternalProfanityRule, "id"> & { readonly id?: string } =>
   typeof definition === "string"
     ? { source: definition }
     : {
+        ...(definition.id === undefined ? {} : { id: definition.id }),
         ...ruleSourceMetadata(definition),
         ...(definition.loose === undefined ? {} : { loose: definition.loose }),
       };

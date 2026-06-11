@@ -29,8 +29,8 @@ metadata required by the requested filter. Empty arrays intentionally act as
 empty filters.
 
 Runtime string terms remain unclassified and omit taxonomy metadata. Object
-terms can carry `category` and `severity`, and built-in JSON corpora are still
-string-backed through the generated term modules.
+terms can carry `category` and `severity`. The built-in Russian dictionary is
+object-backed but its current rules do not attach taxonomy metadata yet.
 
 ## Audit Findings
 

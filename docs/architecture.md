@@ -1,10 +1,10 @@
 # Profanity Filter Architecture
 
 This package keeps the public dictionary API intentionally small: runtime terms are
-normalized literals, while the bundled Russian profanity corpus may use controlled
-internal rules. That split keeps custom dictionaries predictable and avoids the
-raw-regex edge cases that previously made matching, normalization, and boundary
-checks hard to reason about.
+normalized literals, while the bundled Russian profanity dictionary may use
+controlled internal rules. That split keeps custom dictionaries predictable and
+avoids the raw-regex edge cases that previously made matching, normalization, and
+boundary checks hard to reason about.
 
 ## Compatibility And Intentional Changes
 
@@ -48,8 +48,9 @@ folding, `ё` to `е` folding, and zero-width replacement with a regular space.
 flowchart LR
   PublicAPI["createProfanityFilter(strict, loose)"] --> RuntimeTerms["runtime terms"]
   RuntimeTerms --> LiteralCompiler["matchers/literals"]
-  DefaultFilter["filter"] --> BuiltInTerms["built-in JSON term data"]
-  BuiltInTerms --> InternalRules["matchers/internal-rules"]
+  DefaultFilter["filter"] --> RussianDictionary["Russian language dictionary"]
+  RussianDictionary --> MatcherViews["compiled strict and loose views"]
+  MatcherViews --> InternalRules["matchers/internal-rules"]
   InternalRules --> Reader["rule-reader and rule-classifier"]
   LiteralCompiler --> Matchers["compiled matcher sets"]
   Reader --> Matchers
@@ -61,9 +62,15 @@ literal text `foo|bar`, not `foo` or `bar`. Escaped punctuation is accepted for
 compatibility with old literal spellings, so `foo\\.bar` is treated as the literal
 term `foo.bar`.
 
-The built-in lists are different. They are package-owned rule sources that are
-compiled internally and covered by corpus tests. This allows compact expressions
-for Russian morphology without exposing arbitrary user regex semantics.
+The built-in Russian dictionary is different. It is package-owned rule data that
+is compiled internally and covered by corpus tests. Each rule owns its source,
+optional taxonomy metadata, and match behavior. Strict and loose are compiled
+matcher views, not separate dictionaries. This allows compact expressions for
+Russian morphology without exposing arbitrary user regex semantics.
+
+The source tree is prepared for language profiles, but this package does not
+implement multi-language selection, external language packs, or a public pack API
+yet. The only built-in profile is Russian.
 
 ## Strict And Loose Matching
 
@@ -111,7 +118,10 @@ The implementation is split by reading level:
 ```mermaid
 flowchart TD
   API["filter.ts: public API and mutable state"] --> Terms["matchers/terms.ts: input cleanup"]
+  API --> Languages["languages/ru: built-in Russian dictionary profile"]
+  Languages --> TermsLoaders["terms/*.ts: compatibility matcher views"]
   Terms --> Build["matchers/build.ts: combine internal rules and literals"]
+  TermsLoaders --> Build
   Build --> Literal["matchers/literals.ts: runtime literal terms"]
   Build --> Internal["matchers/internal-rules.ts: built-in rule expansion"]
   Internal --> RuleHelpers["rule-reader / rule-scanner / rule-classifier"]
@@ -137,13 +147,14 @@ range modules decide what parts of text can be masked.
 | `src/matchers/rule-reader.ts`     | Reads controlled rule sources into atoms.                             |
 | `src/matchers/rule-scanner.ts`    | Low-level controlled rule scanning and alternative splitting helpers. |
 | `src/matchers/rule-classifier.ts` | Decides which controlled atoms are word-like.                         |
+| `src/languages/profanity.ts`      | Generic language dictionary to matcher-view conversion.               |
+| `src/languages/ru/*`              | Built-in Russian profanity dictionary/profile data.                   |
 | `src/ranges/strict.ts`            | Strict range collection.                                              |
 | `src/ranges/loose.ts`             | Loose range collection.                                               |
 | `src/ranges/patterns.ts`          | Shared global regexp iteration with zero-width protection.            |
 | `src/ranges/boundary.ts`          | Token-boundary validation.                                            |
 | `src/token-ranges.ts`             | Shared UTF-16 token and masking helpers.                              |
-| `src/terms/*.ts`                  | Typed loaders for built-in package-owned rule data.                   |
-| `src/terms/data/*.json`           | Built-in package-owned rule data.                                     |
+| `src/terms/*.ts`                  | Compatibility exports for compiled built-in matcher views.            |
 
 The important design decision is that user input never enters the internal rule
 compiler. That keeps the public API stable, prevents user-provided zero-width or
@@ -156,7 +167,7 @@ after text normalization.
 | Change                                     | Start Here                                                       |
 | ------------------------------------------ | ---------------------------------------------------------------- |
 | Add a runtime dictionary behavior          | `src/matchers/literals.ts` and tests.                            |
-| Add a built-in corpus rule                 | `src/terms/data/*.json` and corpus tests.                        |
+| Add a built-in Russian corpus rule         | `src/languages/ru/profanity.json` and corpus tests.              |
 | Change separator handling for built-ins    | `src/matchers/internal-rules.ts`.                                |
 | Change token acceptance or false positives | `src/ranges/boundary.ts`.                                        |
 | Change masking length behavior             | `src/token-ranges.ts`.                                           |
@@ -164,8 +175,10 @@ after text normalization.
 
 ## Adding New Built-In Rules
 
-1. Add the narrowest rule source to `src/terms/data/strict-base.json` or
-   `src/terms/data/loose-base.json`.
+1. Add the narrowest rule source to `src/languages/ru/profanity.json`.
+   Choose `match.strict`, `match.loose`, or both based on the behavior being
+   added; strict and loose are compiled matcher modes, not separate source
+   dictionaries.
 2. Add a positive corpus case in the relevant corpus spec under `tests/`.
 3. Add a false-positive case when the rule could overlap with common neutral
    words.

@@ -138,9 +138,9 @@ needed. Taxonomy options apply the same match narrowing as `analyze()`.
 
 ### `createProfanityFilter(strict?, loose?): ProfanityFilter`
 
-Creates a new mutable filter instance. Without arguments it uses the built-in
-strict and loose dictionaries. Passing arrays replaces that side with runtime
-dictionary terms:
+Creates a new mutable filter instance. Without arguments it uses compiled views
+of the built-in Russian dictionary. Passing arrays replaces that side with
+runtime dictionary terms:
 
 ```ts
 const strictOnly = createProfanityFilter(["blocked"], []);
@@ -196,14 +196,16 @@ term such as `foo|bar` matches the literal text `foo|bar`, not `foo` or `bar`.
 Escaped punctuation from older literal spellings is accepted, so `foo\\.bar`
 matches the literal text `foo.bar`.
 
-The built-in corpus is different: package-owned data may use controlled internal
-rules to represent existing behavior compactly. That internal rule syntax is not
-part of the public API and is not applied to runtime dictionaries.
+The built-in Russian dictionary is different: package-owned data may use
+controlled internal rules to represent existing behavior compactly. That
+internal rule syntax is not part of the public API and is not applied to runtime
+dictionaries.
 
 Built-in internal rules can also carry compact compiler metadata, such as loose
 stretch matching for repeated word-like atoms. Language-specific roots, aliases,
-guards, and false-positive protections belong in corpus data; the matcher keeps
-the corresponding compilation behavior generic.
+guards, morphology, taxonomy, loose behavior, and false-positive protections
+belong in the Russian dictionary profile; the matcher keeps the corresponding
+compilation behavior generic.
 
 ## Known Limitations And Behavior Notes
 
@@ -227,7 +229,7 @@ Intentional public-package changes:
 - The filter exposes stable `name: "profanity"`.
 - The filter exposes `analyze(text): ProfanityMatchRange[]` for accepted match ranges and optional taxonomy metadata.
 - The filter exposes `check(text): boolean` for boolean-only detection.
-- `createProfanityFilter()` without arguments creates an instance with the built-in package dictionaries.
+- `createProfanityFilter()` without arguments creates an instance with compiled views of the built-in Russian dictionary.
 - Masking preserves JavaScript string length for astral code points.
 
 ## Architecture

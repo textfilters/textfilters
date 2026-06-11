@@ -147,10 +147,12 @@ behavior of calls that omit options.
 
 ## Corpus Taxonomy Audit Status
 
-The built-in JSON corpus is currently string-backed and does not attach
-taxonomy metadata to package-owned rules. Runtime object-backed terms and future
-object-backed corpus rules can carry metadata, and tests enforce that any
-taxonomy-backed built-in rule uses a valid category and severity.
+The built-in Russian dictionary is object-backed so each package-owned rule can
+carry source, match behavior, and optional taxonomy metadata in one place. The
+current Russian rules do not attach taxonomy metadata yet. Runtime object-backed
+terms and future taxonomy-backed corpus rules can carry metadata, and tests
+enforce that any taxonomy-backed built-in rule uses a valid category and
+severity.
 
 ## Open Questions
 

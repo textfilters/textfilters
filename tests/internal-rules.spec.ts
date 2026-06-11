@@ -17,6 +17,7 @@ import {
   compileStrictInternalRulePatterns,
   createBuiltInProfanityRules,
 } from "../src/matchers/internal-rules.js";
+import { RUSSIAN_PROFANITY_DICTIONARY } from "../src/languages/ru/index.js";
 import { LOOSE_BASE } from "../src/terms/loose-base.js";
 import { STRICT_BASE } from "../src/terms/strict-base.js";
 import type { InternalProfanityRuleDefinition } from "../src/matchers/internal-rules.js";
@@ -145,20 +146,39 @@ describe("internal profanity rules", () => {
       {
         corpus: "strict",
         totalRules: 53,
-        stringBackedRules: 53,
+        stringBackedRules: 0,
         taxonomyBackedRules: 0,
-        compilerMetadataRules: 0,
+        compilerMetadataRules: 53,
         invalidTaxonomyBackedRules: 0,
       },
       {
         corpus: "loose",
         totalRules: 62,
-        stringBackedRules: 12,
+        stringBackedRules: 0,
         taxonomyBackedRules: 0,
-        compilerMetadataRules: 50,
+        compilerMetadataRules: 62,
         invalidTaxonomyBackedRules: 0,
       },
     ]);
+  });
+
+  it("models the Russian corpus as one language dictionary with compiled matcher views", () => {
+    const rules = RUSSIAN_PROFANITY_DICTIONARY.rules;
+
+    expect(RUSSIAN_PROFANITY_DICTIONARY.language).toBe("ru");
+    expect(rules).toHaveLength(67);
+    expect(
+      rules.filter((rule) => rule.match.strict !== undefined),
+    ).toHaveLength(STRICT_BASE.length);
+    expect(rules.filter((rule) => rule.match.loose !== undefined)).toHaveLength(
+      LOOSE_BASE.length,
+    );
+    expect(
+      rules.filter(
+        (rule) =>
+          rule.match.strict !== undefined && rule.match.loose !== undefined,
+      ),
+    ).toHaveLength(48);
   });
 
   it("keeps representative taxonomy-backed examples for every public category and severity", () => {
