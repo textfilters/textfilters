@@ -3,7 +3,12 @@ import type { CompiledPattern } from "../matchers/compile.js";
 import { patternMatches } from "../matchers/compile.js";
 import type { CollectedProfanityRange } from "../matches/ranges.js";
 import { nextCodePointEnd } from "../normalization/text.js";
-import { WHITESPACE_RE, WORD_CHAR_RE, WORD_RE } from "../token-ranges.js";
+import {
+  containsWordChar,
+  WHITESPACE_RE,
+  WORD_CHAR_RE,
+  WORD_RE,
+} from "../token-ranges.js";
 import { boundaryCheckedRange } from "./boundary.js";
 import { collectedRangeForPattern } from "./collected.js";
 import { forEachPatternMatch } from "./patterns.js";
@@ -96,21 +101,6 @@ const findMatchingTokenPattern = (
     if (patternMatches(pattern, value)) return pattern;
   }
   return null;
-};
-
-const containsWordChar = (
-  normalized: string,
-  start: number,
-  end: number,
-): boolean => {
-  for (let position = start; position < end; ) {
-    const charEnd = nextCodePointEnd(normalized, position);
-    if (WORD_CHAR_RE.test(normalized.slice(position, charEnd))) {
-      return true;
-    }
-    position = charEnd;
-  }
-  return false;
 };
 
 const forEachSymbolRun = (

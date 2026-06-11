@@ -7,18 +7,16 @@ export interface LiteralTermDefinition extends ProfanityTaxonomyMetadata {
   readonly source: string;
 }
 
-type LiteralTermInput = string | LiteralTermDefinition;
-
 export const LOOSE_SEPARATOR = String.raw`[^\p{L}\p{N}]*`;
 
 const LITERAL_ESCAPE_RE = /\\([\\^$.*+?()[\]{}|/])/g;
 
 export const compileStrictLiteralPatterns = (
-  terms: readonly LiteralTermInput[],
+  terms: readonly LiteralTermDefinition[],
   wholeToken: boolean,
 ): CompiledPattern[] =>
   compilePatternDefinitions(
-    terms.map(toLiteralTermDefinition).map((term) => ({
+    terms.map((term) => ({
       source: literalSource(term.source),
       ...literalMetadata(term),
     })),
@@ -26,40 +24,33 @@ export const compileStrictLiteralPatterns = (
   );
 
 export const compileStrictPhraseLiteralPatterns = (
-  terms: readonly LiteralTermInput[],
+  terms: readonly LiteralTermDefinition[],
 ): CompiledPattern[] =>
   compilePatternDefinitions(
-    terms
-      .map(toLiteralTermDefinition)
-      .filter(needsPhrasePass)
-      .map((term) => ({
-        source: literalSource(term.source),
-        ...literalMetadata(term),
-      })),
+    terms.filter(needsPhrasePass).map((term) => ({
+      source: literalSource(term.source),
+      ...literalMetadata(term),
+    })),
     false,
   );
 
 export const compileStrictSymbolLiteralPatterns = (
-  terms: readonly LiteralTermInput[],
+  terms: readonly LiteralTermDefinition[],
 ): CompiledPattern[] =>
   compilePatternDefinitions(
-    terms
-      .map(toLiteralTermDefinition)
-      .filter(isSymbolOnlyLiteral)
-      .map((term) => ({
-        source: literalSource(term.source),
-        ...literalMetadata(term),
-      })),
+    terms.filter(isSymbolOnlyLiteral).map((term) => ({
+      source: literalSource(term.source),
+      ...literalMetadata(term),
+    })),
     true,
   );
 
 export const strictSymbolLiteralLengths = (
-  terms: readonly LiteralTermInput[],
+  terms: readonly LiteralTermDefinition[],
 ): readonly number[] =>
   Array.from(
     new Set(
       terms
-        .map(toLiteralTermDefinition)
         .map((term) => normalizeLiteralTerm(term.source))
         .filter(isSymbolRunLiteral)
         .map((term) => term.length),
@@ -67,10 +58,10 @@ export const strictSymbolLiteralLengths = (
   ).sort((left, right) => right - left);
 
 export const compileLooseLiteralPatterns = (
-  terms: readonly LiteralTermInput[],
+  terms: readonly LiteralTermDefinition[],
 ): CompiledPattern[] =>
   compilePatternDefinitions(
-    terms.map(toLiteralTermDefinition).map((term) => ({
+    terms.map((term) => ({
       source: looseLiteralSource(term.source),
       ...literalMetadata(term),
     })),
@@ -104,11 +95,6 @@ const literalMetadata = (
   ...(term.category === undefined ? {} : { category: term.category }),
   ...(term.severity === undefined ? {} : { severity: term.severity }),
 });
-
-const toLiteralTermDefinition = (
-  term: LiteralTermInput,
-): LiteralTermDefinition =>
-  typeof term === "string" ? { source: term } : term;
 
 const isSymbolRunLiteral = (term: string): boolean =>
   term.length > 0 && !WORD_CHAR_RE.test(term) && !WHITESPACE_RE.test(term);

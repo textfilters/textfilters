@@ -4,6 +4,7 @@ import type { CompiledPattern } from "../matchers/compile.js";
 import type { CollectedProfanityRange } from "../matches/ranges.js";
 import { nextCodePointEnd } from "../normalization/text.js";
 import {
+  containsWordChar,
   expandToTokenBounds,
   SPLIT_TOKEN_CHAR_RE,
   tokenBoundsAt,
@@ -133,21 +134,6 @@ const trimSplitWordSuffix = (
   return containsNonSplitWordChar(normalized, trimmedEnd, expandedEnd)
     ? trimmedEnd
     : expandedEnd;
-};
-
-const containsWordChar = (
-  normalized: string,
-  start: number,
-  end: number,
-): boolean => {
-  for (let position = start; position < end; ) {
-    const charEnd = nextCodePointEnd(normalized, position);
-    if (WORD_CHAR_RE.test(normalized.slice(position, charEnd))) {
-      return true;
-    }
-    position = charEnd;
-  }
-  return false;
 };
 
 const containsNonSplitWordChar = (

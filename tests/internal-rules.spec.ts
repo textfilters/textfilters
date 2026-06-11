@@ -471,7 +471,7 @@ describe("internal profanity rules", () => {
   });
 
   it("leaves runtime literal patterns without taxonomy metadata", () => {
-    const pattern = compileStrictLiteralPatterns(["bad"], true)[0];
+    const pattern = compileStrictLiteralPatterns([{ source: "bad" }], true)[0];
 
     expect(pattern?.ruleId).toBeUndefined();
     expect(pattern?.category).toBeUndefined();

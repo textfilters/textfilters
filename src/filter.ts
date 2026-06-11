@@ -77,11 +77,11 @@ function createState(
     strictTerms:
       strictTerms === STRICT_BASE
         ? builtInRuleTerms(strictTerms, "strict")
-        : customRuleAndLiteralTerms(strictTerms),
+        : runtimeLiteralTerms(strictTerms),
     looseTerms:
       looseTerms === LOOSE_BASE
         ? builtInRuleTerms(looseTerms, "loose")
-        : customRuleAndLiteralTerms(looseTerms),
+        : runtimeLiteralTerms(looseTerms),
     strictPatterns: {
       token: [],
       symbolToken: [],
@@ -111,11 +111,6 @@ const builtInRuleTerms = (
 ): MatcherTerms => ({
   internal: createBuiltInProfanityRules(builtInRuleDefinitions(terms), corpus),
   literals: [],
-});
-
-const customRuleAndLiteralTerms = (terms: ProfanityTermList): MatcherTerms => ({
-  internal: [],
-  literals: literalDefinitions(terms),
 });
 
 const builtInRuleDefinitions = (

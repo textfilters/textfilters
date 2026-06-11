@@ -17,6 +17,21 @@ export const isWordCharAt = (s: string, i: number): boolean =>
   i < s.length &&
   WORD_CHAR_RE.test(s.slice(i, nextCodePointEnd(s, i)));
 
+export const containsWordChar = (
+  s: string,
+  start: number,
+  end: number,
+): boolean => {
+  for (let position = start; position < end; ) {
+    const charEnd = nextCodePointEnd(s, position);
+    if (WORD_CHAR_RE.test(s.slice(position, charEnd))) {
+      return true;
+    }
+    position = charEnd;
+  }
+  return false;
+};
+
 export const expandToTokenBounds = (
   s: string,
   a: number,
