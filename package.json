@@ -30,8 +30,9 @@
     "test": "vitest run",
     "lint": "prettier README.md docs package.json src tests --check",
     "format": "prettier README.md docs package.json src tests --write",
+    "smoke:dist": "npm run build && tsc --ignoreConfig --noEmit --target ES2024 --module NodeNext --moduleResolution NodeNext --strict --skipLibCheck tests/dist-public-api-smoke.ts && node tests/dist-public-api-smoke.mjs",
     "pack:dry-run": "npm pack --dry-run",
-    "check": "npm run lint && npm test && npm run build && npm run pack:dry-run"
+    "check": "npm run lint && npm test && npm run smoke:dist && npm run pack:dry-run"
   },
   "dependencies": {
     "@textfilters/core": "^0.1.0"

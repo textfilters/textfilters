@@ -160,6 +160,43 @@ describe("public API", () => {
     expect(strict.analyze(input, { categories: ["EUPHEMISM"] })).toEqual([]);
   });
 
+  it("treats empty taxonomy option arrays as empty filters", () => {
+    const strict = createProfanityFilter(
+      [{ source: "alpha", category: "OBSCENE_MAT", severity: "high" }],
+      [],
+    );
+
+    expect(strict.analyze("alpha", { categories: [] })).toEqual([]);
+    expect(strict.analyze("alpha", { severities: [] })).toEqual([]);
+    expect(
+      strict.analyze("alpha", {
+        categories: [],
+        severities: ["high"],
+      }),
+    ).toEqual([]);
+    expect(strict.check("alpha", { categories: [] })).toBe(false);
+    expect(strict.censor("alpha", { severities: [] })).toBe("alpha");
+  });
+
+  it("excludes string-backed matches when taxonomy filters are requested", () => {
+    const strict = createProfanityFilter(
+      [{ source: "alpha", category: "OBSCENE_MAT", severity: "high" }],
+      ["beta"],
+    );
+    const input = "alpha b-e-t-a";
+
+    expect(
+      strict
+        .analyze(input, {
+          categories: ["OBSCENE_MAT"],
+          severities: ["high"],
+        })
+        .map((match) => input.slice(match[0], match[1])),
+    ).toEqual(["alpha"]);
+    expect(strict.check(input, { severities: ["low"] })).toBe(false);
+    expect(strict.censor(input, { categories: ["VULGAR"] })).toBe(input);
+  });
+
   it("applies taxonomy options to check and censor without mutating matches", () => {
     const strict = createProfanityFilter(
       [
