@@ -1,7 +1,4 @@
-import type {
-  InternalProfanityRuleDefinition,
-  InternalProfanityRuleLooseOptions,
-} from "../matchers/internal-rules.js";
+import type { InternalProfanityRuleDefinition } from "../matchers/internal-rules.js";
 import type { ProfanityTaxonomyMetadata } from "../types.js";
 
 export interface ProfanityLanguageDictionary {
@@ -22,7 +19,9 @@ export interface ProfanityLanguageRuleMatch {
 
 export type ProfanityLanguageStrictMatchOptions = Record<string, never>;
 
-export interface ProfanityLanguageLooseMatchOptions extends InternalProfanityRuleLooseOptions {}
+export interface ProfanityLanguageLooseMatchOptions {
+  readonly stretch?: boolean;
+}
 
 export type ProfanityLanguageMatchMode = "strict" | "loose";
 
@@ -52,5 +51,5 @@ export const dictionaryRulesForMode = (
 
 const looseOptions = (
   match: ProfanityLanguageLooseMatchOptions,
-): { readonly loose?: InternalProfanityRuleLooseOptions } =>
+): { readonly loose?: ProfanityLanguageLooseMatchOptions } =>
   match.stretch === true ? { loose: { stretch: true } } : {};

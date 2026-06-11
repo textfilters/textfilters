@@ -2,12 +2,16 @@ import { describe, expect, expectTypeOf, it } from "vitest";
 
 import {
   createProfanityFilter,
+  createProfanityFilterFromDictionary,
   filter,
   PROFANITY_FILTER_NAME,
   profanityFilter,
+  russianProfanityDictionary,
 } from "../src/index.js";
 import type {
   ProfanityCategory,
+  ProfanityLanguageDictionary,
+  ProfanityLanguageRuleDefinition,
   ProfanityMatchOptions,
   ProfanityMatchMode,
   ProfanityMatchRange,
@@ -18,6 +22,25 @@ import type {
 import { mask } from "./helpers.js";
 
 describe("public API", () => {
+  it("exports language dictionary helpers from the public entrypoint", () => {
+    expectTypeOf<ProfanityLanguageDictionary>().toMatchTypeOf<{
+      readonly language: string;
+      readonly rules: readonly ProfanityLanguageRuleDefinition[];
+    }>();
+    expectTypeOf<ProfanityLanguageRuleDefinition>().toMatchTypeOf<{
+      readonly id?: string;
+      readonly source: string;
+      readonly match: {
+        readonly strict?: Record<string, never>;
+        readonly loose?: {
+          readonly stretch?: boolean;
+        };
+      };
+    }>();
+    expect(russianProfanityDictionary.language).toBe("ru");
+    expect(russianProfanityDictionary.rules.length).toBeGreaterThan(0);
+  });
+
   it("exports taxonomy metadata types from the public entrypoint", () => {
     expectTypeOf<"OBSCENE_MAT">().toExtend<ProfanityCategory>();
     expectTypeOf<"soft">().toExtend<ProfanitySeverity>();
@@ -54,6 +77,71 @@ describe("public API", () => {
 
   it("uses built-in dictionaries for the default factory instance", () => {
     expect(createProfanityFilter().censor("привет блядь")).toBe("привет *****");
+  });
+
+  it("creates an isolated filter from the Russian language dictionary", () => {
+    const dictionaryFilter = createProfanityFilterFromDictionary(
+      russianProfanityDictionary,
+    );
+
+    expect(dictionaryFilter.name).toBe(PROFANITY_FILTER_NAME);
+    expect(dictionaryFilter.censor("привет блядь")).toBe("привет *****");
+    expect(dictionaryFilter.check("привет")).toBe(false);
+  });
+
+  it("preserves Russian dictionary metadata in analyze output", () => {
+    const dictionaryFilter = createProfanityFilterFromDictionary(
+      russianProfanityDictionary,
+    );
+
+    expect(dictionaryFilter.analyze("бля")[0]).toMatchObject({
+      ruleId: "ru.obscene.blya",
+      category: "OBSCENE_MAT",
+      severity: "medium",
+      mode: "strict",
+    });
+  });
+
+  it("applies taxonomy filters to language dictionary filters", () => {
+    const dictionaryFilter = createProfanityFilterFromDictionary(
+      russianProfanityDictionary,
+    );
+    const input = "бля хули";
+
+    expect(dictionaryFilter.check("бля", { categories: ["OBSCENE_MAT"] })).toBe(
+      true,
+    );
+    expect(dictionaryFilter.check("бля", { categories: ["VULGAR"] })).toBe(
+      false,
+    );
+    expect(dictionaryFilter.check("хули", { severities: ["low"] })).toBe(true);
+    expect(dictionaryFilter.check("хули", { minSeverity: "medium" })).toBe(
+      false,
+    );
+    expect(
+      new Set(
+        dictionaryFilter
+          .analyze(input, {
+            categories: ["OBSCENE_MAT"],
+            minSeverity: "medium",
+          })
+          .map((match) => input.slice(match[0], match[1])),
+      ),
+    ).toEqual(new Set(["бля"]));
+  });
+
+  it("keeps language dictionary instances separate from the shared filter", () => {
+    const dictionaryFilter = createProfanityFilterFromDictionary(
+      russianProfanityDictionary,
+    );
+
+    dictionaryFilter.setStrict(["isolated-only"]);
+    dictionaryFilter.setLoose([]);
+
+    expect(dictionaryFilter.check("блядь")).toBe(false);
+    expect(dictionaryFilter.check("isolated-only")).toBe(true);
+    expect(filter.check("блядь")).toBe(true);
+    expect(filter.check("isolated-only")).toBe(false);
   });
 
   it("keeps censor and check behavior stable through internal range metadata", () => {

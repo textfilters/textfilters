@@ -153,6 +153,36 @@ const builtIn = createProfanityFilter();
 All filter instances expose stable `name: "profanity"` plus `check`, `censor`,
 `analyze`, `setStrict`, `setLoose`, `addStrict`, and `addLoose`.
 
+### Language Dictionaries
+
+The package exports a minimal language dictionary API for callers that need an
+isolated filter built from a maintained language dictionary:
+
+```ts
+import {
+  createProfanityFilterFromDictionary,
+  russianProfanityDictionary,
+  type ProfanityLanguageDictionary,
+} from "@textfilters/profanity";
+
+const dictionary: ProfanityLanguageDictionary = russianProfanityDictionary;
+const russianFilter = createProfanityFilterFromDictionary(dictionary);
+
+russianFilter.analyze("message text");
+```
+
+`createProfanityFilterFromDictionary(dictionary)` compiles strict and loose
+views from the dictionary and returns a mutable `ProfanityFilter` instance. The
+instance is isolated from the shared `filter` export, so later calls to
+`setStrict`, `setLoose`, `addStrict`, or `addLoose` affect only that instance.
+
+Dictionary-backed matches preserve semantic rule ids, categories, and
+severities in `analyze()` output, and taxonomy filters apply to those metadata
+fields. Runtime dictionary terms remain normalized literals; language
+dictionaries are the supported boundary for maintained language-specific rule
+data. This release intentionally keeps the public surface small and does not
+add new languages or separate packages.
+
 ### Taxonomy Metadata Types
 
 The package also exports type-only taxonomy metadata names for callers that need

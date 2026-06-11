@@ -3,6 +3,8 @@ import type { MatcherTerms, StrictPatternSet } from "./matchers/build.js";
 import type { CompiledPattern } from "./matchers/compile.js";
 import { createBuiltInProfanityRules } from "./matchers/internal-rules.js";
 import { normalizeTermList } from "./matchers/terms.js";
+import { dictionaryRulesForMode } from "./languages/profanity.js";
+import type { ProfanityLanguageDictionary } from "./languages/profanity.js";
 import {
   matchRangesForMode,
   PROFANITY_MATCH_MODE,
@@ -41,9 +43,13 @@ interface FilterState {
 export const createProfanityFilter = (
   strictTerms: ProfanityTermList = STRICT_BASE,
   looseTerms: ProfanityTermList = LOOSE_BASE,
-): ProfanityFilter => {
-  const state = createState(strictTerms, looseTerms);
+): ProfanityFilter => createFilter(createState(strictTerms, looseTerms));
 
+export const createProfanityFilterFromDictionary = (
+  dictionary: ProfanityLanguageDictionary,
+): ProfanityFilter => createFilter(createDictionaryState(dictionary));
+
+function createFilter(state: FilterState): ProfanityFilter {
   return {
     name: PROFANITY_FILTER_NAME,
     analyze: (text, options) =>
@@ -67,7 +73,7 @@ export const createProfanityFilter = (
       rebuildLoose(state);
     },
   };
-};
+}
 
 function createState(
   strictTerms: ProfanityTermList,
@@ -82,6 +88,33 @@ function createState(
       looseTerms === LOOSE_BASE
         ? builtInRuleTerms(looseTerms, "loose")
         : runtimeLiteralTerms(looseTerms),
+    strictPatterns: {
+      token: [],
+      symbolToken: [],
+      symbolLengths: [],
+      phrase: [],
+    },
+    loosePatterns: [],
+  };
+
+  rebuildStrict(state);
+  rebuildLoose(state);
+
+  return state;
+}
+
+function createDictionaryState(
+  dictionary: ProfanityLanguageDictionary,
+): FilterState {
+  const state: FilterState = {
+    strictTerms: builtInRuleTerms(
+      dictionaryRulesForMode(dictionary, "strict"),
+      "strict",
+    ),
+    looseTerms: builtInRuleTerms(
+      dictionaryRulesForMode(dictionary, "loose"),
+      "loose",
+    ),
     strictPatterns: {
       token: [],
       symbolToken: [],

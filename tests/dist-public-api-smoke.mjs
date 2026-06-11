@@ -1,7 +1,9 @@
 import {
   createProfanityFilter,
+  createProfanityFilterFromDictionary,
   filter,
   PROFANITY_FILTER_NAME,
+  russianProfanityDictionary,
 } from "../dist/index.js";
 
 const strict = createProfanityFilter(
@@ -13,6 +15,9 @@ const strict = createProfanityFilter(
   ],
   [],
 );
+const dictionaryFilter = createProfanityFilterFromDictionary(
+  russianProfanityDictionary,
+);
 const input = "alpha beta gamma delta";
 
 if (PROFANITY_FILTER_NAME !== "profanity") {
@@ -21,6 +26,17 @@ if (PROFANITY_FILTER_NAME !== "profanity") {
 
 if (!filter.check("привет блядь")) {
   throw new Error("Default dist filter did not detect a built-in match.");
+}
+
+if (!dictionaryFilter.check("привет блядь")) {
+  throw new Error("Dist dictionary filter did not detect a built-in match.");
+}
+
+if (
+  dictionaryFilter.analyze("бля")[0]?.ruleId !== "ru.obscene.blya" ||
+  dictionaryFilter.analyze("бля")[0]?.category !== "OBSCENE_MAT"
+) {
+  throw new Error("Dist dictionary filter did not preserve metadata.");
 }
 
 if (
