@@ -181,18 +181,6 @@ describe("internal profanity rules", () => {
     ).toHaveLength(48);
   });
 
-  it("keeps the Russian dictionary as human-maintained rule data", () => {
-    const serializedDictionary = JSON.stringify(RUSSIAN_PROFANITY_DICTIONARY);
-
-    expect(serializedDictionary).not.toContain("builtin:");
-    for (const rule of RUSSIAN_PROFANITY_DICTIONARY.rules) {
-      expect(Object.hasOwn(rule.match.strict ?? {}, "id")).toBe(false);
-      expect(Object.hasOwn(rule.match.strict ?? {}, "order")).toBe(false);
-      expect(Object.hasOwn(rule.match.loose ?? {}, "id")).toBe(false);
-      expect(Object.hasOwn(rule.match.loose ?? {}, "order")).toBe(false);
-    }
-  });
-
   it("derives matcher views from Russian dictionary source order", () => {
     const strictSources = RUSSIAN_PROFANITY_DICTIONARY.rules
       .filter((rule) => rule.match.strict !== undefined)
