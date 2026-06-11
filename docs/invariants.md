@@ -26,15 +26,17 @@ Runtime dictionary terms from `createProfanityFilter(strict, loose)`,
 `setStrict`, `setLoose`, `addStrict`, and `addLoose` are normalized literals.
 They are not regular expressions.
 
-The built-in Russian corpus is package-owned language dictionary data and may
-use controlled internal rules. Keep user-provided terms out of that internal
-rule compiler.
+The built-in Russian corpus is package-owned, human-maintained language
+dictionary data and may use controlled internal rules. Keep user-provided terms
+out of that internal rule compiler.
 
-Built-in rule objects may carry compiler metadata. `loose.stretch: true` allows
-the loose compiler to match repeated word-like atoms with optional separators
-between repeats. This is generic matcher behavior; language-specific roots,
-aliases, guards, morphology, taxonomy, loose behavior, and false-positive
-exceptions must stay in the Russian dictionary profile.
+Built-in rule objects may carry meaningful compiler metadata. For example,
+`loose.stretch: true` allows the loose compiler to match repeated word-like
+atoms with optional separators between repeats. Strict and loose entries are
+compiled matcher views, not serialized matcher output. This is generic matcher
+behavior; language-specific roots, aliases, guards, morphology, taxonomy, loose
+behavior, and false-positive exceptions must stay in the Russian dictionary
+profile.
 
 ## Strict Token Boundaries
 

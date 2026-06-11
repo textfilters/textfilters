@@ -62,11 +62,12 @@ literal text `foo|bar`, not `foo` or `bar`. Escaped punctuation is accepted for
 compatibility with old literal spellings, so `foo\\.bar` is treated as the literal
 term `foo.bar`.
 
-The built-in Russian dictionary is different. It is package-owned rule data that
-is compiled internally and covered by corpus tests. Each rule owns its source,
-optional taxonomy metadata, and match behavior. Strict and loose are compiled
-matcher views, not separate dictionaries. This allows compact expressions for
-Russian morphology without exposing arbitrary user regex semantics.
+The built-in Russian dictionary is different. It is package-owned,
+human-maintained rule data that is compiled internally and covered by corpus
+tests. Each rule owns its source, optional taxonomy metadata, and match
+behavior. Strict and loose are compiled matcher views, not separate dictionaries
+or serialized matcher output. This allows compact expressions for Russian
+morphology without exposing arbitrary user regex semantics.
 
 The source tree is prepared for language profiles, but this package does not
 implement multi-language selection, external language packs, or a public pack API
@@ -178,7 +179,8 @@ after text normalization.
 1. Add the narrowest rule source to `src/languages/ru/profanity.json`.
    Choose `match.strict`, `match.loose`, or both based on the behavior being
    added; strict and loose are compiled matcher modes, not separate source
-   dictionaries.
+   dictionaries. Do not add generated matcher ids or per-mode ordering fields to
+   the dictionary.
 2. Add a positive corpus case in the relevant corpus spec under `tests/`.
 3. Add a false-positive case when the rule could overlap with common neutral
    words.

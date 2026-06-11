@@ -20,15 +20,9 @@ export interface ProfanityLanguageRuleMatch {
   readonly loose?: ProfanityLanguageLooseMatchOptions;
 }
 
-export interface ProfanityLanguageStrictMatchOptions {
-  readonly id?: string;
-  readonly order?: number;
-}
+export type ProfanityLanguageStrictMatchOptions = Record<string, never>;
 
-export interface ProfanityLanguageLooseMatchOptions extends InternalProfanityRuleLooseOptions {
-  readonly id?: string;
-  readonly order?: number;
-}
+export interface ProfanityLanguageLooseMatchOptions extends InternalProfanityRuleLooseOptions {}
 
 export type ProfanityLanguageMatchMode = "strict" | "loose";
 
@@ -36,28 +30,25 @@ export const dictionaryRulesForMode = (
   dictionary: ProfanityLanguageDictionary,
   mode: ProfanityLanguageMatchMode,
 ): InternalProfanityRuleDefinition[] =>
-  dictionary.rules
-    .flatMap((rule, index) => {
-      const match = rule.match[mode];
+  dictionary.rules.flatMap((rule) => {
+    const match = rule.match[mode];
 
-      if (match === undefined) {
-        return [];
-      }
+    if (match === undefined) {
+      return [];
+    }
 
-      const definition: InternalProfanityRuleDefinition = {
-        id: match.id ?? rule.id,
-        source: rule.source,
-        ...(rule.category === undefined ? {} : { category: rule.category }),
-        ...(rule.severity === undefined ? {} : { severity: rule.severity }),
-        ...(mode === "loose"
-          ? looseOptions(match as ProfanityLanguageLooseMatchOptions)
-          : {}),
-      };
+    const definition: InternalProfanityRuleDefinition = {
+      ...(rule.id === undefined ? {} : { id: rule.id }),
+      source: rule.source,
+      ...(rule.category === undefined ? {} : { category: rule.category }),
+      ...(rule.severity === undefined ? {} : { severity: rule.severity }),
+      ...(mode === "loose"
+        ? looseOptions(match as ProfanityLanguageLooseMatchOptions)
+        : {}),
+    };
 
-      return [{ definition, order: match.order ?? index }];
-    })
-    .sort((left, right) => left.order - right.order)
-    .map(({ definition }) => definition);
+    return [definition];
+  });
 
 const looseOptions = (
   match: ProfanityLanguageLooseMatchOptions,

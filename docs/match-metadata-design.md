@@ -68,7 +68,9 @@ collector may still group ranges by mode, but public output is a single list of
 accepted match ranges with explicit metadata.
 
 The model preserves enough information for `censor()` to keep its current
-behavior and for callers to inspect structured match facts.
+behavior and for callers to inspect structured match facts. Generated built-in
+rule ids are diagnostic metadata, not stable policy keys; they may change when a
+package-owned corpus is reorganized into different compiled matcher views.
 
 ## Taxonomy-Driven Options
 
@@ -102,7 +104,7 @@ obscene term, a loose/evasive match of that rule is still the same category.
 This means corpus or rule definitions can carry explicit taxonomy metadata, for
 example:
 
-- a stable rule id;
+- an explicit rule id when the package intentionally supports one;
 - a category such as `OBSCENE_MAT`, `STRONG_INSULT`, `VULGAR`, or `EUPHEMISM`;
 - a severity such as `high`, `medium`, `low`, or `soft`;
 - any language- or corpus-specific review notes that are needed before exposure.

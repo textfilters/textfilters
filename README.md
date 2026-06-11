@@ -197,15 +197,20 @@ Escaped punctuation from older literal spellings is accepted, so `foo\\.bar`
 matches the literal text `foo.bar`.
 
 The built-in Russian dictionary is different: package-owned data may use
-controlled internal rules to represent existing behavior compactly. That
-internal rule syntax is not part of the public API and is not applied to runtime
-dictionaries.
+controlled internal rules to represent existing behavior compactly. The JSON
+dictionary is the human-maintained source of truth; strict and loose entries are
+compiled matcher views, not serialized matcher output. That internal rule syntax
+is not part of the public API and is not applied to runtime dictionaries.
 
-Built-in internal rules can also carry compact compiler metadata, such as loose
-stretch matching for repeated word-like atoms. Language-specific roots, aliases,
-guards, morphology, taxonomy, loose behavior, and false-positive protections
-belong in the Russian dictionary profile; the matcher keeps the corresponding
-compilation behavior generic.
+Built-in internal rules can also carry compact, meaningful compiler metadata,
+such as loose stretch matching for repeated word-like atoms. Language-specific
+roots, aliases, guards, morphology, taxonomy, loose behavior, and false-positive
+protections belong in the Russian dictionary profile; generated rule ids and
+matcher ordering are owned by the generic compilation layer.
+
+Generated built-in rule ids are diagnostic metadata, not stable policy or
+allowlist keys. They may change when the package-owned corpus is reorganized
+into different compiled matcher views.
 
 ## Known Limitations And Behavior Notes
 
