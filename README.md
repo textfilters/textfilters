@@ -8,14 +8,14 @@ Textfilters is a small set of composable TypeScript text filtering primitives fo
 
 | Package | Repository | Status | Purpose |
 | --- | --- | --- | --- |
-| `@textfilters/core` | `textfilters/core` | `0.1.2` on GitHub Packages | Shared contracts and pipeline utilities. |
-| `@textfilters/url` | `textfilters/url` | `0.1.2` on GitHub Packages | URL and obfuscated-link filtering. |
-| `@textfilters/phone` | `textfilters/phone` | `0.1.2` on GitHub Packages | Phone-like sequence filtering. |
-| `@textfilters/profanity` | `textfilters/profanity` | `0.1.2` on GitHub Packages | Profanity filtering primitives. |
-| `@textfilters/spam` | `textfilters/spam` | `0.1.2` on GitHub Packages | Lightweight in-memory spam guard primitives. |
-| `@textfilters/email` | `textfilters/email` | `0.2.4` on GitHub Packages | Email address and obfuscated-email filtering. |
+| `@textfilters/core` | `textfilters/core` | Published on GitHub Packages | Shared contracts and pipeline utilities. |
+| `@textfilters/url` | `textfilters/url` | Published on GitHub Packages | URL and obfuscated-link filtering. |
+| `@textfilters/phone` | `textfilters/phone` | Published on GitHub Packages | Phone-like sequence filtering. |
+| `@textfilters/profanity` | `textfilters/profanity` | Published on GitHub Packages | Profanity filtering primitives. |
+| `@textfilters/spam` | `textfilters/spam` | Published on GitHub Packages | Lightweight in-memory spam guard primitives. |
+| `@textfilters/email` | `textfilters/email` | Published on GitHub Packages | Email address and obfuscated-email filtering. |
 
-All current packages are published to GitHub Packages.
+Packages are released independently, so versions are not kept in lockstep across the ecosystem. Use the relevant package repository, GitHub Release, or package metadata as the source of truth for the current release.
 
 ## Installation
 
@@ -69,7 +69,9 @@ const decision = spam.check({
 
 ## Release Model
 
-Packages use semantic versioning and Release Please from Conventional Commit history on `main`. Packages are published to GitHub Packages first, with GitHub Releases and immutable release tags using `vX.Y.Z`. npmjs.org publication may be added later.
+Packages use semantic versioning and Release Please from Conventional Commit history on `main`. Each package has its own release cadence and version line. During `0.x`, minor releases may include API changes, so consumers should review the affected package release notes before upgrading.
+
+Packages are published to GitHub Packages first, with GitHub Releases and immutable release tags using `vX.Y.Z`. npmjs.org publication may be added later.
 
 ## Support
 
