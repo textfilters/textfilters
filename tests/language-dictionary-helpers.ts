@@ -27,6 +27,7 @@ const ALLOWED_PROFANITY_SEVERITY_SET = new Set<unknown>(
 
 const ALLOWED_LOOSE_MATCH_OPTION_KEYS = new Set(["stretch"]);
 const GENERATED_MATCHER_METADATA_KEYS = new Set(["id", "order", "ruleId"]);
+const SEMANTIC_RULE_ID_PATTERN = /^[a-z]{2}\.[a-z]+(?:\.[a-z0-9]+)+$/;
 
 export const assertLanguageDictionaryInvariants = (
   dictionary: ProfanityLanguageDictionary,
@@ -36,6 +37,7 @@ export const assertLanguageDictionaryInvariants = (
     ...dictionary.rules.flatMap((rule, index) =>
       ruleInvariantFailures(rule, index),
     ),
+    ...duplicateRuleIdFailures(dictionary),
     ...generatedMatcherMetadataFailures(dictionary),
   ];
 
@@ -66,6 +68,16 @@ const ruleInvariantFailures = (
 
   if (rule.source.trim().length === 0) {
     failures.push(`rules[${index}].source must not be empty`);
+  }
+
+  if (rule.id !== undefined) {
+    if (rule.id.trim().length === 0) {
+      failures.push(`rules[${index}].id must not be empty`);
+    }
+
+    if (!SEMANTIC_RULE_ID_PATTERN.test(rule.id)) {
+      failures.push(`rules[${index}].id must be a semantic dotted id`);
+    }
   }
 
   if (rule.match.strict === undefined && rule.match.loose === undefined) {
@@ -106,6 +118,28 @@ const ruleInvariantFailures = (
   ) {
     failures.push(`rules[${index}].severity is not supported`);
   }
+
+  return failures;
+};
+
+const duplicateRuleIdFailures = (
+  dictionary: ProfanityLanguageDictionary,
+): string[] => {
+  const failures = [];
+  const seen = new Set<string>();
+
+  dictionary.rules.forEach((rule, index) => {
+    if (rule.id === undefined) {
+      return;
+    }
+
+    if (seen.has(rule.id)) {
+      failures.push(`rules[${index}].id must be unique`);
+      return;
+    }
+
+    seen.add(rule.id);
+  });
 
   return failures;
 };

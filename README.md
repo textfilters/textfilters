@@ -52,12 +52,14 @@ const matches = filter.analyze("blocked text");
 
 for (const match of matches) {
   console.log(match[0], match[1], match.mode);
-  console.log(match.category, match.severity);
+  console.log(match.ruleId, match.category, match.severity);
 }
 ```
 
-`category` and `severity` are present when the matched rule has taxonomy
-metadata. Runtime string terms remain unclassified and omit those fields.
+`ruleId`, `category`, and `severity` are present when the matched rule has
+taxonomy metadata. Built-in Russian dictionary rules include semantic rule ids
+and taxonomy metadata. Runtime string terms remain unclassified and omit those
+fields unless callers provide structured runtime rules with metadata.
 
 Taxonomy options can narrow matches to rules with specific metadata:
 
