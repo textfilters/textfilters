@@ -200,6 +200,11 @@ The built-in corpus is different: package-owned data may use controlled internal
 rules to represent existing behavior compactly. That internal rule syntax is not
 part of the public API and is not applied to runtime dictionaries.
 
+Built-in internal rules can also carry compact compiler metadata, such as loose
+stretch matching for repeated word-like atoms. Language-specific roots, aliases,
+guards, and false-positive protections belong in corpus data; the matcher keeps
+the corresponding compilation behavior generic.
+
 ## Known Limitations And Behavior Notes
 
 - Censored output preserves JavaScript string length, including astral code

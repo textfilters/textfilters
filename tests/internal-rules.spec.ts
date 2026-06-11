@@ -67,6 +67,11 @@ const isObjectRuleDefinition = (
 ): definition is Extract<InternalProfanityRuleDefinition, { source: string }> =>
   typeof definition === "object" && definition !== null;
 
+const hasTaxonomyMetadata = (
+  definition: Extract<InternalProfanityRuleDefinition, { source: string }>,
+): boolean =>
+  definition.category !== undefined || definition.severity !== undefined;
+
 describe("internal profanity rules", () => {
   it("keeps internal object rule metadata within the allowed taxonomy", () => {
     const invalidDefinitions = BUILT_IN_RULE_DEFINITION_SETS.flatMap(
@@ -82,12 +87,25 @@ describe("internal profanity rules", () => {
             failures.push("source");
           }
 
-          if (!ALLOWED_PROFANITY_CATEGORY_SET.has(definition.category)) {
+          if (
+            hasTaxonomyMetadata(definition) &&
+            !ALLOWED_PROFANITY_CATEGORY_SET.has(definition.category)
+          ) {
             failures.push("category");
           }
 
-          if (!ALLOWED_PROFANITY_SEVERITY_SET.has(definition.severity)) {
+          if (
+            hasTaxonomyMetadata(definition) &&
+            !ALLOWED_PROFANITY_SEVERITY_SET.has(definition.severity)
+          ) {
             failures.push("severity");
+          }
+
+          if (
+            definition.loose !== undefined &&
+            definition.loose.stretch !== true
+          ) {
+            failures.push("loose");
           }
 
           return failures.length === 0
@@ -103,16 +121,21 @@ describe("internal profanity rules", () => {
     const audit = BUILT_IN_RULE_DEFINITION_SETS.map(
       ({ corpus, definitions }) => {
         const objectDefinitions = definitions.filter(isObjectRuleDefinition);
+        const taxonomyDefinitions =
+          objectDefinitions.filter(hasTaxonomyMetadata);
 
         return {
           corpus,
           totalRules: definitions.length,
           stringBackedRules: definitions.length - objectDefinitions.length,
-          taxonomyBackedRules: objectDefinitions.length,
+          taxonomyBackedRules: taxonomyDefinitions.length,
+          compilerMetadataRules:
+            objectDefinitions.length - taxonomyDefinitions.length,
           invalidTaxonomyBackedRules: objectDefinitions.filter(
             (definition) =>
-              !ALLOWED_PROFANITY_CATEGORY_SET.has(definition.category) ||
-              !ALLOWED_PROFANITY_SEVERITY_SET.has(definition.severity),
+              hasTaxonomyMetadata(definition) &&
+              (!ALLOWED_PROFANITY_CATEGORY_SET.has(definition.category) ||
+                !ALLOWED_PROFANITY_SEVERITY_SET.has(definition.severity)),
           ).length,
         };
       },
@@ -121,16 +144,18 @@ describe("internal profanity rules", () => {
     expect(audit).toEqual([
       {
         corpus: "strict",
-        totalRules: 56,
-        stringBackedRules: 56,
+        totalRules: 53,
+        stringBackedRules: 53,
         taxonomyBackedRules: 0,
+        compilerMetadataRules: 0,
         invalidTaxonomyBackedRules: 0,
       },
       {
         corpus: "loose",
-        totalRules: 68,
-        stringBackedRules: 68,
+        totalRules: 62,
+        stringBackedRules: 12,
         taxonomyBackedRules: 0,
+        compilerMetadataRules: 50,
         invalidTaxonomyBackedRules: 0,
       },
     ]);
@@ -359,6 +384,20 @@ describe("internal profanity rules", () => {
     });
     expect(pattern?.re.source).toBe(
       String.raw`b[^\p{L}\p{N}]*a[^\p{L}\p{N}]*d`,
+    );
+  });
+
+  it("uses loose stretch metadata without changing strict compilation", () => {
+    const rule = createBuiltInProfanityRules(
+      [{ source: "bad", loose: { stretch: true } }],
+      "loose",
+    )[0]!;
+
+    expect(compileStrictInternalRulePatterns([rule])[0]?.re.source).toBe(
+      "^(?:bad)$",
+    );
+    expect(compileLooseInternalRulePatterns([rule])[0]?.re.source).toBe(
+      String.raw`b(?:[^\p{L}\p{N}]*b)*[^\p{L}\p{N}]*a(?:[^\p{L}\p{N}]*a)*[^\p{L}\p{N}]*d(?:[^\p{L}\p{N}]*d)*`,
     );
   });
 

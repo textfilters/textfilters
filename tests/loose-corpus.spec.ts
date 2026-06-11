@@ -32,6 +32,104 @@ describe("loose corpus", () => {
     }
   });
 
+  it("censors stretched built-in profanity families by default", () => {
+    const cases = [
+      "хуууй",
+      "бляяя",
+      "пиииздец",
+      "заееебал",
+      "выыыеебал",
+      "ееебнулся",
+      "хуууйню",
+      "охуууеть",
+    ];
+
+    for (const input of cases) {
+      const output = filter.censor(input);
+      expect(output.length).toBe(input.length);
+      expect(output).toBe(mask(input));
+    }
+  });
+
+  it("censors mixed separator and stretched built-in profanity families", () => {
+    const cases = [
+      "х-у-у-у-й",
+      "б л я я я",
+      "п_и_и_и_з_д_е_ц",
+      "за.е.е.е.б.а.л",
+      "о/х/у/у/е/т/ь",
+      "н а х у у й",
+    ];
+
+    for (const input of cases) {
+      const output = filter.censor(input);
+      expect(output.length).toBe(input.length);
+      expect(output).toBe(mask(input));
+    }
+  });
+
+  it("censors zero-width built-in profanity evasions by default", () => {
+    const cases = [
+      "х\u200bу\u200bй",
+      "п\u200bи\u200bз\u200bд\u200bа",
+      "б\u200bл\u200bя",
+      "з\u200bа\u200bе\u200bб\u200bа\u200bл",
+    ];
+
+    for (const input of cases) {
+      const output = filter.censor(input);
+      expect(output.length).toBe(input.length);
+      expect(output).toBe(mask(input));
+      expect(output).not.toBe(input);
+      expect(output).toContain("*");
+    }
+  });
+
+  it("censors stretched obscene families covered by explicit loose metadata", () => {
+    const cases = [
+      "запиииздячить",
+      "распиииздяйство",
+      "долбоооеб",
+      "хуууячим",
+      "захуууячить",
+      "ляяять",
+    ];
+
+    for (const input of cases) {
+      const output = filter.censor(input);
+      expect(output.length).toBe(input.length);
+      expect(output).toBe(mask(input));
+    }
+  });
+
+  it("preserves reviewed loose corpus edge cases", () => {
+    const cases: Array<[string, string]> = [
+      ["хуей", mask("хуей")],
+      ["ху-ей", mask("ху-ей")],
+      ["бляд!", `${mask("бляд")}!`],
+      ["блят!", `${mask("блят")}!`],
+      ["б л я д ь", mask("б л я д ь")],
+      ["б-л-я-т-ь", mask("б-л-я-т-ь")],
+    ];
+
+    for (const [input, expected] of cases) {
+      const output = filter.censor(input);
+      expect(output.length).toBe(input.length);
+      expect(output).toBe(expected);
+    }
+  });
+
+  it("censors common same-length homoglyph and leet variants through corpus data", () => {
+    const cases = ["xyй", "пuздeц", "пи3дец", "е6 твою мать"];
+
+    for (const input of cases) {
+      const output = filter.censor(input);
+      expect(output.length).toBe(input.length);
+      expect(output).toContain("*");
+      expect(output).not.toBe(input);
+    }
+  });
+
   it("censors mixed separator families from the regression suite", () => {
     const separators = [" ", "-", ".", "_", "/", "*"];
     for (const sep of separators) {

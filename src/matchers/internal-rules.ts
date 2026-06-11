@@ -12,13 +12,19 @@ const IN_TOKEN_SEPARATOR = String.raw`[^\p{L}\p{N}\s]*`;
 export interface InternalProfanityRule extends ProfanityTaxonomyMetadata {
   readonly id: string;
   readonly source: string;
+  readonly loose?: InternalProfanityRuleLooseOptions;
 }
 
 export type InternalProfanityRuleDefinition =
   | string
   | (ProfanityTaxonomyMetadata & {
       readonly source: string;
+      readonly loose?: InternalProfanityRuleLooseOptions;
     });
+
+export interface InternalProfanityRuleLooseOptions {
+  readonly stretch?: boolean;
+}
 
 export const createBuiltInProfanityRules = (
   definitions: readonly InternalProfanityRuleDefinition[],
@@ -50,7 +56,7 @@ export const compileLooseInternalRulePatterns = (
 ): CompiledPattern[] =>
   compilePatternDefinitions(
     rules.map((rule) => ({
-      source: loosenInternalRuleSource(rule.source),
+      source: loosenInternalRuleSource(rule.source, rule.loose),
       ruleId: rule.id,
       ...ruleIdentityMetadata(rule),
     })),
@@ -76,13 +82,15 @@ const builtInRuleDefinitionToRule = (
 ): Omit<InternalProfanityRule, "id"> =>
   typeof definition === "string"
     ? { source: definition }
-    : ruleSourceMetadata(definition);
+    : {
+        ...ruleSourceMetadata(definition),
+        ...(definition.loose === undefined ? {} : { loose: definition.loose }),
+      };
 
-const loosenInternalRuleSource = (source: string): string => {
-  if (source === "бля[дт](?:[а-яё]+)?") {
-    return `б${LOOSE_SEPARATOR}л${LOOSE_SEPARATOR}я${IN_TOKEN_SEPARATOR}[дт](?:${IN_TOKEN_SEPARATOR}[а-яё])*`;
-  }
-
+const loosenInternalRuleSource = (
+  source: string,
+  options: InternalProfanityRuleLooseOptions = {},
+): string => {
   let previousWasWordLike = false;
   let result = "";
 
@@ -97,47 +105,60 @@ const loosenInternalRuleSource = (source: string): string => {
         : LOOSE_SEPARATOR;
     }
 
-    result += loosenRuleAtom(atom);
+    result += loosenRuleAtom(atom, options);
     previousWasWordLike = wordLike;
   }
 
   return result;
 };
 
-const loosenRuleAtom = (atom: RuleAtom): string => {
+const loosenRuleAtom = (
+  atom: RuleAtom,
+  options: InternalProfanityRuleLooseOptions,
+): string => {
   if (isOptionalSuffixAtom(atom)) {
-    return loosenOptionalSuffix(atom);
+    return loosenOptionalSuffix(atom, options);
   }
 
-  if (isRepeatedSingleAtom(atom)) {
+  if (isRepeatedWordLikeAtom(atom)) {
     return `${atom.base}(?:${LOOSE_SEPARATOR}${atom.base})*`;
   }
 
   if (isPlainGroup(atom.base)) {
-    return loosenGroup(atom);
+    return loosenGroup(atom, options);
+  }
+
+  if (isStretchableAtom(atom, options)) {
+    return `${atom.source}(?:${LOOSE_SEPARATOR}${atom.base})*`;
   }
 
   return atom.source;
 };
 
-const loosenOptionalSuffix = (atom: RuleAtom): string => {
+const loosenOptionalSuffix = (
+  atom: RuleAtom,
+  options: InternalProfanityRuleLooseOptions,
+): string => {
   const classSource = atom.base.match(/^\(\?:(\[[^\]]+\])\+\)$/u)?.[1];
   // Turn `(?:[а-яё]+)?` into an optional sequence that can consume split suffix
   // letters, for example `за-е-б-а-л`, while staying within the current token.
   return classSource === undefined
-    ? loosenGroup(atom)
+    ? loosenGroup(atom, options)
     : `(?:${classSource}(?:${IN_TOKEN_SEPARATOR}${classSource})*)?`;
 };
 
-const loosenGroup = (atom: RuleAtom): string => {
+const loosenGroup = (
+  atom: RuleAtom,
+  options: InternalProfanityRuleLooseOptions,
+): string => {
   const prefix = atom.base.startsWith("(?:") ? "(?:" : "(";
   const bodyStart = atom.base.startsWith("(?:") ? 3 : 1;
   const body = atom.base.slice(bodyStart, -1);
   const quantifier = atom.source.slice(atom.base.length);
   // Groups with alternatives such as `(у|ал|нуть)` need the same loose expansion
   // inside each alternative; treating the group as one atom misses `е-б-н-у-т-ь`.
-  const alternatives = splitTopLevelAlternatives(body).map(
-    loosenInternalRuleSource,
+  const alternatives = splitTopLevelAlternatives(body).map((alternative) =>
+    loosenInternalRuleSource(alternative, options),
   );
 
   return `${prefix}${alternatives.join("|")})${quantifier}`;
@@ -146,5 +167,16 @@ const loosenGroup = (atom: RuleAtom): string => {
 const isPlainGroup = (source: string): boolean =>
   source.startsWith("(") && !/^\(\?<?[=!]/u.test(source);
 
-const isRepeatedSingleAtom = (atom: RuleAtom): boolean =>
-  atom.source === `${atom.base}+` && Array.from(atom.base).length === 1;
+const isRepeatedWordLikeAtom = (atom: RuleAtom): boolean =>
+  atom.source === `${atom.base}+` &&
+  isWordLikeAtom(atom) &&
+  !isPlainGroup(atom.base);
+
+const isStretchableAtom = (
+  atom: RuleAtom,
+  options: InternalProfanityRuleLooseOptions,
+): boolean =>
+  options.stretch === true &&
+  atom.source === atom.base &&
+  isWordLikeAtom(atom) &&
+  !isPlainGroup(atom.base);

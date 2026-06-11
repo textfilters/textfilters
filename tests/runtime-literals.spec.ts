@@ -25,6 +25,13 @@ describe("runtime literals", () => {
     expect(createProfanityFilter([], ["[.a]bad"]).censor(". b a d")).toBe(
       ". b a d",
     );
+    expect(createProfanityFilter([], ["bad"]).censor("baaad")).toBe("baaad");
+    expect(
+      createProfanityFilter(
+        [],
+        [{ source: "bad", loose: { stretch: true } }],
+      ).censor("baaad"),
+    ).toBe("baaad");
   });
 
   it("keeps runtime regex-like terms safe because they are literals", () => {

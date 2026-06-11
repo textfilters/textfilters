@@ -29,6 +29,11 @@ They are not regular expressions.
 The built-in corpus is package-owned JSON data and may use controlled internal
 rules. Keep user-provided terms out of that internal rule compiler.
 
+Built-in rule objects may carry compiler metadata. `loose.stretch: true` allows
+the loose compiler to match repeated word-like atoms with optional separators
+between repeats. This is generic matcher behavior; language-specific roots,
+aliases, guards, and false-positive exceptions must stay in corpus data.
+
 ## Strict Token Boundaries
 
 Strict word terms match whole normalized tokens. A strict runtime word term such
@@ -42,6 +47,10 @@ Loose terms may match across separators such as spaces, hyphens, dots,
 underscores, slashes, and similar split characters. Loose matches still need
 boundary checks so a separator-obfuscated prefix inside a larger word remains
 neutral.
+
+For built-in internal rules, word-like atoms with a `+` quantifier are expanded
+with the same loose separator behavior between repeated atoms. This keeps rules
+such as character-class aliases compact while covering separated repeats.
 
 ## False-Positive Locks
 
