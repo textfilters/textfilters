@@ -52,6 +52,16 @@ const BUILT_IN_RULE_DEFINITION_SETS = [
   readonly definitions: readonly InternalProfanityRuleDefinition[];
 }[];
 
+const REPRESENTATIVE_TAXONOMY_RULES = [
+  { source: "alpha", category: "OBSCENE_MAT", severity: "high" },
+  { source: "beta", category: "STRONG_INSULT", severity: "medium" },
+  { source: "gamma", category: "VULGAR", severity: "low" },
+  { source: "delta", category: "EUPHEMISM", severity: "soft" },
+] as const satisfies readonly Extract<
+  InternalProfanityRuleDefinition,
+  { source: string }
+>[];
+
 const isObjectRuleDefinition = (
   definition: InternalProfanityRuleDefinition,
 ): definition is Extract<InternalProfanityRuleDefinition, { source: string }> =>
@@ -87,6 +97,64 @@ describe("internal profanity rules", () => {
     );
 
     expect(invalidDefinitions).toEqual([]);
+  });
+
+  it("documents the built-in corpus taxonomy metadata audit baseline", () => {
+    const audit = BUILT_IN_RULE_DEFINITION_SETS.map(
+      ({ corpus, definitions }) => {
+        const objectDefinitions = definitions.filter(isObjectRuleDefinition);
+
+        return {
+          corpus,
+          totalRules: definitions.length,
+          stringBackedRules: definitions.length - objectDefinitions.length,
+          taxonomyBackedRules: objectDefinitions.length,
+          invalidTaxonomyBackedRules: objectDefinitions.filter(
+            (definition) =>
+              !ALLOWED_PROFANITY_CATEGORY_SET.has(definition.category) ||
+              !ALLOWED_PROFANITY_SEVERITY_SET.has(definition.severity),
+          ).length,
+        };
+      },
+    );
+
+    expect(audit).toEqual([
+      {
+        corpus: "strict",
+        totalRules: 56,
+        stringBackedRules: 56,
+        taxonomyBackedRules: 0,
+        invalidTaxonomyBackedRules: 0,
+      },
+      {
+        corpus: "loose",
+        totalRules: 68,
+        stringBackedRules: 68,
+        taxonomyBackedRules: 0,
+        invalidTaxonomyBackedRules: 0,
+      },
+    ]);
+  });
+
+  it("keeps representative taxonomy-backed examples for every public category and severity", () => {
+    const categories = new Set(
+      REPRESENTATIVE_TAXONOMY_RULES.map((rule) => rule.category),
+    );
+    const severities = new Set(
+      REPRESENTATIVE_TAXONOMY_RULES.map((rule) => rule.severity),
+    );
+
+    expect([...categories].sort()).toEqual(
+      [...ALLOWED_PROFANITY_CATEGORIES].sort(),
+    );
+    expect([...severities].sort()).toEqual(
+      [...ALLOWED_PROFANITY_SEVERITIES].sort(),
+    );
+    expect(
+      createBuiltInProfanityRules(REPRESENTATIVE_TAXONOMY_RULES, "strict").map(
+        ({ source, category, severity }) => ({ source, category, severity }),
+      ),
+    ).toEqual(REPRESENTATIVE_TAXONOMY_RULES);
   });
 
   it("creates deterministic built-in rule ids from corpus, index, and source", () => {

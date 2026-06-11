@@ -73,6 +73,15 @@ const highSeverityMatches = filter.analyze("blocked text", {
 const mediumOrHigherMatches = filter.analyze("blocked text", {
   minSeverity: "medium",
 });
+
+const hasHighSeverityMatch = filter.check("blocked text", {
+  severities: ["high"],
+});
+
+const censoredVulgarText = filter.censor("blocked text", {
+  categories: ["VULGAR"],
+  minSeverity: "low",
+});
 ```
 
 Severity thresholds use this package-defined order:
@@ -85,6 +94,19 @@ satisfy every requested taxonomy filter.
 
 Taxonomy metadata-backed filters only match rules where the requested metadata
 is available. Omitting taxonomy options preserves the default matching behavior.
+
+The taxonomy filtering contract is:
+
+- `categories`, `severities`, and `minSeverity` are exposed on
+  `ProfanityMatchOptions`.
+- Calls without taxonomy options keep the same default `analyze()`, `check()`,
+  and `censor()` behavior.
+- Taxonomy filters exclude metadata-less string-backed matches.
+- `categories` combined with `severities` is an intersection.
+- `categories` combined with `minSeverity` is an intersection.
+- `severities` combined with `minSeverity` is the intersection between the
+  exact severity set and the threshold.
+- The severity order is `soft < low < medium < high`.
 
 For taxonomy-backed rules, runtime match output includes the available metadata:
 
@@ -216,6 +238,10 @@ locks, and hyphen-tail behavior.
 Releases are managed by Release Please from Conventional Commit history on `main`. When a Release Please release is created, the workflow runs `npm run check` and publishes the package to GitHub Packages. Release tags keep the `v*` pattern.
 
 The package is prepared for publication to GitHub Packages, not the public npm registry.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for pull request scope guidance.
 
 ## License
 

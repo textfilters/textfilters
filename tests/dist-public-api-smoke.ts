@@ -22,11 +22,16 @@ const metadata: ProfanityTaxonomyMetadata = {
   severity,
 };
 const strict: ProfanityFilter = createProfanityFilter(
-  [{ source: "alpha", ...metadata }],
+  [
+    { source: "alpha", ...metadata },
+    { source: "beta", category: "VULGAR", severity: "low" },
+    { source: "gamma", category: "VULGAR", severity: "medium" },
+    "delta",
+  ],
   [],
 );
 const match: ProfanityMatchRange | undefined = strict.analyze(
-  "alpha",
+  "alpha beta gamma delta",
   options,
 )[0];
 

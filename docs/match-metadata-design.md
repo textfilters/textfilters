@@ -1,8 +1,8 @@
 # Match Metadata Design
 
-This document records the intended direction for future profanity match metadata.
-It is design and status documentation only: it does not add category options,
-severity options, corpus changes, or matcher behavior changes.
+This document records the intended direction and current compatibility rules for
+profanity match metadata. It is design and status documentation only: it does
+not add corpus changes or matcher behavior changes.
 
 The taxonomy metadata rollout plan is tracked separately in
 [Profanity Taxonomy Metadata Plan](profanity-taxonomy-plan.md).
@@ -70,21 +70,24 @@ accepted match ranges with explicit metadata.
 The model preserves enough information for `censor()` to keep its current
 behavior and for callers to inspect structured match facts.
 
-## Future Taxonomy-Driven Options
+## Taxonomy-Driven Options
 
-A later public API can add category- or severity-aware filtering options. One
-possible options shape:
+The public API includes category- and severity-aware filtering options:
 
 ```ts
-interface ProfanityAnalyzeOptions {
+interface ProfanityMatchOptions {
   readonly categories?: readonly ProfanityCategory[];
   readonly severities?: readonly ProfanitySeverity[];
+  readonly minSeverity?: ProfanitySeverity;
 }
 ```
 
-Any future options API should describe caller-selected filtering, not final
-moderation policy. Callers can decide whether to block, warn, censor, log, or
-ignore a match based on their own product policy.
+These options describe caller-selected filtering, not final moderation policy.
+Callers can decide whether to block, warn, censor, log, or ignore a match based
+on their own product policy. Combined taxonomy options are intersections:
+`categories` must match the category set, `severities` must match the exact
+severity set, and `minSeverity` must satisfy the package-defined order
+`soft < low < medium < high`.
 
 ## Category And Severity Ownership
 
@@ -105,9 +108,8 @@ example:
 - any language- or corpus-specific review notes that are needed before exposure.
 
 Runtime string terms remain unclassified and omit taxonomy metadata. Object terms
-can carry metadata. A future options API should decide whether callers can
-provide metadata through a dedicated public shape or whether runtime strings stay
-unclassified permanently.
+can carry metadata. Taxonomy filters exclude matches that do not carry the
+requested metadata.
 
 ## Evasion Is Orthogonal To Category
 
@@ -140,15 +142,15 @@ Metadata remains additive on `analyze()` output. Existing callers should not nee
 to pass category or severity options to preserve today's boolean and masking
 behavior.
 
-If category-aware options are added later, they should be opt-in and should not
-silently narrow the default behavior of current calls.
+Taxonomy-aware options are opt-in and must not silently narrow the default
+behavior of calls that omit options.
 
-## Future Options API
+## Corpus Taxonomy Audit Status
 
-A future options API should be a separate pull request after its behavior is
-designed. That pull request should define option names, runtime literal metadata
-behavior, sorting and de-duplication rules, and tests for direct and obfuscated
-matches.
+The built-in JSON corpus is currently string-backed and does not attach
+taxonomy metadata to package-owned rules. Runtime object-backed terms and future
+object-backed corpus rules can carry metadata, and tests enforce that any
+taxonomy-backed built-in rule uses a valid category and severity.
 
 ## Open Questions
 

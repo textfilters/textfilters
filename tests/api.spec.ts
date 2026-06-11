@@ -200,6 +200,76 @@ describe("public API", () => {
     ).toEqual(["gamma"]);
   });
 
+  it("keeps default behavior unchanged without taxonomy filters", () => {
+    const strict = createProfanityFilter(
+      [
+        { source: "alpha", category: "EUPHEMISM", severity: "soft" },
+        { source: "beta", category: "VULGAR", severity: "low" },
+        { source: "gamma", category: "STRONG_INSULT", severity: "medium" },
+        { source: "delta", category: "OBSCENE_MAT", severity: "high" },
+        "epsilon",
+      ],
+      [],
+    );
+    const input = "alpha beta gamma delta epsilon";
+
+    expect(
+      strict.analyze(input).map((match) => input.slice(match[0], match[1])),
+    ).toEqual(["alpha", "beta", "gamma", "delta", "epsilon"]);
+    expect(
+      strict.analyze(input, {}).map((match) => input.slice(match[0], match[1])),
+    ).toEqual(["alpha", "beta", "gamma", "delta", "epsilon"]);
+    expect(strict.check(input)).toBe(true);
+    expect(strict.check(input, {})).toBe(true);
+    expect(strict.censor(input)).toBe("***** **** ***** ***** *******");
+    expect(strict.censor(input, {})).toBe("***** **** ***** ***** *******");
+  });
+
+  it("applies taxonomy filters as intersections", () => {
+    const strict = createProfanityFilter(
+      [
+        { source: "alpha", category: "EUPHEMISM", severity: "soft" },
+        { source: "beta", category: "VULGAR", severity: "low" },
+        { source: "gamma", category: "VULGAR", severity: "medium" },
+        { source: "delta", category: "STRONG_INSULT", severity: "medium" },
+        { source: "epsilon", category: "OBSCENE_MAT", severity: "high" },
+        "zeta",
+      ],
+      [],
+    );
+    const input = "alpha beta gamma delta epsilon zeta";
+    const matchedTerms = (options: ProfanityMatchOptions) =>
+      strict
+        .analyze(input, options)
+        .map((match) => input.slice(match[0], match[1]));
+
+    expect(
+      matchedTerms({
+        categories: ["VULGAR"],
+        severities: ["medium", "high"],
+      }),
+    ).toEqual(["gamma"]);
+    expect(
+      matchedTerms({
+        categories: ["VULGAR", "STRONG_INSULT"],
+        minSeverity: "medium",
+      }),
+    ).toEqual(["gamma", "delta"]);
+    expect(
+      matchedTerms({
+        severities: ["soft", "medium", "high"],
+        minSeverity: "medium",
+      }),
+    ).toEqual(["gamma", "delta", "epsilon"]);
+    expect(
+      matchedTerms({
+        categories: ["VULGAR"],
+        severities: ["low"],
+        minSeverity: "medium",
+      }),
+    ).toEqual([]);
+  });
+
   it("treats empty taxonomy option arrays as empty filters", () => {
     const strict = createProfanityFilter(
       [{ source: "alpha", category: "OBSCENE_MAT", severity: "high" }],
