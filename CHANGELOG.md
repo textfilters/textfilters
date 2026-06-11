@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.0](https://github.com/textfilters/profanity/compare/v0.5.0...v0.6.0) (2026-06-11)
+
+
+### Features
+
+* improve aggressive profanity obfuscation coverage ([310402f](https://github.com/textfilters/profanity/commit/310402f42dfae438432b9089a9933c350a1417ea))
+
 ## [0.5.0](https://github.com/textfilters/profanity/compare/v0.4.0...v0.5.0) (2026-06-11)
 
 
