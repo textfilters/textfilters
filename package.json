@@ -1,6 +1,6 @@
 {
   "name": "@textfilters/profanity",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "type": "module",
   "description": "Profanity filtering primitives for composable text moderation.",
   "license": "MIT",
