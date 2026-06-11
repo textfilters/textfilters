@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0](https://github.com/textfilters/profanity/compare/v0.3.0...v0.4.0) (2026-06-11)
+
+
+### Features
+
+* add taxonomy filtering options ([2e7486c](https://github.com/textfilters/profanity/commit/2e7486ccba96b46560288cdf3a532493be99f56a))
+
 ## [0.3.0](https://github.com/textfilters/profanity/compare/v0.2.0...v0.3.0) (2026-06-10)
 
 
