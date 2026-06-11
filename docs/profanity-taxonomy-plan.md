@@ -231,6 +231,11 @@ The next meaningful milestone is a separate taxonomy-driven filtering/options
 API. That work should define option names, default behavior, runtime term
 metadata semantics, sorting, and overlap handling before implementation.
 
+Severity threshold filtering has a separate design audit in
+[Severity Ordering Design](severity-ordering-design.md). That document records
+why current `severities` filtering is exact-match only and what compatibility
+questions a future `minSeverity` implementation must settle.
+
 ## Relationship To Match Metadata
 
 The broader match metadata direction is described in
