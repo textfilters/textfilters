@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.0](https://github.com/textfilters/profanity/compare/v0.4.0...v0.5.0) (2026-06-11)
+
+
+### Features
+
+* add min severity taxonomy filter ([#42](https://github.com/textfilters/profanity/issues/42)) ([e84f526](https://github.com/textfilters/profanity/commit/e84f52612e91ab80f3a2b6712ad3f938adc34afc))
+
 ## [0.4.0](https://github.com/textfilters/profanity/compare/v0.3.0...v0.4.0) (2026-06-11)
 
 
