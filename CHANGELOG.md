@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.0](https://github.com/textfilters/profanity/compare/v0.8.0...v0.9.0) (2026-06-12)
+
+
+### Features
+
+* add language dictionary conformance validator ([eafef1a](https://github.com/textfilters/profanity/commit/eafef1a67363d28c7e2b42ff5913d208749d626b))
+
 ## [0.8.0](https://github.com/textfilters/profanity/compare/v0.7.0...v0.8.0) (2026-06-11)
 
 
