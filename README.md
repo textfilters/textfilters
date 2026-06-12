@@ -183,6 +183,11 @@ dictionaries are the supported boundary for maintained language-specific rule
 data. This release intentionally keeps the public surface small and does not
 add new languages or separate packages.
 
+For future external language pack guidance, see
+[the language pack authoring guide](docs/language-pack-authoring.md). It covers
+source dictionary shape, stable ids, taxonomy metadata, strict and loose views,
+human-maintained JSON, and conformance expectations.
+
 ### Taxonomy Metadata Types
 
 The package also exports type-only taxonomy metadata names for callers that need

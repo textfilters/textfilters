@@ -1,10 +1,43 @@
 import { describe, expect, it } from "vitest";
 
-import { filter } from "../src/index.js";
+import {
+  createProfanityFilterFromDictionary,
+  filter,
+  type ProfanityLanguageDictionary,
+} from "../src/index.js";
 import { RUSSIAN_PROFANITY_DICTIONARY } from "../src/languages/ru/index.js";
-import { assertLanguageDictionaryInvariants } from "./language-dictionary-helpers.js";
+import {
+  assertLanguageDictionaryInvariants,
+  assertLanguagePackDictionaryContract,
+} from "./language-dictionary-helpers.js";
 
 const LANGUAGE_DICTIONARIES = [RUSSIAN_PROFANITY_DICTIONARY] as const;
+const CUSTOM_LANGUAGE_PACK_DICTIONARY = {
+  language: "zz",
+  rules: [
+    {
+      id: "zz.vulgar.qwr",
+      category: "VULGAR",
+      severity: "low",
+      source: "qwr",
+      match: {
+        strict: {},
+        loose: {
+          stretch: true,
+        },
+      },
+    },
+    {
+      id: "zz.euphemism.vnn",
+      category: "EUPHEMISM",
+      severity: "soft",
+      source: "vnn",
+      match: {
+        strict: {},
+      },
+    },
+  ],
+} as const satisfies ProfanityLanguageDictionary;
 
 describe("language dictionaries", () => {
   it.each(LANGUAGE_DICTIONARIES)(
@@ -13,6 +46,67 @@ describe("language dictionaries", () => {
       assertLanguageDictionaryInvariants(dictionary);
     },
   );
+
+  it.each([...LANGUAGE_DICTIONARIES, CUSTOM_LANGUAGE_PACK_DICTIONARY] as const)(
+    "keeps the $language dictionary compatible with the language-pack contract",
+    (dictionary) => {
+      assertLanguagePackDictionaryContract(dictionary);
+    },
+  );
+
+  it("rejects generated matcher metadata in source dictionaries", () => {
+    expect(() =>
+      assertLanguageDictionaryInvariants({
+        language: "zz",
+        rules: [
+          {
+            id: "builtin:strict:0:abcdefg",
+            category: "VULGAR",
+            severity: "low",
+            source: "qwr",
+            match: {
+              strict: {},
+            },
+            ruleId: "compiled-rule",
+            order: 1,
+          },
+        ],
+      } as unknown as ProfanityLanguageDictionary),
+    ).toThrowError();
+  });
+
+  it("creates a filter from a minimal custom non-Russian dictionary", () => {
+    const customFilter = createProfanityFilterFromDictionary(
+      CUSTOM_LANGUAGE_PACK_DICTIONARY,
+    );
+
+    expect(customFilter.check("qwr")).toBe(true);
+    expect(customFilter.check("q-w-r")).toBe(true);
+    expect(customFilter.check("vnn")).toBe(true);
+    expect(customFilter.analyze("qwr")[0]).toMatchObject({
+      ruleId: "zz.vulgar.qwr",
+      category: "VULGAR",
+      severity: "low",
+      mode: "strict",
+    });
+    expect(customFilter.check("qwr", { categories: ["OBSCENE_MAT"] })).toBe(
+      false,
+    );
+  });
+
+  it("keeps runtime mutations on dictionary filters normalized-literal based", () => {
+    const customFilter = createProfanityFilterFromDictionary(
+      CUSTOM_LANGUAGE_PACK_DICTIONARY,
+    );
+
+    customFilter.setStrict(["q\\.wr"]);
+    customFilter.setLoose(["qwr"]);
+
+    expect(customFilter.censor("q.wr")).toBe("****");
+    expect(customFilter.censor("qXwr")).toBe("qXwr");
+    expect(customFilter.censor("q-w-r")).toBe("*****");
+    expect(customFilter.censor("qXwr")).toBe("qXwr");
+  });
 
   it("keeps semantic taxonomy metadata on Russian dictionary rules", () => {
     expect(

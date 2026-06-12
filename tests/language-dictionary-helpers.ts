@@ -44,6 +44,19 @@ export const assertLanguageDictionaryInvariants = (
   expect(failures).toEqual([]);
 };
 
+export const assertLanguagePackDictionaryContract = (
+  dictionary: ProfanityLanguageDictionary,
+): void => {
+  assertLanguageDictionaryInvariants(dictionary);
+
+  const failures = dictionary.rules.flatMap((rule, index) => [
+    ...requiredStableRuleIdFailures(rule, index),
+    ...requiredTaxonomyMetadataFailures(rule, index),
+  ]);
+
+  expect(failures).toEqual([]);
+};
+
 const dictionaryShapeFailures = (
   dictionary: ProfanityLanguageDictionary,
 ): string[] => {
@@ -144,6 +157,31 @@ const duplicateRuleIdFailures = (
   return failures;
 };
 
+const requiredStableRuleIdFailures = (
+  rule: ProfanityLanguageDictionary["rules"][number],
+  index: number,
+): string[] =>
+  rule.id === undefined
+    ? [`rules[${index}].id must be explicit and stable`]
+    : [];
+
+const requiredTaxonomyMetadataFailures = (
+  rule: ProfanityLanguageDictionary["rules"][number],
+  index: number,
+): string[] => {
+  const failures = [];
+
+  if (rule.category === undefined) {
+    failures.push(`rules[${index}].category must be explicit`);
+  }
+
+  if (rule.severity === undefined) {
+    failures.push(`rules[${index}].severity must be explicit`);
+  }
+
+  return failures;
+};
+
 const generatedMatcherMetadataFailures = (
   dictionary: ProfanityLanguageDictionary,
 ): string[] => {
@@ -166,6 +204,12 @@ const generatedMatcherMetadataFailures = (
     }
 
     for (const [key, nestedValue] of Object.entries(value)) {
+      if (key === "ruleId") {
+        failures.push(
+          `${path}.${key} must not contain generated matcher metadata`,
+        );
+      }
+
       if (key === "order") {
         failures.push(
           `${path}.${key} must not contain generated order metadata`,
