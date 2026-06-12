@@ -162,11 +162,17 @@ isolated filter built from a maintained language dictionary:
 import {
   createProfanityFilterFromDictionary,
   russianProfanityDictionary,
+  validateProfanityLanguageDictionary,
   type ProfanityLanguageDictionary,
 } from "@textfilters/profanity";
 
 const dictionary: ProfanityLanguageDictionary = russianProfanityDictionary;
+const issues = validateProfanityLanguageDictionary(dictionary);
 const russianFilter = createProfanityFilterFromDictionary(dictionary);
+
+if (issues.length > 0) {
+  throw new Error(JSON.stringify(issues, null, 2));
+}
 
 russianFilter.analyze("message text");
 ```
@@ -182,6 +188,13 @@ fields. Runtime dictionary terms remain normalized literals; language
 dictionaries are the supported boundary for maintained language-specific rule
 data. This release intentionally keeps the public surface small and does not
 add new languages or separate packages.
+
+`validateProfanityLanguageDictionary(dictionary)` checks the source dictionary
+contract and returns stable issues with `path`, `code`, and `message` fields.
+Valid dictionaries return `[]`; ordinary validation errors are reported as
+issues instead of thrown exceptions. The validator does not judge moderation
+quality, false-positive behavior, language coverage, taxonomy choices, or
+whether a rule should exist.
 
 For future external language pack guidance, see
 [the language pack authoring guide](docs/language-pack-authoring.md). It covers

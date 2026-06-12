@@ -4,9 +4,11 @@ import {
   filter,
   PROFANITY_FILTER_NAME,
   russianProfanityDictionary,
+  validateProfanityLanguageDictionary,
   type ProfanityCategory,
   type ProfanityFilter,
   type ProfanityLanguageDictionary,
+  type ProfanityLanguageDictionaryValidationIssue,
   type ProfanityLanguageRuleDefinition,
   type ProfanityMatchOptions,
   type ProfanityMatchRange,
@@ -28,6 +30,8 @@ const metadata: ProfanityTaxonomyMetadata = {
 const dictionary: ProfanityLanguageDictionary = russianProfanityDictionary;
 const dictionaryRule: ProfanityLanguageRuleDefinition | undefined =
   dictionary.rules[0];
+const dictionaryValidationIssues: ProfanityLanguageDictionaryValidationIssue[] =
+  validateProfanityLanguageDictionary(dictionary);
 const strict: ProfanityFilter = createProfanityFilter(
   [
     { source: "alpha", ...metadata },
@@ -53,6 +57,10 @@ if (PROFANITY_FILTER_NAME !== "profanity") {
 
 if (dictionaryRule?.source === undefined) {
   throw new Error("Unexpected dictionary rule declaration surface.");
+}
+
+if (dictionaryValidationIssues.length !== 0) {
+  throw new Error("Unexpected dictionary validation issue surface.");
 }
 
 if (match?.category !== category || match.severity !== severity) {

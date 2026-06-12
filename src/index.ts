@@ -17,6 +17,11 @@ export type {
   ProfanityLanguageRuleMatch,
   ProfanityLanguageStrictMatchOptions,
 } from "./languages/profanity.js";
+export { validateProfanityLanguageDictionary } from "./languages/validation.js";
+export type {
+  ProfanityLanguageDictionaryValidationIssue,
+  ProfanityLanguageDictionaryValidationIssueCode,
+} from "./languages/validation.js";
 export {
   createProfanityFilter,
   createProfanityFilterFromDictionary,

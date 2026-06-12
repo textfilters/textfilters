@@ -3,7 +3,9 @@ import { describe, expect, it } from "vitest";
 import {
   createProfanityFilterFromDictionary,
   filter,
+  validateProfanityLanguageDictionary,
   type ProfanityLanguageDictionary,
+  type ProfanityLanguageDictionaryValidationIssue,
 } from "../src/index.js";
 import { RUSSIAN_PROFANITY_DICTIONARY } from "../src/languages/ru/index.js";
 import {
@@ -39,6 +41,11 @@ const CUSTOM_LANGUAGE_PACK_DICTIONARY = {
   ],
 } as const satisfies ProfanityLanguageDictionary;
 
+const issueSummary = (
+  issues: readonly ProfanityLanguageDictionaryValidationIssue[],
+): Array<Pick<ProfanityLanguageDictionaryValidationIssue, "path" | "code">> =>
+  issues.map(({ path, code }) => ({ path, code }));
+
 describe("language dictionaries", () => {
   it.each(LANGUAGE_DICTIONARIES)(
     "keeps the $language dictionary human-maintained and schema-valid",
@@ -53,6 +60,156 @@ describe("language dictionaries", () => {
       assertLanguagePackDictionaryContract(dictionary);
     },
   );
+
+  it("validates the built-in Russian dictionary with the public validator", () => {
+    expect(
+      validateProfanityLanguageDictionary(RUSSIAN_PROFANITY_DICTIONARY),
+    ).toEqual([]);
+  });
+
+  it("validates a minimal custom non-Russian dictionary with the public validator", () => {
+    expect(
+      validateProfanityLanguageDictionary(CUSTOM_LANGUAGE_PACK_DICTIONARY),
+    ).toEqual([]);
+  });
+
+  it("returns stable issue codes and paths for invalid dictionaries", () => {
+    const issues = validateProfanityLanguageDictionary({
+      language: "",
+      rules: [
+        {
+          source: "",
+          match: {},
+        },
+        {
+          id: "zz.vulgar.duplicate",
+          category: "VULGAR",
+          severity: "low",
+          source: "qwr",
+          match: {
+            strict: {},
+          },
+        },
+        {
+          id: "zz.vulgar.duplicate",
+          category: "UNKNOWN",
+          severity: "highest",
+          source: "qwr",
+          match: {
+            loose: {
+              stretch: false,
+              distance: 1,
+            },
+          },
+        },
+        {
+          id: "builtin:strict:0:abcdefg",
+          category: "VULGAR",
+          severity: "low",
+          source: "qwr",
+          match: {
+            strict: {
+              ruleId: "compiled-rule",
+            },
+          },
+          ruleId: "compiled-rule",
+          order: 1,
+          re: "qwr",
+          ranges: [[0, 3]],
+        },
+      ],
+    });
+
+    expect(issueSummary(issues)).toEqual([
+      { path: "language", code: "invalid_language" },
+      { path: "rules[0].id", code: "missing_id" },
+      { path: "rules[0].category", code: "missing_category" },
+      { path: "rules[0].severity", code: "missing_severity" },
+      { path: "rules[0].source", code: "invalid_source" },
+      { path: "rules[0].match", code: "missing_match_mode" },
+      { path: "rules[2].id", code: "duplicate_id" },
+      { path: "rules[2].category", code: "invalid_category" },
+      { path: "rules[2].severity", code: "invalid_severity" },
+      {
+        path: "rules[2].match.loose.stretch",
+        code: "invalid_loose_option_value",
+      },
+      {
+        path: "rules[2].match.loose.distance",
+        code: "unsupported_loose_option",
+      },
+      { path: "rules[3].id", code: "generated_id" },
+      {
+        path: "rules[3].match.strict.ruleId",
+        code: "unsupported_strict_option",
+      },
+      {
+        path: "rules[3].match.strict.ruleId",
+        code: "generated_metadata",
+      },
+      {
+        path: "rules[3].ruleId",
+        code: "generated_metadata",
+      },
+      {
+        path: "rules[3].order",
+        code: "generated_metadata",
+      },
+      {
+        path: "rules[3].re",
+        code: "generated_metadata",
+      },
+      {
+        path: "rules[3].ranges",
+        code: "generated_metadata",
+      },
+    ]);
+    expect(issues.every((issue) => issue.message.length > 0)).toBe(true);
+  });
+
+  it("returns shape issues instead of throwing for malformed inputs", () => {
+    expect(issueSummary(validateProfanityLanguageDictionary(null))).toEqual([
+      { path: "$", code: "invalid_dictionary" },
+    ]);
+    expect(issueSummary(validateProfanityLanguageDictionary({}))).toEqual([
+      { path: "language", code: "missing_language" },
+      { path: "rules", code: "missing_rules" },
+    ]);
+    expect(
+      issueSummary(
+        validateProfanityLanguageDictionary({
+          language: "zz",
+          rules: "not-array",
+        }),
+      ),
+    ).toEqual([{ path: "rules", code: "invalid_rules" }]);
+    expect(
+      issueSummary(
+        validateProfanityLanguageDictionary({
+          language: "zz",
+          rules: [],
+        }),
+      ),
+    ).toEqual([{ path: "rules", code: "empty_rules" }]);
+    expect(
+      issueSummary(
+        validateProfanityLanguageDictionary({
+          language: "zz",
+          rules: [
+            {
+              id: "not.semantic",
+              category: "VULGAR",
+              severity: "low",
+              source: "qwr",
+              match: {
+                strict: {},
+              },
+            },
+          ],
+        }),
+      ),
+    ).toEqual([{ path: "rules[0].id", code: "invalid_id" }]);
+  });
 
   it("rejects generated matcher metadata in source dictionaries", () => {
     expect(() =>

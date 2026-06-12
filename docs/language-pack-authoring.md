@@ -95,8 +95,26 @@ and tests can remain stable when matcher internals change.
 ## Conformance Tests
 
 A future external language package should validate its dictionary before
-publishing. Conceptually, it should run the same contract covered by this
-repository's `tests/language-dictionary-helpers.ts`:
+publishing. The package exports a framework-independent validator for that
+source dictionary contract:
+
+```ts
+import { validateProfanityLanguageDictionary } from "@textfilters/profanity";
+import dictionary from "./profanity.json" with { type: "json" };
+
+const issues = validateProfanityLanguageDictionary(dictionary);
+
+if (issues.length > 0) {
+  throw new Error(JSON.stringify(issues, null, 2));
+}
+```
+
+`validateProfanityLanguageDictionary(dictionary)` returns an array of issues.
+Valid source dictionaries return `[]`. Validation issues use stable `path`,
+`code`, and `message` fields so language packs can print them in tests or CI
+without depending on this repository's test helpers.
+
+The validator checks:
 
 - the dictionary language and rules are present;
 - every rule has a stable explicit semantic id;
@@ -105,8 +123,17 @@ repository's `tests/language-dictionary-helpers.ts`:
 - each rule opts into `strict`, `loose`, or both;
 - `loose` options only use supported public options;
 - source JSON does not contain generated matcher metadata;
-- `createProfanityFilterFromDictionary(dictionary)` returns an isolated filter
-  that preserves rule ids, categories, and severities in `analyze()` output.
+- generated fallback ids such as `builtin:*` are not serialized into source
+  JSON.
+
+The validator checks the source dictionary contract. It does not prove
+moderation quality, false-positive behavior, language coverage, taxonomy
+judgment, or whether a rule should exist. Language packs should still keep
+their own corpus, regression, and policy tests.
+
+Conformance tests should also cover that
+`createProfanityFilterFromDictionary(dictionary)` returns an isolated filter
+that preserves rule ids, categories, and severities in `analyze()` output.
 
 The package-level public boundary is
 `createProfanityFilterFromDictionary(dictionary)`. External packs should avoid

@@ -7,10 +7,12 @@ import {
   PROFANITY_FILTER_NAME,
   profanityFilter,
   russianProfanityDictionary,
+  validateProfanityLanguageDictionary,
 } from "../src/index.js";
 import type {
   ProfanityCategory,
   ProfanityLanguageDictionary,
+  ProfanityLanguageDictionaryValidationIssue,
   ProfanityLanguageRuleDefinition,
   ProfanityMatchOptions,
   ProfanityMatchMode,
@@ -39,6 +41,43 @@ describe("public API", () => {
     }>();
     expect(russianProfanityDictionary.language).toBe("ru");
     expect(russianProfanityDictionary.rules.length).toBeGreaterThan(0);
+  });
+
+  it("exports the language dictionary validator from the public entrypoint", () => {
+    expectTypeOf<ProfanityLanguageDictionaryValidationIssue>().toEqualTypeOf<{
+      readonly path: string;
+      readonly code:
+        | "invalid_dictionary"
+        | "missing_language"
+        | "invalid_language"
+        | "missing_rules"
+        | "invalid_rules"
+        | "empty_rules"
+        | "invalid_rule"
+        | "missing_id"
+        | "invalid_id"
+        | "generated_id"
+        | "duplicate_id"
+        | "missing_category"
+        | "invalid_category"
+        | "missing_severity"
+        | "invalid_severity"
+        | "missing_source"
+        | "invalid_source"
+        | "missing_match"
+        | "invalid_match"
+        | "missing_match_mode"
+        | "invalid_strict_options"
+        | "unsupported_strict_option"
+        | "invalid_loose_options"
+        | "unsupported_loose_option"
+        | "invalid_loose_option_value"
+        | "generated_metadata";
+      readonly message: string;
+    }>();
+    expect(
+      validateProfanityLanguageDictionary(russianProfanityDictionary),
+    ).toEqual([]);
   });
 
   it("exports taxonomy metadata types from the public entrypoint", () => {
