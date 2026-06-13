@@ -1,13 +1,15 @@
 import { describe, expect, it } from "vitest";
 
-import { zzProfanityDictionary } from "../examples/language-pack/src/dictionary.js";
 import {
   createProfanityFilterFromDictionary,
   validateProfanityLanguageDictionary,
 } from "../src/index.js";
 
+const { zzProfanityDictionary, zzProfanityFilter } =
+  await import("../examples/language-pack/src/index.js");
+
 describe("language pack example", () => {
-  it("keeps the example dictionary valid and filter-compatible", () => {
+  it("keeps the example entrypoint valid and filter-compatible", () => {
     expect(validateProfanityLanguageDictionary(zzProfanityDictionary)).toEqual(
       [],
     );
@@ -25,5 +27,8 @@ describe("language pack example", () => {
       severity: "low",
       mode: "strict",
     });
+
+    expect(zzProfanityFilter.check("qwr")).toBe(true);
+    expect(zzProfanityFilter.check("vnn")).toBe(true);
   });
 });

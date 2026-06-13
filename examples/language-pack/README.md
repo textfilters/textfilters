@@ -1,21 +1,59 @@
 # External Language Pack Example
 
-This directory is a minimal, non-published template for a future external
-language pack. It is not a workspace package, is not included in package
-publishing, and intentionally uses the fake language code `zz`.
+This directory is a minimal, non-published package template for a future
+external language pack. It is not a workspace package, is not included in
+package publishing, and intentionally uses the fake language code `zz`.
 
 ## Shape
 
 ```text
 examples/language-pack/
+  package.json
   src/
     dictionary.ts
     index.ts
 ```
 
+- `package.json` shows hypothetical package metadata for an unpublished
+  language pack named `@textfilters/profanity-zz`.
 - `src/dictionary.ts` keeps the human-maintained source dictionary.
 - `src/index.ts` validates that dictionary, creates a filter from it, and
   exports both values from the hypothetical package entrypoint.
+
+## Starting a Real Package
+
+Copy these files into the future package repository:
+
+```text
+package.json
+src/dictionary.ts
+src/index.ts
+```
+
+Before publishing a real package, replace every template-only value:
+
+- Change `@textfilters/profanity-zz` to the real package name.
+- Replace the placeholder `0.0.0` version with the real initial package
+  version.
+- Replace the fake `zz` language code, rule ids, categories, severities, and
+  placeholder source terms with reviewed language data.
+- Replace the in-repository source import in `src/index.ts` with the real
+  package import from `@textfilters/profanity`.
+- Remove `private: true` only when the package is ready to publish and the
+  target registry, access level, license, README, tests, and release workflow
+  are configured in the real repository.
+- Add the real package build and test tooling in that repository. This example
+  intentionally does not add a build framework or dependencies.
+
+The example `exports` map demonstrates three public surfaces:
+
+```json
+{
+  ".": "./dist/index.js",
+  "./dictionary": "./dist/dictionary.js",
+  "./filter": "./dist/index.js"
+}
+```
 
 ## Dictionary Source
 
@@ -47,6 +85,22 @@ export const zzProfanityDictionary = {
 The example terms are neutral placeholders. A real external pack should replace
 them with its own reviewed language data and policy tests.
 
+## Validation
+
+Run the example validator from this repository with the focused test:
+
+```bash
+npm test -- tests/language-pack-example.spec.ts
+```
+
+The test imports the example package entrypoint and confirms that
+`validateProfanityLanguageDictionary` accepts the dictionary before a filter is
+created from it.
+
+In a real external package, keep the same validation step in that package's test
+suite or run a compiled entrypoint that calls
+`validateProfanityLanguageDictionary` before exporting the filter.
+
 ## Package Entrypoint
 
 A future external package can expose a validated dictionary and a ready-to-use
@@ -56,7 +110,7 @@ filter from its public entrypoint:
 import {
   createProfanityFilterFromDictionary,
   validateProfanityLanguageDictionary,
-} from "@textfilters/profanity";
+} from "../../../src/index.js";
 
 import { zzProfanityDictionary } from "./dictionary.js";
 
@@ -73,6 +127,9 @@ export const zzProfanityFilter = createProfanityFilterFromDictionary(
   zzProfanityDictionary,
 );
 ```
+
+In a real external package, replace `../../../src/index.js` with
+`@textfilters/profanity` after adding the package dependency in that repository.
 
 This repository only provides the template. It does not create, publish, or
 reserve a real external language package.

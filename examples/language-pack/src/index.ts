@@ -1,7 +1,7 @@
 import {
   createProfanityFilterFromDictionary,
   validateProfanityLanguageDictionary,
-} from "@textfilters/profanity";
+} from "../../../src/index.js";
 
 import { zzProfanityDictionary } from "./dictionary.js";
 
