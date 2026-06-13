@@ -143,6 +143,11 @@ Runtime mutations on a dictionary-backed filter still use normalized literals.
 Calls such as `setStrict`, `setLoose`, `addStrict`, and `addLoose` do not expose
 the dictionary's internal rule compiler to caller-provided terms.
 
+A minimal non-published template for a future external pack lives in
+[`../examples/language-pack/`](../examples/language-pack/). It uses the fake
+language code `zz`, validates its source dictionary, creates a dictionary-backed
+filter, and exports both from a hypothetical package entrypoint.
+
 ## Currently Out Of Scope
 
 The following work is intentionally out of scope for this milestone:
