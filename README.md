@@ -200,6 +200,9 @@ For future external language pack guidance, see
 [the language pack authoring guide](docs/language-pack-authoring.md). It covers
 source dictionary shape, stable ids, taxonomy metadata, strict and loose views,
 human-maintained JSON, and conformance expectations.
+The [external language pack policy](docs/external-language-pack-policy.md)
+defines when the project is ready to create a real external package and keeps
+the built-in Russian dictionary in this package for now.
 
 ### Taxonomy Metadata Types
 

@@ -5,6 +5,10 @@ future external language packs that want to build on `@textfilters/profanity`.
 It is intentionally scoped to the contract that exists in this repository
 today; no external language package is created by this guide.
 
+For the decision criteria that determine when a real external package should be
+created, see the
+[external language pack policy](external-language-pack-policy.md).
+
 ## Source Shape
 
 The public dictionary shape is defined by the exported
