@@ -46,15 +46,18 @@ folding, `ё` to `е` folding, and zero-width replacement with a regular space.
 
 ```mermaid
 flowchart LR
-  PublicAPI["createProfanityFilter(strict, loose)"] --> RuntimeTerms["runtime terms"]
+  Source["human-maintained dictionary source"] --> Validation["validateProfanityLanguageDictionary"]
+  Validation --> CliReports["CLI text and JSON reports"]
+  Validation --> Normalization["dictionaryRulesForMode"]
+  Normalization --> Views["strict and loose rule views"]
+  Views --> InternalCompiler["matchers/internal-rules"]
+  InternalCompiler --> Reader["rule-reader and rule-classifier"]
+  Reader --> Matchers["compiled matcher sets"]
+  RuntimeAPI["createProfanityFilter(strict, loose)"] --> RuntimeTerms["runtime terms"]
   RuntimeTerms --> LiteralCompiler["matchers/literals"]
-  DefaultFilter["filter"] --> RussianDictionary["Russian language dictionary"]
-  RussianDictionary --> MatcherViews["compiled strict and loose views"]
-  MatcherViews --> InternalRules["matchers/internal-rules"]
-  InternalRules --> Reader["rule-reader and rule-classifier"]
-  LiteralCompiler --> Matchers["compiled matcher sets"]
-  Reader --> Matchers
-  Matchers --> Ranges["ranges/strict and ranges/loose"]
+  LiteralCompiler --> Matchers
+  Matchers --> PublicAPI["filter API"]
+  PublicAPI --> Ranges["ranges/strict and ranges/loose"]
 ```
 
 Runtime terms are not regular expressions. A term such as `foo|bar` matches the
@@ -72,6 +75,13 @@ morphology without exposing arbitrary user regex semantics.
 Reviewed loose rules may also opt into `hyphenTail` metadata from the source
 dictionary. That keeps language-specific compound trimming decisions in data
 while the runtime range code only applies the generic compiled-rule signal.
+
+The validator is the authoring gate for language dictionaries. It rejects
+missing taxonomy, generated matcher metadata, duplicate ids and sources,
+unsupported match options, invalid source patterns, suspicious id/category
+pairings, and source formatting mistakes before the dictionary reaches compiled
+runtime views. The CLI is a thin JSON-file wrapper around that same validator;
+it does not compile matchers or change runtime behavior.
 
 The source tree is prepared for language profiles, but this package does not
 implement multi-language selection, external language packs, or a public pack API
@@ -139,27 +149,29 @@ flowchart TD
 The top-level filter has lifecycle code only; matcher modules compile rules;
 range modules decide what parts of text can be masked.
 
-| File                              | Responsibility                                                        |
-| --------------------------------- | --------------------------------------------------------------------- |
-| `src/filter.ts`                   | Public API lifecycle and orchestration.                               |
-| `src/normalization/text.ts`       | Same-length normalization and code-point helpers.                     |
-| `src/constants/latin-to-cyr.ts`   | Shared homoglyph map used by normalization.                           |
-| `src/matchers/terms.ts`           | Runtime term cleanup and deduplication.                               |
-| `src/matchers/build.ts`           | Final matcher-set assembly from internal rules and literals.          |
-| `src/matchers/compile.ts`         | Small `RegExp` compile/test wrapper.                                  |
-| `src/matchers/literals.ts`        | Runtime literal dictionary compilation.                               |
-| `src/matchers/internal-rules.ts`  | Built-in loose rule separator expansion.                              |
-| `src/matchers/rule-reader.ts`     | Reads controlled rule sources into atoms.                             |
-| `src/matchers/rule-scanner.ts`    | Low-level controlled rule scanning and alternative splitting helpers. |
-| `src/matchers/rule-classifier.ts` | Decides which controlled atoms are word-like.                         |
-| `src/languages/profanity.ts`      | Generic language dictionary to matcher-view conversion.               |
-| `src/languages/ru/*`              | Built-in Russian profanity dictionary/profile data.                   |
-| `src/ranges/strict.ts`            | Strict range collection.                                              |
-| `src/ranges/loose.ts`             | Loose range collection.                                               |
-| `src/ranges/patterns.ts`          | Shared global regexp iteration with zero-width protection.            |
-| `src/ranges/boundary.ts`          | Token-boundary validation.                                            |
-| `src/token-ranges.ts`             | Shared UTF-16 token and masking helpers.                              |
-| `src/terms/*.ts`                  | Compatibility exports for compiled built-in matcher views.            |
+| File                                      | Responsibility                                                        |
+| ----------------------------------------- | --------------------------------------------------------------------- |
+| `src/filter.ts`                           | Public API lifecycle and orchestration.                               |
+| `src/normalization/text.ts`               | Same-length normalization and code-point helpers.                     |
+| `src/constants/latin-to-cyr.ts`           | Shared homoglyph map used by normalization.                           |
+| `src/matchers/terms.ts`                   | Runtime term cleanup and deduplication.                               |
+| `src/matchers/build.ts`                   | Final matcher-set assembly from internal rules and literals.          |
+| `src/matchers/compile.ts`                 | Small `RegExp` compile/test wrapper.                                  |
+| `src/matchers/literals.ts`                | Runtime literal dictionary compilation.                               |
+| `src/matchers/internal-rules.ts`          | Built-in loose rule separator expansion.                              |
+| `src/matchers/rule-reader.ts`             | Reads controlled rule sources into atoms.                             |
+| `src/matchers/rule-scanner.ts`            | Low-level controlled rule scanning and alternative splitting helpers. |
+| `src/matchers/rule-classifier.ts`         | Decides which controlled atoms are word-like.                         |
+| `src/languages/profanity.ts`              | Generic language dictionary to matcher-view conversion.               |
+| `src/languages/validation.ts`             | Source dictionary authoring validator and issue contract.             |
+| `src/cli/validate-language-dictionary.ts` | JSON dictionary validator CLI and text/JSON report formatting.        |
+| `src/languages/ru/*`                      | Built-in Russian profanity dictionary/profile data.                   |
+| `src/ranges/strict.ts`                    | Strict range collection.                                              |
+| `src/ranges/loose.ts`                     | Loose range collection.                                               |
+| `src/ranges/patterns.ts`                  | Shared global regexp iteration with zero-width protection.            |
+| `src/ranges/boundary.ts`                  | Token-boundary validation.                                            |
+| `src/token-ranges.ts`                     | Shared UTF-16 token and masking helpers.                              |
+| `src/terms/*.ts`                          | Compatibility exports for compiled built-in matcher views.            |
 
 The important design decision is that user input never enters the internal rule
 compiler. That keeps the public API stable, prevents user-provided zero-width or

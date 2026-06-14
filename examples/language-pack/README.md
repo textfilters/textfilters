@@ -105,8 +105,11 @@ If the package keeps its source dictionary in JSON, validate it with the package
 CLI before release:
 
 ```bash
-profanity-validate-language-dictionary path/to/profanity.json
+profanity-validate-language-dictionary --format json --pretty path/to/profanity.json
 ```
+
+CI should use `--format json` without `--pretty` when another step reads the
+report. Text output remains the default for local terminal use.
 
 ## Package Entrypoint
 

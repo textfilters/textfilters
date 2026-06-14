@@ -207,6 +207,42 @@ found, and `2` for usage, file read, or JSON parse errors. Validation issue
 output includes the same stable `path`, `code`, and `message` fields as the
 programmatic validator.
 
+Text output is the default:
+
+```text
+Dictionary validation failed:
+- rules[0].source source_not_trimmed: Rule source must not include leading or trailing whitespace.
+```
+
+Machine-readable JSON output is available for CI and authoring tools:
+
+```sh
+profanity-validate-language-dictionary --format json --pretty path/to/profanity.json
+```
+
+The JSON report always includes `ok`, `file`, `issueCount`, `issues`, and
+`summary`. Validation failures exit `1` and print the report to stdout with
+stable issue objects:
+
+```json
+{
+  "ok": false,
+  "file": "path/to/profanity.json",
+  "issueCount": 1,
+  "issues": [
+    {
+      "path": "rules[0].source",
+      "code": "source_not_trimmed",
+      "message": "Rule source must not include leading or trailing whitespace."
+    }
+  ],
+  "summary": {
+    "status": "invalid",
+    "message": "Dictionary validation failed with 1 issue."
+  }
+}
+```
+
 For future external language pack guidance, see
 [the language pack authoring guide](docs/language-pack-authoring.md). It covers
 source dictionary shape, stable ids, taxonomy metadata, strict and loose views,

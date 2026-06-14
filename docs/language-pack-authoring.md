@@ -47,6 +47,27 @@ Each rule needs:
 - `source`: the human-maintained source pattern for the rule.
 - `match`: at least one of `strict` or `loose`.
 
+The language code is a lowercase two-letter ISO 639-1 code. Rule ids use the
+same language prefix and a category segment before the stable term segment:
+
+```text
+<language>.<category-segment>.<stable-rule-name>
+```
+
+The category segments are:
+
+| Category        | Id Segment  |
+| --------------- | ----------- |
+| `OBSCENE_MAT`   | `obscene`   |
+| `STRONG_INSULT` | `insult`    |
+| `VULGAR`        | `vulgar`    |
+| `EUPHEMISM`     | `euphemism` |
+
+The validator reports `suspicious_id` when the id segment does not match the
+rule category. That is an authoring signal: either the taxonomy is wrong, the id
+was copied from another rule, or the rule needs a deliberate rename before it is
+released.
+
 ## Categories And Severities
 
 Language packs should classify every rule with both `category` and `severity`.
@@ -88,6 +109,11 @@ behavior. A rule may opt into both views when both behaviors are expected.
 Source dictionaries should stay human-maintained JSON. They should describe
 language-specific source rules, taxonomy, and intended strict or loose behavior.
 They must not store generated matcher output or compiler bookkeeping.
+
+Keep each `source` trimmed, non-empty, unique within the dictionary, and
+compilable as a Unicode regular expression. Duplicate source checks normalize
+Unicode to NFC after trimming so accidental copy differences are caught before
+runtime matcher views are compiled.
 
 Do not store these generated or matcher-only fields in source JSON:
 
@@ -134,12 +160,59 @@ The command exits `0` for valid dictionaries, `1` when validation issues are
 found, and `2` for usage, file read, or JSON parse errors. Validation output
 prints each issue with its stable `path`, `code`, and `message`.
 
+Use `--format json` when CI or an authoring tool needs a stable report:
+
+```sh
+profanity-validate-language-dictionary --format json path/to/profanity.json
+```
+
+Add `--pretty` for readable local output:
+
+```sh
+profanity-validate-language-dictionary --format json --pretty path/to/profanity.json
+```
+
+JSON reports are printed to stdout and have this shape:
+
+```json
+{
+  "ok": false,
+  "file": "path/to/profanity.json",
+  "issueCount": 1,
+  "issues": [
+    {
+      "path": "rules[0].id",
+      "code": "suspicious_id",
+      "message": "Rule id category segment should match the rule category."
+    }
+  ],
+  "summary": {
+    "status": "invalid",
+    "message": "Dictionary validation failed with 1 issue."
+  }
+}
+```
+
+Usage, read, and JSON parse failures exit `2`. In JSON mode those failures use
+the same top-level shape with `ok: false`, `issueCount: 0`, an empty `issues`
+array, and `summary.status: "error"`.
+
+In package CI, run the CLI before build or test steps that import the
+dictionary:
+
+```sh
+profanity-validate-language-dictionary --format json path/to/profanity.json
+```
+
 The validator checks:
 
 - the dictionary language and rules are present;
 - every rule has a stable explicit semantic id;
+- id language prefixes match the dictionary language;
+- id category segments match the rule category;
 - ids are unique;
-- sources are non-empty after trimming and unique within the dictionary;
+- sources are trimmed, non-empty, valid Unicode regular expression patterns,
+  and unique within the dictionary;
 - every rule has category and severity metadata;
 - each rule opts into `strict`, `loose`, or both;
 - `loose` options only use supported public options;
@@ -152,6 +225,17 @@ The validator checks the source dictionary contract. It does not prove
 moderation quality, false-positive behavior, language coverage, taxonomy
 judgment, or whether a rule should exist. Language packs should still keep
 their own corpus, regression, and policy tests.
+
+Common fixes:
+
+| Code                     | Fix                                                                  |
+| ------------------------ | -------------------------------------------------------------------- |
+| `invalid_language`       | Use a lowercase two-letter language code such as `zz`.               |
+| `invalid_id`             | Rename the rule to a semantic dotted id such as `zz.vulgar.example`. |
+| `suspicious_id`          | Align the id category segment with the `category` field.             |
+| `source_not_trimmed`     | Remove leading or trailing whitespace from `source`.                 |
+| `invalid_source_pattern` | Fix the source so it compiles as a Unicode regular expression.       |
+| `duplicate_source`       | Merge the duplicate rule or give each rule a distinct source.        |
 
 Conformance tests should also cover that
 `createProfanityFilterFromDictionary(dictionary)` returns an isolated filter

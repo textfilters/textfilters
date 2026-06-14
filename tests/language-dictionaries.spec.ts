@@ -202,6 +202,7 @@ describe("language dictionaries", () => {
     expect(issueSummary(issues)).toEqual([
       { path: "rules[0].notes", code: "unsupported_rule_key" },
       { path: "rules[0].id", code: "language_mismatch_id" },
+      { path: "rules[0].source", code: "source_not_trimmed" },
       { path: "rules[0].match.fuzzy", code: "unsupported_match_key" },
       { path: "rules[1].source", code: "duplicate_source" },
       {
@@ -212,6 +213,47 @@ describe("language dictionaries", () => {
         path: "rules[1].match.loose.hyphenTailMin",
         code: "invalid_loose_option_value",
       },
+    ]);
+  });
+
+  it("flags suspicious ids and invalid source patterns before runtime compilation", () => {
+    const issues = validateProfanityLanguageDictionary({
+      language: "zz",
+      rules: [
+        {
+          id: "zz.vulgar.category-mismatch",
+          category: "OBSCENE_MAT",
+          severity: "medium",
+          source: "(",
+          match: {
+            strict: {},
+          },
+        },
+      ],
+    });
+
+    expect(issueSummary(issues)).toEqual([
+      { path: "rules[0].id", code: "invalid_id" },
+      { path: "rules[0].source", code: "invalid_source_pattern" },
+    ]);
+
+    const suspiciousIssues = validateProfanityLanguageDictionary({
+      language: "zz",
+      rules: [
+        {
+          id: "zz.vulgar.category",
+          category: "OBSCENE_MAT",
+          severity: "medium",
+          source: "qwr",
+          match: {
+            strict: {},
+          },
+        },
+      ],
+    });
+
+    expect(issueSummary(suspiciousIssues)).toEqual([
+      { path: "rules[0].id", code: "suspicious_id" },
     ]);
   });
 

@@ -11,6 +11,7 @@ export type ProfanityLanguageDictionaryValidationIssueCode =
   | "missing_id"
   | "invalid_id"
   | "generated_id"
+  | "suspicious_id"
   | "duplicate_id"
   | "language_mismatch_id"
   | "missing_category"
@@ -19,6 +20,8 @@ export type ProfanityLanguageDictionaryValidationIssueCode =
   | "invalid_severity"
   | "missing_source"
   | "invalid_source"
+  | "source_not_trimmed"
+  | "invalid_source_pattern"
   | "duplicate_source"
   | "missing_match"
   | "invalid_match"
@@ -66,6 +69,13 @@ const ALLOWED_LOOSE_MATCH_OPTION_KEYS = new Set([
   "hyphenTailMin",
 ]);
 const SEMANTIC_RULE_ID_PATTERN = /^[a-z]{2}\.[a-z]+(?:\.[a-z0-9]+)+$/u;
+const LANGUAGE_CODE_PATTERN = /^[a-z]{2}$/u;
+const CATEGORY_ID_SEGMENTS = new Map<ProfanityCategory, string>([
+  ["OBSCENE_MAT", "obscene"],
+  ["STRONG_INSULT", "insult"],
+  ["VULGAR", "vulgar"],
+  ["EUPHEMISM", "euphemism"],
+]);
 const GENERATED_METADATA_KEYS = new Set([
   "ruleId",
   "order",
@@ -109,12 +119,15 @@ const validateLanguage = (
     return;
   }
 
-  if (!isNonEmptyString(dictionary.language)) {
+  if (
+    !isNonEmptyString(dictionary.language) ||
+    !LANGUAGE_CODE_PATTERN.test(dictionary.language)
+  ) {
     issues.push(
       issue(
         "language",
         "invalid_language",
-        "Dictionary language must be a non-empty string.",
+        "Dictionary language must be a lowercase ISO 639-1 language code.",
       ),
     );
   }
@@ -163,6 +176,7 @@ const validateRules = (
     validateRuleKeys(rule, path, issues);
     validateRuleId(rule, path, index, language, seenRuleIds, issues);
     validateRuleTaxonomy(rule, path, issues);
+    validateRuleIdTaxonomy(rule, path, issues);
     validateRuleSource(rule, path, index, seenRuleSources, issues);
     validateRuleMatch(rule, path, issues);
   });
@@ -247,6 +261,34 @@ const validateRuleKeys = (
   }
 };
 
+const validateRuleIdTaxonomy = (
+  rule: Record<string, unknown>,
+  path: string,
+  issues: ProfanityLanguageDictionaryValidationIssue[],
+): void => {
+  if (
+    !isNonEmptyString(rule.id) ||
+    !SEMANTIC_RULE_ID_PATTERN.test(rule.id) ||
+    !ALLOWED_PROFANITY_CATEGORIES.has(rule.category)
+  ) {
+    return;
+  }
+
+  const category = rule.category as ProfanityCategory;
+  const categorySegment = CATEGORY_ID_SEGMENTS.get(category);
+  const actualSegment = rule.id.split(".")[1];
+
+  if (categorySegment !== undefined && actualSegment !== categorySegment) {
+    issues.push(
+      issue(
+        `${path}.id`,
+        "suspicious_id",
+        "Rule id category segment should match the rule category.",
+      ),
+    );
+  }
+};
+
 const validateRuleTaxonomy = (
   rule: Record<string, unknown>,
   path: string,
@@ -314,7 +356,29 @@ const validateRuleSource = (
     return;
   }
 
-  const normalizedSource = rule.source.trim();
+  if (rule.source !== rule.source.trim()) {
+    issues.push(
+      issue(
+        `${path}.source`,
+        "source_not_trimmed",
+        "Rule source must not include leading or trailing whitespace.",
+      ),
+    );
+  }
+
+  try {
+    new RegExp(rule.source, "u");
+  } catch {
+    issues.push(
+      issue(
+        `${path}.source`,
+        "invalid_source_pattern",
+        "Rule source must compile as a Unicode regular expression.",
+      ),
+    );
+  }
+
+  const normalizedSource = rule.source.trim().normalize("NFC");
   const firstIndex = seenRuleSources.get(normalizedSource);
   if (firstIndex !== undefined) {
     issues.push(
