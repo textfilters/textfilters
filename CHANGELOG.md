@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.0](https://github.com/textfilters/profanity/compare/v0.9.0...v0.10.0) (2026-06-14)
+
+
+### Features
+
+* add language dictionary validator cli ([2c9707b](https://github.com/textfilters/profanity/commit/2c9707b993f61fdffcc07f061fcc0508a7a3ac67))
+
 ## [0.9.0](https://github.com/textfilters/profanity/compare/v0.8.0...v0.9.0) (2026-06-12)
 
 
