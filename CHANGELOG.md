@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.0](https://github.com/textfilters/profanity/compare/v0.10.0...v0.11.0) (2026-06-14)
+
+
+### Features
+
+* establish language dictionary authoring platform ([6118e29](https://github.com/textfilters/profanity/commit/6118e299a28eadc3e560e563932aa0ad02176ea0))
+
 ## [0.10.0](https://github.com/textfilters/profanity/compare/v0.9.0...v0.10.0) (2026-06-14)
 
 
