@@ -83,7 +83,8 @@ describe("profanity-validate-language-dictionary", () => {
 - rules[2].id duplicate_id: Rule id duplicates rules[1].id.
 - rules[2].category invalid_category: Rule category must be a supported profanity category.
 - rules[2].severity invalid_severity: Rule severity must be a supported profanity severity.
-- rules[2].match.loose.stretch invalid_loose_option_value: Loose match stretch option must be true when present.
+- rules[2].source duplicate_source: Rule source duplicates rules[1].source.
+- rules[2].match.loose.stretch invalid_loose_option_value: Loose match option must be true when present.
 - rules[2].match.loose.distance unsupported_loose_option: Loose match option is not supported.
 `);
   });

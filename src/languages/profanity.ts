@@ -21,6 +21,8 @@ export type ProfanityLanguageStrictMatchOptions = Record<string, never>;
 
 export interface ProfanityLanguageLooseMatchOptions {
   readonly stretch?: boolean;
+  readonly hyphenTail?: boolean;
+  readonly hyphenTailMin?: number;
 }
 
 export type ProfanityLanguageMatchMode = "strict" | "loose";
@@ -52,4 +54,14 @@ export const dictionaryRulesForMode = (
 const looseOptions = (
   match: ProfanityLanguageLooseMatchOptions,
 ): { readonly loose?: ProfanityLanguageLooseMatchOptions } =>
-  match.stretch === true ? { loose: { stretch: true } } : {};
+  match.stretch === true || match.hyphenTail === true
+    ? {
+        loose: {
+          ...(match.stretch === true ? { stretch: true } : {}),
+          ...(match.hyphenTail === true ? { hyphenTail: true } : {}),
+          ...(match.hyphenTailMin === undefined
+            ? {}
+            : { hyphenTailMin: match.hyphenTailMin }),
+        },
+      }
+    : {};

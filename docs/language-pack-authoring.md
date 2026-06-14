@@ -73,6 +73,11 @@ serialized matcher output.
   to the package's loose matching rules.
 - `loose: { "stretch": true }` additionally allows repeated word-like atoms in
   the controlled internal rule compiler.
+- `loose: { "hyphenTail": true }` marks a maintained dictionary rule whose
+  hyphenated compound tail should be trimmed unless the tail is itself profane.
+  Use it only for reviewed source rules with explicit false-positive locks.
+- `loose: { "hyphenTail": true, "hyphenTailMin": 5 }` can set the minimum
+  compact prefix length required before trimming a hyphenated tail.
 
 Choose strict matching when a rule should only match clear token boundaries.
 Choose loose matching when separator-obfuscated spelling is part of the intended
@@ -134,9 +139,11 @@ The validator checks:
 - the dictionary language and rules are present;
 - every rule has a stable explicit semantic id;
 - ids are unique;
+- sources are non-empty after trimming and unique within the dictionary;
 - every rule has category and severity metadata;
 - each rule opts into `strict`, `loose`, or both;
 - `loose` options only use supported public options;
+- rule and match objects do not contain unsupported authoring keys;
 - source JSON does not contain generated matcher metadata;
 - generated fallback ids such as `builtin:*` are not serialized into source
   JSON.

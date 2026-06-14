@@ -130,6 +130,7 @@ describe("language dictionaries", () => {
       { path: "rules[2].id", code: "duplicate_id" },
       { path: "rules[2].category", code: "invalid_category" },
       { path: "rules[2].severity", code: "invalid_severity" },
+      { path: "rules[2].source", code: "duplicate_source" },
       {
         path: "rules[2].match.loose.stretch",
         code: "invalid_loose_option_value",
@@ -139,6 +140,7 @@ describe("language dictionaries", () => {
         code: "unsupported_loose_option",
       },
       { path: "rules[3].id", code: "generated_id" },
+      { path: "rules[3].source", code: "duplicate_source" },
       {
         path: "rules[3].match.strict.ruleId",
         code: "unsupported_strict_option",
@@ -165,6 +167,52 @@ describe("language dictionaries", () => {
       },
     ]);
     expect(issues.every((issue) => issue.message.length > 0)).toBe(true);
+  });
+
+  it("flags suspicious authoring keys, language-mismatched ids, and duplicate sources", () => {
+    const issues = validateProfanityLanguageDictionary({
+      language: "zz",
+      rules: [
+        {
+          id: "ru.vulgar.example",
+          category: "VULGAR",
+          severity: "low",
+          source: " qwr ",
+          notes: "not part of the source contract",
+          match: {
+            strict: {},
+            fuzzy: {},
+          },
+        },
+        {
+          id: "zz.vulgar.other",
+          category: "VULGAR",
+          severity: "low",
+          source: "qwr",
+          match: {
+            loose: {
+              hyphenTail: false,
+              hyphenTailMin: 0,
+            },
+          },
+        },
+      ],
+    });
+
+    expect(issueSummary(issues)).toEqual([
+      { path: "rules[0].notes", code: "unsupported_rule_key" },
+      { path: "rules[0].id", code: "language_mismatch_id" },
+      { path: "rules[0].match.fuzzy", code: "unsupported_match_key" },
+      { path: "rules[1].source", code: "duplicate_source" },
+      {
+        path: "rules[1].match.loose.hyphenTail",
+        code: "invalid_loose_option_value",
+      },
+      {
+        path: "rules[1].match.loose.hyphenTailMin",
+        code: "invalid_loose_option_value",
+      },
+    ]);
   });
 
   it("returns shape issues instead of throwing for malformed inputs", () => {

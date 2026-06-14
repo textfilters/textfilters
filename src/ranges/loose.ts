@@ -49,6 +49,7 @@ const looseRange = (
           normalized,
           start,
           end,
+          pattern,
           patterns,
           looseTailMatchEnd,
         )

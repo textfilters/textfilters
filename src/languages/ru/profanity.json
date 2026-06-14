@@ -17,7 +17,7 @@
       "id": "ru.obscene.blyad.family",
       "category": "OBSCENE_MAT",
       "severity": "high",
-      "source": "бля[дт](?:[а-яё]+)?",
+      "source": "бл[я9@][дт](?:[а-яё]+)?",
       "match": {
         "strict": {}
       }
@@ -36,17 +36,7 @@
       "id": "ru.insult.pidor.family",
       "category": "STRONG_INSULT",
       "severity": "high",
-      "source": "пид[оа]?р(?:[а-яё]+)?",
-      "match": {
-        "strict": {},
-        "loose": {}
-      }
-    },
-    {
-      "id": "ru.insult.pidoras.family",
-      "category": "STRONG_INSULT",
-      "severity": "high",
-      "source": "пид[оа]рас(?:[а-яё]+)?",
+      "source": "п[иu]д[оа0]?р(?:[аa]с)?(?:[а-яё]+)?",
       "match": {
         "strict": {},
         "loose": {}
@@ -233,7 +223,7 @@
       "id": "ru.obscene.eb.verb.sv",
       "category": "OBSCENE_MAT",
       "severity": "high",
-      "source": "(?<!\\p{L})[св][ъь]?еб(?:ал|али|ало|ать|у|ут|ем|ешь|ете|ись|ну|нуть|нулся|ывай(?:те)?)(?:[а-яё]+)?",
+      "source": "(?<!\\p{L})(?:[св][ъь]еб(?:ал|али|ало|ать|у|ут|ем|ешь|ете|ись|ну|нуть|нулся|ывай(?:те)?)?|[св]еб(?:ал|али|ало|ать|у|ут|ем|ешь|ете|ись|ну|нуть|нулся|ывай(?:те)?))(?:[а-яё]+)?",
       "match": {
         "strict": {},
         "loose": {
@@ -245,7 +235,7 @@
       "id": "ru.obscene.eb.verb.ot",
       "category": "OBSCENE_MAT",
       "severity": "high",
-      "source": "(?<!\\p{L})от[ъь]?еб(?:ись|ать|ал|али|ало|у|ут|ем|ешь|ете|нулся|ну|нуть|ывай(?:те)?)(?:[а-яё]+)?",
+      "source": "(?<!\\p{L})(?:от[ъь]еб(?:ись|ать|ал|али|ало|у|ут|ем|ешь|ете|нулся|ну|нуть|ывай(?:те)?)?|отеб(?:ись|ать|ал|али|ало|у|ут|ем|ешь|ете|нулся|ну|нуть|ывай(?:те)?))(?:[а-яё]+)?",
       "match": {
         "strict": {},
         "loose": {
@@ -448,7 +438,9 @@
       "match": {
         "strict": {},
         "loose": {
-          "stretch": true
+          "stretch": true,
+          "hyphenTail": true,
+          "hyphenTailMin": 5
         }
       }
     },
@@ -469,6 +461,18 @@
       "category": "VULGAR",
       "severity": "medium",
       "source": "охуе(?:[а-яё]+)?",
+      "match": {
+        "strict": {},
+        "loose": {
+          "stretch": true
+        }
+      }
+    },
+    {
+      "id": "ru.vulgar.ahue.family",
+      "category": "VULGAR",
+      "severity": "medium",
+      "source": "ахуев(?:ш(?:[а-яё]+)?|[а-яё]+)?",
       "match": {
         "strict": {},
         "loose": {
@@ -628,7 +632,7 @@
       "id": "ru.obscene.blyad.loose",
       "category": "OBSCENE_MAT",
       "severity": "high",
-      "source": "бля[дт]ь",
+      "source": "бл[я9@][дт]ь",
       "match": {
         "loose": {
           "stretch": true
@@ -639,7 +643,7 @@
       "id": "ru.obscene.blyad.short.loose",
       "category": "OBSCENE_MAT",
       "severity": "medium",
-      "source": "(?<!\\p{L})бля[дт](?!\\p{L})",
+      "source": "(?<!\\p{L})бл[я9@][дт](?!\\p{L})",
       "match": {
         "loose": {
           "stretch": true

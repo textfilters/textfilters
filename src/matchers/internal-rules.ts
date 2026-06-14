@@ -25,6 +25,8 @@ export type InternalProfanityRuleDefinition =
 
 export interface InternalProfanityRuleLooseOptions {
   readonly stretch?: boolean;
+  readonly hyphenTail?: boolean;
+  readonly hyphenTailMin?: number;
 }
 
 export const createBuiltInProfanityRules = (
@@ -60,13 +62,12 @@ export const compileLooseInternalRulePatterns = (
   compilePatternDefinitions(
     rules.map((rule) => ({
       source: loosenInternalRuleSource(rule.source, rule.loose),
+      trimHyphenTail: rule.loose?.hyphenTail,
+      trimHyphenTailMin: rule.loose?.hyphenTailMin,
       ruleId: rule.id,
       ...ruleIdentityMetadata(rule),
     })),
     false,
-    {
-      trimHyphenTail: true,
-    },
   );
 
 const stableRuleSourceHash = (source: string): string => {
@@ -144,8 +145,8 @@ const loosenOptionalSuffix = (
   options: InternalProfanityRuleLooseOptions,
 ): string => {
   const classSource = atom.base.match(/^\(\?:(\[[^\]]+\])\+\)$/u)?.[1];
-  // Turn `(?:[а-яё]+)?` into an optional sequence that can consume split suffix
-  // letters, for example `за-е-б-а-л`, while staying within the current token.
+  // Turn optional suffix character classes into sequences that can consume
+  // split suffix letters while staying within the current token.
   return classSource === undefined
     ? loosenGroup(atom, options)
     : `(?:${classSource}(?:${IN_TOKEN_SEPARATOR}${classSource})*)?`;
@@ -159,8 +160,8 @@ const loosenGroup = (
   const bodyStart = atom.base.startsWith("(?:") ? 3 : 1;
   const body = atom.base.slice(bodyStart, -1);
   const quantifier = atom.source.slice(atom.base.length);
-  // Groups with alternatives such as `(у|ал|нуть)` need the same loose expansion
-  // inside each alternative; treating the group as one atom misses `е-б-н-у-т-ь`.
+  // Groups with alternatives need the same loose expansion inside each
+  // alternative; treating the group as one atom misses split suffix variants.
   const alternatives = splitTopLevelAlternatives(body).map((alternative) =>
     loosenInternalRuleSource(alternative, options),
   );

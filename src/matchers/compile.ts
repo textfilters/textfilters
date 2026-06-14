@@ -4,16 +4,20 @@ import { ruleIdentityMetadata } from "./rule-metadata.js";
 export interface CompiledPattern extends ProfanityTaxonomyMetadata {
   readonly re: RegExp;
   readonly trimHyphenTail?: boolean;
+  readonly trimHyphenTailMin?: number;
   readonly ruleId?: string;
 }
 
 export interface CompilePatternOptions {
   readonly trimHyphenTail?: boolean;
+  readonly trimHyphenTailMin?: number;
 }
 
 export interface CompilePatternSource extends ProfanityTaxonomyMetadata {
   readonly source: string;
   readonly ruleId?: string;
+  readonly trimHyphenTail?: boolean;
+  readonly trimHyphenTailMin?: number;
 }
 
 const GLOBAL_UNICODE_FLAGS = "giu";
@@ -40,9 +44,12 @@ export const compilePatternDefinitions = (
     // know whether a pattern came from strict token matching or global search.
     .map((definition) => ({
       source: wholeToken ? `^(?:${definition.source})$` : definition.source,
+      trimHyphenTail: definition.trimHyphenTail ?? options.trimHyphenTail,
+      trimHyphenTailMin:
+        definition.trimHyphenTailMin ?? options.trimHyphenTailMin,
       ...ruleIdentityMetadata(definition),
     }))
-    .map((definition) => compilePattern(definition, wholeToken, options))
+    .map((definition) => compilePattern(definition, wholeToken))
     .filter((pattern): pattern is CompiledPattern => pattern !== null)
     .sort((left, right) => right.re.source.length - left.re.source.length);
 
@@ -57,7 +64,6 @@ export const patternMatches = (
 const compilePattern = (
   definition: CompilePatternSource,
   wholeToken: boolean,
-  options: CompilePatternOptions,
 ): CompiledPattern | null => {
   try {
     return {
@@ -65,7 +71,8 @@ const compilePattern = (
         definition.source,
         wholeToken ? ANCHORED_UNICODE_FLAGS : GLOBAL_UNICODE_FLAGS,
       ),
-      trimHyphenTail: options.trimHyphenTail,
+      trimHyphenTail: definition.trimHyphenTail,
+      trimHyphenTailMin: definition.trimHyphenTailMin,
       ...ruleIdentityMetadata(definition),
     };
   } catch {

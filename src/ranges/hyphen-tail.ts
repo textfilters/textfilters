@@ -31,10 +31,11 @@ export const knownHyphenatedSuffixRange = (
   normalized: string,
   start: number,
   end: number,
+  pattern: CompiledPattern,
   patterns: LooseRangePatterns,
   looseTailMatchEnd: LooseTailMatchEnd,
 ): HyphenSuffixRange => {
-  const prefixEnd = hyphenatedHuinPrefixEnd(normalized, start, end);
+  const prefixEnd = hyphenatedRulePrefixEnd(normalized, start, end, pattern);
   if (prefixEnd === null) return { emitEnd: end, boundaryEnd: end };
 
   const tailStart = prefixEnd + 1;
@@ -55,7 +56,7 @@ export const knownHyphenatedSuffixRange = (
 
   if (profaneTailEnd !== null) {
     const end = tailStart + profaneTailEnd;
-    return { emitEnd: end, boundaryEnd: end };
+    return { emitEnd: end, boundaryEnd: Math.max(end, tailTokenEnd) };
   }
 
   return { emitEnd: prefixEnd, boundaryEnd: tailTokenEnd };
@@ -143,10 +144,11 @@ const strictFirstSplitSegmentEnd = (
   return null;
 };
 
-const hyphenatedHuinPrefixEnd = (
+const hyphenatedRulePrefixEnd = (
   normalized: string,
   start: number,
   end: number,
+  pattern: CompiledPattern,
 ): number | null => {
   const scanEnd = Math.min(normalized.length, Math.max(end, start + 64));
   let compact = "";
@@ -156,7 +158,7 @@ const hyphenatedHuinPrefixEnd = (
     const char = normalized.slice(position, charEnd);
 
     if (char === "-" && isWordCharAt(normalized, charEnd)) {
-      if (/^хуйн[а-яё]+$/iu.test(compact)) {
+      if (patternMatchesFullPrefix(pattern, compact)) {
         return position;
       }
       position = charEnd;
@@ -165,7 +167,7 @@ const hyphenatedHuinPrefixEnd = (
 
     if (/[\p{L}\p{N}]/u.test(char)) {
       compact += char;
-      if (!/^хуйн?[а-яё]*$/iu.test(compact) && !/^ху?$/iu.test(compact)) {
+      if (!patternCanStartWithPrefix(pattern, compact)) {
         break;
       }
     }
@@ -174,6 +176,37 @@ const hyphenatedHuinPrefixEnd = (
   }
 
   return null;
+};
+
+const patternMatchesFullPrefix = (
+  pattern: CompiledPattern,
+  compact: string,
+): boolean => {
+  if (Array.from(compact).length < (pattern.trimHyphenTailMin ?? 1)) {
+    return false;
+  }
+
+  const re = new RegExp(pattern.re.source, pattern.re.flags);
+  const match = re.exec(compact);
+  return (
+    match !== null && match.index === 0 && match[0].length === compact.length
+  );
+};
+
+const patternCanStartWithPrefix = (
+  pattern: CompiledPattern,
+  compact: string,
+): boolean => {
+  for (let end = nextCodePointEnd(compact, 0); end <= compact.length; ) {
+    if (patternMatchesFullPrefix(pattern, compact.slice(0, end))) {
+      return true;
+    }
+
+    if (end === compact.length) break;
+    end = nextCodePointEnd(compact, end);
+  }
+
+  return compact.length <= HYPHEN_TAIL_SCAN_LOOKAHEAD;
 };
 
 const hyphenTailScanEnd = (

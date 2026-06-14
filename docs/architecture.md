@@ -69,6 +69,10 @@ behavior. Strict and loose are compiled matcher views, not separate dictionaries
 or serialized matcher output. This allows compact expressions for Russian
 morphology without exposing arbitrary user regex semantics.
 
+Reviewed loose rules may also opt into `hyphenTail` metadata from the source
+dictionary. That keeps language-specific compound trimming decisions in data
+while the runtime range code only applies the generic compiled-rule signal.
+
 The source tree is prepared for language profiles, but this package does not
 implement multi-language selection, external language packs, or a public pack API
 yet. The only built-in profile is Russian.

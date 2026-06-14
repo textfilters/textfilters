@@ -12,14 +12,18 @@ export type ProfanityLanguageDictionaryValidationIssueCode =
   | "invalid_id"
   | "generated_id"
   | "duplicate_id"
+  | "language_mismatch_id"
   | "missing_category"
   | "invalid_category"
   | "missing_severity"
   | "invalid_severity"
   | "missing_source"
   | "invalid_source"
+  | "duplicate_source"
   | "missing_match"
   | "invalid_match"
+  | "unsupported_rule_key"
+  | "unsupported_match_key"
   | "missing_match_mode"
   | "invalid_strict_options"
   | "unsupported_strict_option"
@@ -48,7 +52,19 @@ const ALLOWED_PROFANITY_SEVERITIES = new Set<unknown>([
   "soft",
 ] as const satisfies readonly ProfanitySeverity[]);
 
-const ALLOWED_LOOSE_MATCH_OPTION_KEYS = new Set(["stretch"]);
+const ALLOWED_RULE_KEYS = new Set([
+  "id",
+  "category",
+  "severity",
+  "source",
+  "match",
+]);
+const ALLOWED_MATCH_KEYS = new Set(["strict", "loose"]);
+const ALLOWED_LOOSE_MATCH_OPTION_KEYS = new Set([
+  "stretch",
+  "hyphenTail",
+  "hyphenTailMin",
+]);
 const SEMANTIC_RULE_ID_PATTERN = /^[a-z]{2}\.[a-z]+(?:\.[a-z0-9]+)+$/u;
 const GENERATED_METADATA_KEYS = new Set([
   "ruleId",
@@ -128,7 +144,11 @@ const validateRules = (
     );
   }
 
+  const language = isNonEmptyString(dictionary.language)
+    ? dictionary.language
+    : undefined;
   const seenRuleIds = new Map<string, number>();
+  const seenRuleSources = new Map<string, number>();
 
   dictionary.rules.forEach((rule, index) => {
     const path = `rules[${index}]`;
@@ -140,9 +160,10 @@ const validateRules = (
       return;
     }
 
-    validateRuleId(rule, path, index, seenRuleIds, issues);
+    validateRuleKeys(rule, path, issues);
+    validateRuleId(rule, path, index, language, seenRuleIds, issues);
     validateRuleTaxonomy(rule, path, issues);
-    validateRuleSource(rule, path, issues);
+    validateRuleSource(rule, path, index, seenRuleSources, issues);
     validateRuleMatch(rule, path, issues);
   });
 };
@@ -151,6 +172,7 @@ const validateRuleId = (
   rule: Record<string, unknown>,
   path: string,
   index: number,
+  language: string | undefined,
   seenRuleIds: Map<string, number>,
   issues: ProfanityLanguageDictionaryValidationIssue[],
 ): void => {
@@ -182,6 +204,14 @@ const validateRuleId = (
         "Rule id must be a semantic dotted id.",
       ),
     );
+  } else if (language !== undefined && !rule.id.startsWith(`${language}.`)) {
+    issues.push(
+      issue(
+        `${path}.id`,
+        "language_mismatch_id",
+        "Rule id must start with the dictionary language code.",
+      ),
+    );
   }
 
   const firstIndex = seenRuleIds.get(rule.id);
@@ -197,6 +227,24 @@ const validateRuleId = (
   }
 
   seenRuleIds.set(rule.id, index);
+};
+
+const validateRuleKeys = (
+  rule: Record<string, unknown>,
+  path: string,
+  issues: ProfanityLanguageDictionaryValidationIssue[],
+): void => {
+  for (const key of Object.keys(rule)) {
+    if (!ALLOWED_RULE_KEYS.has(key) && !GENERATED_METADATA_KEYS.has(key)) {
+      issues.push(
+        issue(
+          `${path}.${key}`,
+          "unsupported_rule_key",
+          "Rule field is not supported in source dictionaries.",
+        ),
+      );
+    }
+  }
 };
 
 const validateRuleTaxonomy = (
@@ -244,6 +292,8 @@ const validateRuleTaxonomy = (
 const validateRuleSource = (
   rule: Record<string, unknown>,
   path: string,
+  index: number,
+  seenRuleSources: Map<string, number>,
   issues: ProfanityLanguageDictionaryValidationIssue[],
 ): void => {
   if (!("source" in rule)) {
@@ -261,7 +311,23 @@ const validateRuleSource = (
         "Rule source must be a non-empty string.",
       ),
     );
+    return;
   }
+
+  const normalizedSource = rule.source.trim();
+  const firstIndex = seenRuleSources.get(normalizedSource);
+  if (firstIndex !== undefined) {
+    issues.push(
+      issue(
+        `${path}.source`,
+        "duplicate_source",
+        `Rule source duplicates rules[${firstIndex}].source.`,
+      ),
+    );
+    return;
+  }
+
+  seenRuleSources.set(normalizedSource, index);
 };
 
 const validateRuleMatch = (
@@ -285,6 +351,18 @@ const validateRuleMatch = (
 
   const hasStrict = "strict" in rule.match;
   const hasLoose = "loose" in rule.match;
+
+  for (const key of Object.keys(rule.match)) {
+    if (!ALLOWED_MATCH_KEYS.has(key)) {
+      issues.push(
+        issue(
+          `${path}.match.${key}`,
+          "unsupported_match_key",
+          "Rule match key is not supported.",
+        ),
+      );
+    }
+  }
 
   if (!hasStrict && !hasLoose) {
     issues.push(
@@ -360,12 +438,25 @@ const validateLooseMatch = (
       continue;
     }
 
-    if (key === "stretch" && value !== true) {
+    if ((key === "stretch" || key === "hyphenTail") && value !== true) {
       issues.push(
         issue(
-          `${path}.stretch`,
+          `${path}.${key}`,
           "invalid_loose_option_value",
-          "Loose match stretch option must be true when present.",
+          "Loose match option must be true when present.",
+        ),
+      );
+    }
+
+    if (
+      key === "hyphenTailMin" &&
+      (typeof value !== "number" || !Number.isInteger(value) || value < 1)
+    ) {
+      issues.push(
+        issue(
+          `${path}.${key}`,
+          "invalid_loose_option_value",
+          "Loose match numeric options must be positive integers.",
         ),
       );
     }
