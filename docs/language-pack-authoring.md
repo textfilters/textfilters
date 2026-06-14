@@ -118,6 +118,17 @@ Valid source dictionaries return `[]`. Validation issues use stable `path`,
 `code`, and `message` fields so language packs can print them in tests or CI
 without depending on this repository's test helpers.
 
+Packages that keep the dictionary as JSON can validate it directly with the
+included CLI:
+
+```sh
+profanity-validate-language-dictionary path/to/profanity.json
+```
+
+The command exits `0` for valid dictionaries, `1` when validation issues are
+found, and `2` for usage, file read, or JSON parse errors. Validation output
+prints each issue with its stable `path`, `code`, and `message`.
+
 The validator checks:
 
 - the dictionary language and rules are present;

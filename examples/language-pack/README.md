@@ -101,6 +101,13 @@ In a real external package, keep the same validation step in that package's test
 suite or run a compiled entrypoint that calls
 `validateProfanityLanguageDictionary` before exporting the filter.
 
+If the package keeps its source dictionary in JSON, validate it with the package
+CLI before release:
+
+```bash
+profanity-validate-language-dictionary path/to/profanity.json
+```
+
 ## Package Entrypoint
 
 A future external package can expose a validated dictionary and a ready-to-use

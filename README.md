@@ -196,6 +196,17 @@ issues instead of thrown exceptions. The validator does not judge moderation
 quality, false-positive behavior, language coverage, taxonomy choices, or
 whether a rule should exist.
 
+The package also includes a small CLI for validating a JSON source dictionary:
+
+```sh
+profanity-validate-language-dictionary path/to/profanity.json
+```
+
+The command exits `0` for valid dictionaries, `1` when validation issues are
+found, and `2` for usage, file read, or JSON parse errors. Validation issue
+output includes the same stable `path`, `code`, and `message` fields as the
+programmatic validator.
+
 For future external language pack guidance, see
 [the language pack authoring guide](docs/language-pack-authoring.md). It covers
 source dictionary shape, stable ids, taxonomy metadata, strict and loose views,
