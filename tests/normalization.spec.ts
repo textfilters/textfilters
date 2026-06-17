@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { createProfanityFilter, filter } from "../src/index.js";
+import { createProfanityFilter, filter } from "../src";
 
 describe("normalization", () => {
   it("handles latin homoglyphs and fullwidth ASCII in strict matching", () => {
@@ -21,6 +21,7 @@ describe("normalization", () => {
       "первая строка\nпиздец тут\nтретья строка хуй",
       "🙂 пиздец 🔥 и хуй ✅",
       "пи\u200Bздец",
+      "е6\u200Bал",
       `${"a".repeat(5000)} п и з д е ц ${"b".repeat(5000)}`,
       "обычный текст",
       "eбaть, xуй, blender",
@@ -35,10 +36,21 @@ describe("normalization", () => {
     expect(filter.censor("🙂 пиздец 🔥 и хуй ✅")).toBe(
       "🙂 ****** 🔥 и *** ✅",
     );
+    expect(filter.censor("е6\u200Bал")).toBe("*****");
   });
 
   it("preserves UTF-16 length for astral strict and loose tokens", () => {
     expect(createProfanityFilter(["𐐀"], []).censor("𐐀")).toBe("**");
     expect(createProfanityFilter([], ["𐐀"]).censor("𐐀")).toBe("**");
+  });
+
+  it("keeps zero-width split markers outside strict token bounds", () => {
+    const strictOnly = createProfanityFilter(["бля", "foo"], []);
+    const strictDotPhrase = createProfanityFilter(["foo.bar"], []);
+
+    expect(strictOnly.censor("бля\u200B")).toBe("***\u200B");
+    expect(strictOnly.censor("foo\u200B")).toBe("***\u200B");
+    expect(strictDotPhrase.censor("foo\u200Bbar")).toBe("foo\u200Bbar");
+    expect(filter.censor("пи\u200Bздец")).toBe("*******");
   });
 });

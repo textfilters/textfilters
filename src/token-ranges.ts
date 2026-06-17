@@ -32,6 +32,30 @@ export const containsWordChar = (
   return false;
 };
 
+export const wordStartAtOrAfter = (
+  s: string,
+  start: number,
+  end = s.length,
+): number => {
+  let position = start;
+  while (position < end && !isWordCharAt(s, position)) {
+    position = nextCodePointEnd(s, position);
+  }
+  return position;
+};
+
+export const wordRunEnd = (
+  s: string,
+  start: number,
+  end = s.length,
+): number => {
+  let position = start;
+  while (position < end && isWordCharAt(s, position)) {
+    position = nextCodePointEnd(s, position);
+  }
+  return position;
+};
+
 export const expandToTokenBounds = (
   s: string,
   a: number,

@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import { filter } from "../src/index.js";
+import { filter } from "../src";
 
-import { mask } from "./helpers.js";
+import { mask } from "./helpers";
 
 describe("hyphen-tail behavior", () => {
   it("trims neutral hyphen tails without exposing profane tails", () => {

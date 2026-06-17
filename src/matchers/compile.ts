@@ -23,17 +23,6 @@ export interface CompilePatternSource extends ProfanityTaxonomyMetadata {
 const GLOBAL_UNICODE_FLAGS = "giu";
 const ANCHORED_UNICODE_FLAGS = "iu";
 
-export const compilePatternSources = (
-  sources: readonly string[],
-  wholeToken: boolean,
-  options: CompilePatternOptions = {},
-): CompiledPattern[] =>
-  compilePatternDefinitions(
-    sources.map((source) => ({ source })),
-    wholeToken,
-    options,
-  );
-
 export const compilePatternDefinitions = (
   definitions: readonly CompilePatternSource[],
   wholeToken: boolean,

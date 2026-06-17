@@ -6,12 +6,12 @@ import {
   validateProfanityLanguageDictionary,
   type ProfanityLanguageDictionary,
   type ProfanityLanguageDictionaryValidationIssue,
-} from "../src/index.js";
-import { RUSSIAN_PROFANITY_DICTIONARY } from "../src/languages/ru/index.js";
+} from "../src";
+import { RUSSIAN_PROFANITY_DICTIONARY } from "../src/languages/ru";
 import {
   assertLanguageDictionaryInvariants,
   assertLanguagePackDictionaryContract,
-} from "./language-dictionary-helpers.js";
+} from "./language-dictionary-helpers";
 
 const LANGUAGE_DICTIONARIES = [RUSSIAN_PROFANITY_DICTIONARY] as const;
 const CUSTOM_LANGUAGE_PACK_DICTIONARY = {
@@ -71,6 +71,33 @@ describe("language dictionaries", () => {
     expect(
       validateProfanityLanguageDictionary(CUSTOM_LANGUAGE_PACK_DICTIONARY),
     ).toEqual([]);
+  });
+
+  it("allows long source patterns to be authored as joined fragments", () => {
+    const dictionary = {
+      language: "zz",
+      rules: [
+        {
+          id: "zz.vulgar.fragmented",
+          category: "VULGAR",
+          severity: "low",
+          source: ["q", "[._-]?", "w", "[._-]?", "r"],
+          match: {
+            strict: {},
+            loose: {},
+          },
+        },
+      ],
+    } as const satisfies ProfanityLanguageDictionary;
+    const customFilter = createProfanityFilterFromDictionary(dictionary);
+
+    expect(validateProfanityLanguageDictionary(dictionary)).toEqual([]);
+    expect(customFilter.check("q-w-r")).toBe(true);
+    expect(customFilter.analyze("q-w-r")[0]).toMatchObject({
+      ruleId: "zz.vulgar.fragmented",
+      category: "VULGAR",
+      severity: "low",
+    });
   });
 
   it("returns stable issue codes and paths for invalid dictionaries", () => {
@@ -254,6 +281,47 @@ describe("language dictionaries", () => {
 
     expect(issueSummary(suspiciousIssues)).toEqual([
       { path: "rules[0].id", code: "suspicious_id" },
+    ]);
+  });
+
+  it("validates source fragments before compiling the joined pattern", () => {
+    const issues = validateProfanityLanguageDictionary({
+      language: "zz",
+      rules: [
+        {
+          id: "zz.vulgar.empty",
+          category: "VULGAR",
+          severity: "low",
+          source: ["q", ""],
+          match: {
+            strict: {},
+          },
+        },
+        {
+          id: "zz.vulgar.spaced",
+          category: "VULGAR",
+          severity: "low",
+          source: ["q", " wr"],
+          match: {
+            strict: {},
+          },
+        },
+        {
+          id: "zz.vulgar.invalid",
+          category: "VULGAR",
+          severity: "low",
+          source: ["q", "("],
+          match: {
+            strict: {},
+          },
+        },
+      ],
+    });
+
+    expect(issueSummary(issues)).toEqual([
+      { path: "rules[0].source", code: "invalid_source" },
+      { path: "rules[1].source[1]", code: "source_not_trimmed" },
+      { path: "rules[2].source", code: "invalid_source_pattern" },
     ]);
   });
 

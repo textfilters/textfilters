@@ -1,16 +1,16 @@
 import {
   compileLooseInternalRulePatterns,
   compileStrictInternalRulePatterns,
+  type InternalProfanityRule,
 } from "./internal-rules.js";
-import type { InternalProfanityRule } from "./internal-rules.js";
 import {
   compileLooseLiteralPatterns,
   compileStrictPhraseLiteralPatterns,
   compileStrictLiteralPatterns,
   compileStrictSymbolLiteralPatterns,
+  type LiteralTermDefinition,
   strictSymbolLiteralLengths,
 } from "./literals.js";
-import type { LiteralTermDefinition } from "./literals.js";
 import type { CompiledPattern } from "./compile.js";
 
 export interface MatcherTerms {

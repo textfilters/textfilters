@@ -1,6 +1,5 @@
 import type { StrictPatternSet } from "../matchers/build.js";
-import type { CompiledPattern } from "../matchers/compile.js";
-import { patternMatches } from "../matchers/compile.js";
+import { patternMatches, type CompiledPattern } from "../matchers/compile.js";
 import type { CollectedProfanityRange } from "../matches/ranges.js";
 import { nextCodePointEnd } from "../normalization/text.js";
 import {

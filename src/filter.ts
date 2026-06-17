@@ -1,31 +1,39 @@
-import { buildLoosePatterns, buildStrictPatterns } from "./matchers/build.js";
-import type { MatcherTerms, StrictPatternSet } from "./matchers/build.js";
-import type { CompiledPattern } from "./matchers/compile.js";
-import { createBuiltInProfanityRules } from "./matchers/internal-rules.js";
-import { normalizeTermList } from "./matchers/terms.js";
-import { dictionaryRulesForMode } from "./languages/profanity.js";
-import type { ProfanityLanguageDictionary } from "./languages/profanity.js";
 import {
+  buildLoosePatterns,
+  buildStrictPatterns,
+  type MatcherTerms,
+  type StrictPatternSet,
+} from "./matchers/build.js";
+import type { CompiledPattern } from "./matchers/compile.js";
+import {
+  createBuiltInProfanityRules,
+  type InternalProfanityRuleDefinition,
+} from "./matchers/internal-rules.js";
+import { normalizeTermList } from "./matchers/terms.js";
+import {
+  dictionaryRulesForMode,
+  type ProfanityLanguageDictionary,
+} from "./languages/profanity.js";
+import {
+  type CollectedProfanityRange,
   matchRangesForMode,
   PROFANITY_MATCH_MODE,
   textRangesForMode,
 } from "./matches/ranges.js";
-import type { CollectedProfanityRange } from "./matches/ranges.js";
 import { normalizeForMatchSameLen } from "./normalization/text.js";
 import { collectLooseRanges } from "./ranges/loose.js";
 import { collectStrictRanges } from "./ranges/strict.js";
 import { maskProfanityRanges } from "./token-ranges.js";
 import { LOOSE_BASE } from "./terms/loose-base.js";
 import { STRICT_BASE } from "./terms/strict-base.js";
-import { PROFANITY_FILTER_NAME } from "./types.js";
-import type {
-  ProfanityFilter,
-  ProfanityMatchOptions,
-  ProfanityMatchRange,
-  ProfanitySeverity,
-  ProfanityTermList,
+import {
+  PROFANITY_FILTER_NAME,
+  type ProfanityFilter,
+  type ProfanityMatchOptions,
+  type ProfanityMatchRange,
+  type ProfanitySeverity,
+  type ProfanityTermList,
 } from "./types.js";
-import type { InternalProfanityRuleDefinition } from "./matchers/internal-rules.js";
 import {
   normalizeLiteralTerm,
   type LiteralTermDefinition,
@@ -279,6 +287,7 @@ const collectProfanityMatches = (
   collectStrictRanges(normalized, state.strictPatterns, strictRanges);
   collectLooseRanges(
     normalized,
+    text,
     state.loosePatterns,
     state.strictPatterns,
     looseRanges,

@@ -1,11 +1,10 @@
-import { compilePatternDefinitions } from "./compile.js";
+import { compilePatternDefinitions, type CompiledPattern } from "./compile.js";
 import { LOOSE_SEPARATOR } from "./literals.js";
 import { isOptionalSuffixAtom, isWordLikeAtom } from "./rule-classifier.js";
 import { readRuleAtoms, type RuleAtom } from "./rule-reader.js";
 import { ruleIdentityMetadata, ruleSourceMetadata } from "./rule-metadata.js";
 import { splitTopLevelAlternatives } from "./rule-scanner.js";
 import type { ProfanityTaxonomyMetadata } from "../types.js";
-import type { CompiledPattern } from "./compile.js";
 
 const IN_TOKEN_SEPARATOR = String.raw`[^\p{L}\p{N}\s]*`;
 
@@ -96,25 +95,31 @@ const loosenInternalRuleSource = (
   source: string,
   options: InternalProfanityRuleLooseOptions = {},
 ): string => {
-  let previousWasWordLike = false;
+  let previousAtom: RuleAtom | null = null;
   let result = "";
 
   for (const atom of readRuleAtoms(source)) {
-    const wordLike = isWordLikeAtom(atom);
-
-    // Optional suffixes should allow punctuation inside the same obfuscated word
-    // but must not cross whitespace into the next word.
-    if (previousWasWordLike && wordLike) {
-      result += isOptionalSuffixAtom(atom)
-        ? IN_TOKEN_SEPARATOR
-        : LOOSE_SEPARATOR;
-    }
-
+    result += looseSeparatorBefore(previousAtom, atom);
     result += loosenRuleAtom(atom, options);
-    previousWasWordLike = wordLike;
+    previousAtom = atom;
   }
 
   return result;
+};
+
+const looseSeparatorBefore = (
+  previous: RuleAtom | null,
+  current: RuleAtom,
+): string => {
+  if (
+    previous === null ||
+    !isWordLikeAtom(previous) ||
+    !isWordLikeAtom(current)
+  ) {
+    return "";
+  }
+
+  return separatorBeforeWordLikeAtom(current);
 };
 
 const loosenRuleAtom = (
@@ -151,6 +156,11 @@ const loosenOptionalSuffix = (
     ? loosenGroup(atom, options)
     : `(?:${classSource}(?:${IN_TOKEN_SEPARATOR}${classSource})*)?`;
 };
+
+const separatorBeforeWordLikeAtom = (atom: RuleAtom): string =>
+  // Optional suffixes should allow punctuation inside the same obfuscated word
+  // but must not cross whitespace into the next word.
+  isOptionalSuffixAtom(atom) ? IN_TOKEN_SEPARATOR : LOOSE_SEPARATOR;
 
 const loosenGroup = (
   atom: RuleAtom,

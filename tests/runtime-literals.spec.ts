@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { createProfanityFilter } from "../src/index.js";
+import { createProfanityFilter } from "../src";
 
 describe("runtime literals", () => {
   it("treats runtime terms as normalized literals, not regular expressions", () => {

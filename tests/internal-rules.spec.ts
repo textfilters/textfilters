@@ -1,27 +1,28 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  buildLoosePatterns,
-  buildStrictPatterns,
-} from "../src/matchers/build.js";
-import { compileStrictLiteralPatterns } from "../src/matchers/literals.js";
+import { buildLoosePatterns, buildStrictPatterns } from "../src/matchers/build";
+import { compileStrictLiteralPatterns } from "../src/matchers/literals";
 import {
   matchRangesForMode,
   PROFANITY_MATCH_MODE,
-} from "../src/matches/ranges.js";
-import { collectLooseRanges } from "../src/ranges/loose.js";
-import { collectStrictRanges } from "../src/ranges/strict.js";
-import { createProfanityFilter } from "../src/index.js";
+} from "../src/matches/ranges";
+import { collectLooseRanges } from "../src/ranges/loose";
+import { collectStrictRanges } from "../src/ranges/strict";
+import {
+  createProfanityFilter,
+  type ProfanityCategory,
+  type ProfanitySeverity,
+} from "../src";
+import { languageRuleSourcePattern } from "../src/languages/profanity";
 import {
   compileLooseInternalRulePatterns,
   compileStrictInternalRulePatterns,
   createBuiltInProfanityRules,
-} from "../src/matchers/internal-rules.js";
-import { RUSSIAN_PROFANITY_DICTIONARY } from "../src/languages/ru/index.js";
-import { LOOSE_BASE } from "../src/terms/loose-base.js";
-import { STRICT_BASE } from "../src/terms/strict-base.js";
-import type { InternalProfanityRuleDefinition } from "../src/matchers/internal-rules.js";
-import type { ProfanityCategory, ProfanitySeverity } from "../src/index.js";
+  type InternalProfanityRuleDefinition,
+} from "../src/matchers/internal-rules";
+import { RUSSIAN_PROFANITY_DICTIONARY } from "../src/languages/ru";
+import { LOOSE_BASE } from "../src/terms/loose-base";
+import { STRICT_BASE } from "../src/terms/strict-base";
 
 const ALLOWED_PROFANITY_CATEGORIES = [
   "OBSCENE_MAT",
@@ -104,7 +105,8 @@ describe("internal profanity rules", () => {
 
           if (
             definition.loose !== undefined &&
-            definition.loose.stretch !== true
+            definition.loose.stretch !== true &&
+            definition.loose.hyphenTail !== true
           ) {
             failures.push("loose");
           }
@@ -145,17 +147,17 @@ describe("internal profanity rules", () => {
     expect(audit).toEqual([
       {
         corpus: "strict",
-        totalRules: 53,
+        totalRules: 62,
         stringBackedRules: 0,
-        taxonomyBackedRules: 53,
+        taxonomyBackedRules: 62,
         compilerMetadataRules: 0,
         invalidTaxonomyBackedRules: 0,
       },
       {
         corpus: "loose",
-        totalRules: 62,
+        totalRules: 112,
         stringBackedRules: 0,
-        taxonomyBackedRules: 62,
+        taxonomyBackedRules: 112,
         compilerMetadataRules: 0,
         invalidTaxonomyBackedRules: 0,
       },
@@ -166,7 +168,7 @@ describe("internal profanity rules", () => {
     const rules = RUSSIAN_PROFANITY_DICTIONARY.rules;
 
     expect(RUSSIAN_PROFANITY_DICTIONARY.language).toBe("ru");
-    expect(rules).toHaveLength(67);
+    expect(rules).toHaveLength(122);
     expect(
       rules.filter((rule) => rule.match.strict !== undefined),
     ).toHaveLength(STRICT_BASE.length);
@@ -178,16 +180,16 @@ describe("internal profanity rules", () => {
         (rule) =>
           rule.match.strict !== undefined && rule.match.loose !== undefined,
       ),
-    ).toHaveLength(48);
+    ).toHaveLength(52);
   });
 
   it("derives matcher views from Russian dictionary source order", () => {
     const strictSources = RUSSIAN_PROFANITY_DICTIONARY.rules
       .filter((rule) => rule.match.strict !== undefined)
-      .map((rule) => rule.source);
+      .map((rule) => languageRuleSourcePattern(rule.source));
     const looseSources = RUSSIAN_PROFANITY_DICTIONARY.rules
       .filter((rule) => rule.match.loose !== undefined)
-      .map((rule) => rule.source);
+      .map((rule) => languageRuleSourcePattern(rule.source));
 
     expect(STRICT_BASE.map((rule) => rule.source)).toEqual(strictSources);
     expect(LOOSE_BASE.map((rule) => rule.source)).toEqual(looseSources);
@@ -328,6 +330,7 @@ describe("internal profanity rules", () => {
       } else {
         collectLooseRanges(
           testCase.input,
+          testCase.input,
           loosePatterns,
           strictPatterns,
           ranges,
@@ -454,7 +457,13 @@ describe("internal profanity rules", () => {
     const looseRanges = [];
 
     collectStrictRanges("bad", strictPatterns, strictRanges);
-    collectLooseRanges("b-a-d", loosePatterns, strictPatterns, looseRanges);
+    collectLooseRanges(
+      "b-a-d",
+      "b-a-d",
+      loosePatterns,
+      strictPatterns,
+      looseRanges,
+    );
 
     expect(
       matchRangesForMode(strictRanges, PROFANITY_MATCH_MODE.STRICT),
@@ -523,6 +532,7 @@ describe("internal profanity rules", () => {
         collectStrictRanges(testCase.input, strictPatterns, ranges);
       } else {
         collectLooseRanges(
+          testCase.input,
           testCase.input,
           loosePatterns,
           strictPatterns,

@@ -1,6 +1,5 @@
 import { esc, normalizeForMatchSameLen } from "../normalization/text.js";
-import { compilePatternDefinitions } from "./compile.js";
-import type { CompiledPattern } from "./compile.js";
+import { compilePatternDefinitions, type CompiledPattern } from "./compile.js";
 import type { ProfanityTaxonomyMetadata } from "../types.js";
 
 export interface LiteralTermDefinition extends ProfanityTaxonomyMetadata {

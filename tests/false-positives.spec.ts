@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { filter } from "../src/index.js";
+import { filter } from "../src";
 
 describe("false positives", () => {
   it("keeps current false-positive locks untouched", () => {

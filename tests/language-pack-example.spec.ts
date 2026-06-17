@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   createProfanityFilterFromDictionary,
   validateProfanityLanguageDictionary,
-} from "../src/index.js";
+} from "../src";
 
 const { zzProfanityDictionary, zzProfanityFilter } =
   await import("../examples/language-pack/src/index.js");

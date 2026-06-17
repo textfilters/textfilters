@@ -1,9 +1,12 @@
-import { readRuleAtoms } from "./rule-reader.js";
+import { readRuleAtoms, type RuleAtom } from "./rule-reader.js";
 import { splitTopLevelAlternatives } from "./rule-scanner.js";
-import type { RuleAtom } from "./rule-reader.js";
 
 export const isOptionalSuffixAtom = (atom: RuleAtom): boolean =>
-  /^\(\?:\[[^\]]+\]\+\)\?$/u.test(atom.source);
+  /^\(\?:\[[^\]]+\]\+\)\?$/u.test(atom.source) ||
+  (atom.source === `${atom.base}?` &&
+    atom.base.startsWith("(") &&
+    !/^\(\?<?[=!]/u.test(atom.base) &&
+    isWordLikeGroup(atom.base));
 
 export const isWordLikeAtom = (atom: RuleAtom): boolean => {
   // The loose transformer only inserts separators around atoms that behave like

@@ -47,6 +47,25 @@ Each rule needs:
 - `source`: the human-maintained source pattern for the rule.
 - `match`: at least one of `strict` or `loose`.
 
+`source` may be a single string or an array of string fragments. Fragmented
+sources are joined without separators before validation and compilation. Use
+fragments only to keep a long reviewed regular expression readable in JSON:
+
+```json
+{
+  "id": "zz.vulgar.fragmented",
+  "category": "VULGAR",
+  "severity": "low",
+  "source": ["q", "[._-]?", "w", "[._-]?", "r"],
+  "match": {
+    "loose": {}
+  }
+}
+```
+
+Each fragment must be non-empty and trimmed. The joined source still needs to be
+unique within the dictionary and compile as a Unicode regular expression.
+
 The language code is a lowercase two-letter ISO 639-1 code. Rule ids use the
 same language prefix and a category segment before the stable term segment:
 
@@ -102,7 +121,10 @@ serialized matcher output.
 
 Choose strict matching when a rule should only match clear token boundaries.
 Choose loose matching when separator-obfuscated spelling is part of the intended
-behavior. A rule may opt into both views when both behaviors are expected.
+behavior. A rule may opt into both views when both behaviors are expected. Full
+transliteration coverage should be authored as explicit reviewed dictionary
+rules with taxonomy metadata and false-positive tests, not as a global runtime
+normalization switch.
 
 ## Human-Maintained JSON
 

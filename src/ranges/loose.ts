@@ -22,13 +22,14 @@ interface LooseRangePatterns {
 
 export const collectLooseRanges = (
   normalized: string,
+  source: string,
   loosePatterns: readonly CompiledPattern[],
   strictPatterns: StrictPatternSet,
   ranges: CollectedProfanityRange[],
 ): void =>
   forEachPatternMatch(normalized, loosePatterns, (start, end, pattern) => {
     const patterns = { loose: loosePatterns, strict: strictPatterns };
-    const range = looseRange(normalized, start, end, pattern, patterns);
+    const range = looseRange(normalized, source, start, end, pattern, patterns);
 
     if (range !== null) {
       ranges.push(collectedRangeForPattern(range, pattern));
@@ -37,6 +38,7 @@ export const collectLooseRanges = (
 
 const looseRange = (
   normalized: string,
+  source: string,
   start: number,
   end: number,
   pattern: CompiledPattern,
@@ -44,9 +46,10 @@ const looseRange = (
   trimHyphenSuffix = true,
 ): TextRange | null => {
   const hyphenSuffix =
-    trimHyphenSuffix === true && pattern.trimHyphenTail === true
+    trimHyphenSuffix && pattern.trimHyphenTail === true
       ? knownHyphenatedSuffixRange(
           normalized,
+          source,
           start,
           end,
           pattern,
@@ -94,12 +97,21 @@ const looseRange = (
 
 const looseTailMatchEnd = (
   normalized: string,
+  source: string,
   start: number,
   end: number,
   pattern: CompiledPattern,
   patterns: LooseRangePatterns,
 ): number | null => {
-  const range = looseRange(normalized, start, end, pattern, patterns, false);
+  const range = looseRange(
+    normalized,
+    source,
+    start,
+    end,
+    pattern,
+    patterns,
+    false,
+  );
   if (range !== null) return range[1];
 
   // Hyphen-tail rescans a suffix slice. If a loose match starts after a split
@@ -107,6 +119,7 @@ const looseTailMatchEnd = (
   if (start === 0 || SPLIT_TOKEN_CHAR_RE.test(normalized[start - 1] ?? "")) {
     const segmentRange = looseRange(
       normalized.slice(start),
+      source.slice(start),
       0,
       end - start,
       pattern,

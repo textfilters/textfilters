@@ -37,10 +37,10 @@ flowchart TD
   Mask --> Output["censored text"]
 ```
 
-The matcher works on a normalized copy of the text, but all match ranges are kept
-as UTF-16 offsets into the original string. This is why normalization only uses
-same-length transforms: fullwidth ASCII folding, latin-to-cyrillic homoglyph
-folding, `ё` to `е` folding, and zero-width replacement with a regular space.
+The matcher works on a normalized copy of the text, but all match ranges are
+kept as UTF-16 offsets into the original string. Normalization must remain
+same-length; see [invariants.md](invariants.md) for the maintained transform
+list.
 
 ## Dictionary Boundary
 

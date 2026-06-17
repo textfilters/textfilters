@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { filter } from "../src/index.js";
+import { filter } from "../src";
 
 const mask = (value: string): string => "*".repeat(value.length);
 

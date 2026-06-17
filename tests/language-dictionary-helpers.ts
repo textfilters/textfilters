@@ -1,7 +1,7 @@
 import { expect } from "vitest";
 
-import type { ProfanityLanguageDictionary } from "../src/languages/profanity.js";
-import { validateProfanityLanguageDictionary } from "../src/index.js";
+import type { ProfanityLanguageDictionary } from "../src/languages/profanity";
+import { validateProfanityLanguageDictionary } from "../src";
 
 export const assertLanguageDictionaryInvariants = (
   dictionary: ProfanityLanguageDictionary,

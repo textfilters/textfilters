@@ -1,6 +1,8 @@
 import russianProfanity from "./profanity.json" with { type: "json" };
-import { dictionaryRulesForMode } from "../profanity.js";
-import type { ProfanityLanguageDictionary } from "../profanity.js";
+import {
+  dictionaryRulesForMode,
+  type ProfanityLanguageDictionary,
+} from "../profanity.js";
 
 export const RUSSIAN_PROFANITY_DICTIONARY =
   russianProfanity as ProfanityLanguageDictionary;

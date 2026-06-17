@@ -8,8 +8,8 @@ import { describe, expect, it } from "vitest";
 import {
   isCliEntrypoint,
   runValidateLanguageDictionaryCli,
-} from "../src/cli/validate-language-dictionary.js";
-import { zzProfanityDictionary } from "../examples/language-pack/src/dictionary.js";
+} from "../src/cli/validate-language-dictionary";
+import { zzProfanityDictionary } from "../examples/language-pack/src";
 
 const createRecorder = () => {
   let output = "";
@@ -78,7 +78,7 @@ describe("profanity-validate-language-dictionary", () => {
 - rules[0].id missing_id: Rule id is required.
 - rules[0].category missing_category: Rule category is required.
 - rules[0].severity missing_severity: Rule severity is required.
-- rules[0].source invalid_source: Rule source must be a non-empty string.
+- rules[0].source invalid_source: Rule source must be a non-empty string or an array of non-empty strings.
 - rules[0].match missing_match_mode: Rule match must include strict, loose, or both.
 - rules[2].id duplicate_id: Rule id duplicates rules[1].id.
 - rules[2].category invalid_category: Rule category must be a supported profanity category.

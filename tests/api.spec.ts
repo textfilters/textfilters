@@ -5,23 +5,22 @@ import {
   createProfanityFilterFromDictionary,
   filter,
   PROFANITY_FILTER_NAME,
+  type ProfanityCategory,
   profanityFilter,
+  type ProfanityLanguageDictionary,
+  type ProfanityLanguageDictionaryValidationIssue,
+  type ProfanityLanguageRuleDefinition,
+  type ProfanityLanguageRuleSource,
+  type ProfanityMatchMode,
+  type ProfanityMatchOptions,
+  type ProfanityMatchRange,
+  type ProfanitySeverity,
+  type ProfanityTaxonomyMetadata,
   russianProfanityDictionary,
   validateProfanityLanguageDictionary,
-} from "../src/index.js";
-import type {
-  ProfanityCategory,
-  ProfanityLanguageDictionary,
-  ProfanityLanguageDictionaryValidationIssue,
-  ProfanityLanguageRuleDefinition,
-  ProfanityMatchOptions,
-  ProfanityMatchMode,
-  ProfanityMatchRange,
-  ProfanitySeverity,
-  ProfanityTaxonomyMetadata,
-} from "../src/index.js";
+} from "../src";
 
-import { mask } from "./helpers.js";
+import { mask } from "./helpers";
 
 describe("public API", () => {
   it("exports language dictionary helpers from the public entrypoint", () => {
@@ -31,7 +30,7 @@ describe("public API", () => {
     }>();
     expectTypeOf<ProfanityLanguageRuleDefinition>().toMatchTypeOf<{
       readonly id?: string;
-      readonly source: string;
+      readonly source: ProfanityLanguageRuleSource;
       readonly match: {
         readonly strict?: Record<string, never>;
         readonly loose?: {
@@ -39,6 +38,8 @@ describe("public API", () => {
         };
       };
     }>();
+    expectTypeOf<string>().toExtend<ProfanityLanguageRuleSource>();
+    expectTypeOf<readonly string[]>().toExtend<ProfanityLanguageRuleSource>();
     expect(russianProfanityDictionary.language).toBe("ru");
     expect(russianProfanityDictionary.rules.length).toBeGreaterThan(0);
   });

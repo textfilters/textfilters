@@ -2,7 +2,12 @@ import type { TextRange } from "@textfilters/core";
 import type { StrictPatternSet } from "../matchers/build.js";
 import type { CompiledPattern } from "../matchers/compile.js";
 import { nextCodePointEnd } from "../normalization/text.js";
-import { isWordCharAt, SPLIT_TOKEN_CHAR_RE } from "../token-ranges.js";
+import {
+  isWordCharAt,
+  SPLIT_TOKEN_CHAR_RE,
+  wordRunEnd,
+  wordStartAtOrAfter,
+} from "../token-ranges.js";
 import { collectStrictRanges } from "./strict.js";
 
 interface LooseRangePatterns {
@@ -15,8 +20,16 @@ interface HyphenSuffixRange {
   readonly boundaryEnd: number;
 }
 
+interface HyphenTailScan {
+  readonly prefixEnd: number;
+  readonly tailStart: number;
+  readonly tailTokenEnd: number;
+  readonly scanEnd: number;
+}
+
 type LooseTailMatchEnd = (
   normalized: string,
+  source: string,
   start: number,
   end: number,
   pattern: CompiledPattern,
@@ -29,53 +42,70 @@ const HYPHEN_TAIL_SCAN_WORDS = 3;
 
 export const knownHyphenatedSuffixRange = (
   normalized: string,
+  source: string,
   start: number,
   end: number,
   pattern: CompiledPattern,
   patterns: LooseRangePatterns,
   looseTailMatchEnd: LooseTailMatchEnd,
 ): HyphenSuffixRange => {
-  const prefixEnd = hyphenatedRulePrefixEnd(normalized, start, end, pattern);
-  if (prefixEnd === null) return { emitEnd: end, boundaryEnd: end };
+  const scan = hyphenTailScan(normalized, start, end, pattern);
+  if (scan === null) return { emitEnd: end, boundaryEnd: end };
 
-  const tailStart = prefixEnd + 1;
-  if (normalized[prefixEnd] !== "-" || !isWordCharAt(normalized, tailStart)) {
-    return { emitEnd: end, boundaryEnd: end };
-  }
-
-  const tailTokenEnd = wordRunEnd(normalized, tailStart);
-  // Scan beyond the immediate tail token so separated profane tails such as
-  // `prefix-e6 ... phrase` stay masked instead of exposing the later words.
-  const scanEnd = hyphenTailScanEnd(normalized, tailTokenEnd);
-  const profaneTailEnd = profanityTailEnd(
-    normalized.slice(tailStart, scanEnd),
-    tailTokenEnd - tailStart,
+  const profaneTailEnd = profaneTailEndInScan(
+    normalized.slice(scan.tailStart, scan.scanEnd),
+    source.slice(scan.tailStart, scan.scanEnd),
+    scan.tailTokenEnd - scan.tailStart,
     patterns,
     looseTailMatchEnd,
   );
 
   if (profaneTailEnd !== null) {
-    const end = tailStart + profaneTailEnd;
-    return { emitEnd: end, boundaryEnd: Math.max(end, tailTokenEnd) };
+    const end = scan.tailStart + profaneTailEnd;
+    return { emitEnd: end, boundaryEnd: Math.max(end, scan.tailTokenEnd) };
   }
 
-  return { emitEnd: prefixEnd, boundaryEnd: tailTokenEnd };
+  return { emitEnd: scan.prefixEnd, boundaryEnd: scan.tailTokenEnd };
 };
 
-const profanityTailEnd = (
+const hyphenTailScan = (
   normalized: string,
+  start: number,
+  end: number,
+  pattern: CompiledPattern,
+): HyphenTailScan | null => {
+  const prefixEnd = hyphenatedRulePrefixEnd(normalized, start, end, pattern);
+  if (prefixEnd === null) return null;
+
+  const tailStart = prefixEnd + 1;
+  if (normalized[prefixEnd] !== "-" || !isWordCharAt(normalized, tailStart)) {
+    return null;
+  }
+
+  const tailTokenEnd = wordRunEnd(normalized, tailStart);
+  return {
+    prefixEnd,
+    tailStart,
+    tailTokenEnd,
+    scanEnd: hyphenTailScanEnd(normalized, tailTokenEnd),
+  };
+};
+
+const profaneTailEndInScan = (
+  normalized: string,
+  source: string,
   tailTokenLength: number,
   patterns: LooseRangePatterns,
   looseTailMatchEnd: LooseTailMatchEnd,
 ): number | null => {
-  let profaneEnd: number | null = strictTailEnd(
+  let profaneEnd: number | null = strictProfaneTailEnd(
     normalized,
     tailTokenLength,
     patterns.strict,
   );
 
   for (const pattern of patterns.loose) {
-    const re = new RegExp(pattern.re.source, pattern.re.flags);
+    const re = clonePatternRegExp(pattern);
     let match: RegExpExecArray | null;
 
     while ((match = re.exec(normalized)) !== null) {
@@ -88,6 +118,7 @@ const profanityTailEnd = (
 
       const tailEnd = looseTailMatchEnd(
         normalized,
+        source,
         match.index,
         end,
         pattern,
@@ -104,18 +135,18 @@ const profanityTailEnd = (
   return profaneEnd;
 };
 
-const strictTailEnd = (
+const strictProfaneTailEnd = (
   normalized: string,
   tailTokenLength: number,
   patterns: StrictPatternSet,
 ): number | null => {
   let end =
-    strictTailSegmentEnd(normalized, 0, patterns) ??
-    strictFirstSplitSegmentEnd(normalized, tailTokenLength, patterns);
+    strictSegmentEnd(normalized, 0, patterns) ??
+    strictFirstSplitPrefixEnd(normalized, tailTokenLength, patterns);
 
   for (let position = 1; position < tailTokenLength; ) {
     if (SPLIT_TOKEN_CHAR_RE.test(normalized[position - 1] ?? "")) {
-      const segmentEnd = strictTailSegmentEnd(normalized, position, patterns);
+      const segmentEnd = strictSegmentEnd(normalized, position, patterns);
       if (segmentEnd !== null) {
         end = Math.max(end ?? 0, tailTokenLength, segmentEnd);
       }
@@ -126,7 +157,7 @@ const strictTailEnd = (
   return end;
 };
 
-const strictFirstSplitSegmentEnd = (
+const strictFirstSplitPrefixEnd = (
   normalized: string,
   tailTokenLength: number,
   patterns: StrictPatternSet,
@@ -135,7 +166,7 @@ const strictFirstSplitSegmentEnd = (
     const charEnd = nextCodePointEnd(normalized, position);
 
     if (SPLIT_TOKEN_CHAR_RE.test(normalized.slice(position, charEnd))) {
-      return strictTailSegmentEnd(normalized.slice(0, position), 0, patterns);
+      return strictSegmentEnd(normalized.slice(0, position), 0, patterns);
     }
 
     position = charEnd;
@@ -186,7 +217,7 @@ const patternMatchesFullPrefix = (
     return false;
   }
 
-  const re = new RegExp(pattern.re.source, pattern.re.flags);
+  const re = clonePatternRegExp(pattern);
   const match = re.exec(compact);
   return (
     match !== null && match.index === 0 && match[0].length === compact.length
@@ -221,16 +252,11 @@ const hyphenTailScanEnd = (
   );
 
   while (position < maxEnd && words < HYPHEN_TAIL_SCAN_WORDS) {
-    while (position < maxEnd && !isWordCharAt(normalized, position)) {
-      position = nextCodePointEnd(normalized, position);
-    }
-
+    position = wordStartAtOrAfter(normalized, position, maxEnd);
     if (position >= maxEnd) break;
 
     words++;
-    while (position < maxEnd && isWordCharAt(normalized, position)) {
-      position = nextCodePointEnd(normalized, position);
-    }
+    position = wordRunEnd(normalized, position, maxEnd);
   }
 
   return Math.max(
@@ -239,7 +265,7 @@ const hyphenTailScanEnd = (
   );
 };
 
-const strictTailSegmentEnd = (
+const strictSegmentEnd = (
   normalized: string,
   start: number,
   patterns: StrictPatternSet,
@@ -254,10 +280,5 @@ const strictTailSegmentEnd = (
   );
 };
 
-const wordRunEnd = (normalized: string, start: number): number => {
-  let end = start;
-  while (end < normalized.length && isWordCharAt(normalized, end)) {
-    end = nextCodePointEnd(normalized, end);
-  }
-  return end;
-};
+const clonePatternRegExp = (pattern: CompiledPattern): RegExp =>
+  new RegExp(pattern.re.source, pattern.re.flags);

@@ -11,8 +11,8 @@ directly to the original input.
 
 Current same-length transforms include fullwidth ASCII folding, latin-to-cyrillic
 homoglyph folding, `ё` to `е` folding, and zero-width replacement with a regular
-space. Do not introduce normalization that inserts, deletes, or reorders UTF-16
-code units unless range mapping is redesigned first.
+split marker. Do not introduce normalization that inserts, deletes, or reorders
+UTF-16 code units unless range mapping is redesigned first.
 
 ## UTF-16 Source Ranges
 

@@ -1,4 +1,5 @@
 import type { ProfanityCategory, ProfanitySeverity } from "../types.js";
+import { languageRuleSourcePattern } from "./profanity.js";
 
 export type ProfanityLanguageDictionaryValidationIssueCode =
   | "invalid_dictionary"
@@ -345,45 +346,48 @@ const validateRuleSource = (
     return;
   }
 
-  if (!isNonEmptyString(rule.source)) {
+  const source = rule.source;
+  const sourcePath = `${path}.source`;
+
+  if (!isRuleSource(source)) {
     issues.push(
       issue(
-        `${path}.source`,
+        sourcePath,
         "invalid_source",
-        "Rule source must be a non-empty string.",
+        "Rule source must be a non-empty string or an array of non-empty strings.",
       ),
     );
     return;
   }
 
-  if (rule.source !== rule.source.trim()) {
-    issues.push(
-      issue(
-        `${path}.source`,
-        "source_not_trimmed",
-        "Rule source must not include leading or trailing whitespace.",
-      ),
+  if (typeof source === "string") {
+    validateSourceString(source, sourcePath, issues);
+  } else {
+    source.forEach((part, partIndex) =>
+      validateSourceString(part, `${sourcePath}[${partIndex}]`, issues),
     );
   }
 
+  const sourcePattern = languageRuleSourcePattern(source);
+
   try {
-    new RegExp(rule.source, "u");
+    new RegExp(sourcePattern, "u");
   } catch {
     issues.push(
       issue(
-        `${path}.source`,
+        sourcePath,
         "invalid_source_pattern",
         "Rule source must compile as a Unicode regular expression.",
       ),
     );
   }
 
-  const normalizedSource = rule.source.trim().normalize("NFC");
+  const normalizedSource = sourcePattern.trim().normalize("NFC");
   const firstIndex = seenRuleSources.get(normalizedSource);
   if (firstIndex !== undefined) {
     issues.push(
       issue(
-        `${path}.source`,
+        sourcePath,
         "duplicate_source",
         `Rule source duplicates rules[${firstIndex}].source.`,
       ),
@@ -392,6 +396,28 @@ const validateRuleSource = (
   }
 
   seenRuleSources.set(normalizedSource, index);
+};
+
+const isRuleSource = (source: unknown): source is string | readonly string[] =>
+  isNonEmptyString(source) ||
+  (Array.isArray(source) &&
+    source.length > 0 &&
+    source.every((part) => isNonEmptyString(part)));
+
+const validateSourceString = (
+  source: string,
+  path: string,
+  issues: ProfanityLanguageDictionaryValidationIssue[],
+): void => {
+  if (source !== source.trim()) {
+    issues.push(
+      issue(
+        path,
+        "source_not_trimmed",
+        "Rule source must not include leading or trailing whitespace.",
+      ),
+    );
+  }
 };
 
 const validateRuleMatch = (

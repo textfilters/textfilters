@@ -8,9 +8,11 @@ export interface ProfanityLanguageDictionary {
 
 export interface ProfanityLanguageRuleDefinition extends ProfanityTaxonomyMetadata {
   readonly id?: string;
-  readonly source: string;
+  readonly source: ProfanityLanguageRuleSource;
   readonly match: ProfanityLanguageRuleMatch;
 }
+
+export type ProfanityLanguageRuleSource = string | readonly string[];
 
 export interface ProfanityLanguageRuleMatch {
   readonly strict?: ProfanityLanguageStrictMatchOptions;
@@ -40,7 +42,7 @@ export const dictionaryRulesForMode = (
 
     const definition: InternalProfanityRuleDefinition = {
       ...(rule.id === undefined ? {} : { id: rule.id }),
-      source: rule.source,
+      source: languageRuleSourcePattern(rule.source),
       ...(rule.category === undefined ? {} : { category: rule.category }),
       ...(rule.severity === undefined ? {} : { severity: rule.severity }),
       ...(mode === "loose"
@@ -50,6 +52,10 @@ export const dictionaryRulesForMode = (
 
     return [definition];
   });
+
+export const languageRuleSourcePattern = (
+  source: ProfanityLanguageRuleSource,
+): string => (typeof source === "string" ? source : source.join(""));
 
 const looseOptions = (
   match: ProfanityLanguageLooseMatchOptions,

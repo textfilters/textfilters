@@ -5,6 +5,7 @@ const FULLWIDTH_ASCII_END = 0xff5e;
 const FULLWIDTH_ASCII_OFFSET = 0xfee0;
 
 export const ZERO_WIDTH_RE = /[\u200B-\u200D\uFEFF\u2060]/g;
+const ZERO_WIDTH_SPLIT_MARKER = "\uFFFF";
 
 const REGEX_META_RE = /[\\^$.*+?()[\]{}|]/g;
 
@@ -27,11 +28,13 @@ export const normalizeFullwidthAsciiSameLen = (value: string): string =>
     return char;
   }).join("");
 
-// Keep every transform same-length so match indexes still point at the original text.
+// Every transform must preserve UTF-16 length so match ranges stay source-based.
+// Zero-width markers must stay outside WORD_RE so strict token bounds do not
+// grow past the visible word.
 export const normalizeForMatchSameLen = (value: string): string =>
   foldHomoglyphs(normalizeFullwidthAsciiSameLen(value))
     .replace(/[ёЁ]/g, (char) => (char === "Ё" ? "Е" : "е"))
-    .replace(ZERO_WIDTH_RE, " ");
+    .replace(ZERO_WIDTH_RE, ZERO_WIDTH_SPLIT_MARKER);
 
 export const codePointStartAt = (value: string, index: number): number => {
   if (

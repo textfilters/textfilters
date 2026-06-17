@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import { createProfanityFilter, filter } from "../src/index.js";
+import { createProfanityFilter, filter } from "../src";
 
-import { mask } from "./helpers.js";
+import { mask } from "./helpers";
 
 describe("loose corpus", () => {
   it("censors built-in loose matches across separators without changing length", () => {
