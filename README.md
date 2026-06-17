@@ -1,21 +1,52 @@
 # Textfilters
 
-Composable TypeScript text filtering primitives for moderation pipelines.
+Composable TypeScript text filtering and content moderation packages for URLs,
+email addresses, phone numbers, profanity, spam, and custom moderation
+pipelines.
 
-Textfilters is a small set of composable TypeScript text filtering primitives for moderation pipelines. This repository is documentation-only and provides the ecosystem overview for the current package set.
+Textfilters is an ecosystem of small MIT-licensed packages for building a
+TypeScript text filtering library around chat moderation, UGC moderation,
+censoring, redaction, URL detection, email detection, phone number detection,
+Russian profanity filtering, anti-spam checks, and custom pipelines. This
+repository is documentation-only and provides the ecosystem overview for the
+current package set.
 
 ## Packages
 
 | Package | Repository | Status | Purpose |
 | --- | --- | --- | --- |
-| `@textfilters/core` | `textfilters/core` | Published on GitHub Packages | Shared contracts and pipeline utilities. |
-| `@textfilters/url` | `textfilters/url` | Published on GitHub Packages | URL and obfuscated-link filtering. |
-| `@textfilters/phone` | `textfilters/phone` | Published on GitHub Packages | Phone-like sequence filtering. |
-| `@textfilters/profanity` | `textfilters/profanity` | Published on GitHub Packages | Profanity filtering primitives. |
-| `@textfilters/spam` | `textfilters/spam` | Published on GitHub Packages | Lightweight in-memory spam guard primitives. |
-| `@textfilters/email` | `textfilters/email` | Published on GitHub Packages | Email address and obfuscated-email filtering. |
+| `@textfilters/core` | `textfilters/core` | Published on GitHub Packages | Shared contracts, normalization, range masking, and pipeline utilities. |
+| `@textfilters/url` | `textfilters/url` | Published on GitHub Packages | URL detection, obfuscated links, defanged domains, hxxp links, and safe link censoring. |
+| `@textfilters/email` | `textfilters/email` | Published on GitHub Packages | Email detection, obfuscated email forms, contact redaction, and false-positive guards. |
+| `@textfilters/phone` | `textfilters/phone` | Published on GitHub Packages | Phone number detection, phone-like sequence filtering, contact redaction, and numeric false-positive guards. |
+| `@textfilters/profanity` | `textfilters/profanity` | Published on GitHub Packages | Russian profanity filter primitives with dictionary support, obfuscation handling, taxonomy metadata, and validation. |
+| `@textfilters/spam` | `textfilters/spam` | Published on GitHub Packages | Lightweight anti-spam guard for interval, duplicate, burst, and actor-based message checks. |
 
 Packages are released independently, so versions are not kept in lockstep across the ecosystem. Use the relevant package repository, GitHub Release, or package metadata as the source of truth for the current release.
+
+## Which Package Should I Use?
+
+| Need | Start with |
+| --- | --- |
+| Compose multiple filters into one ordered pipeline | `@textfilters/core` |
+| Detect direct URLs, obfuscated links, defanged domains, or hxxp links | `@textfilters/url` |
+| Detect direct or obfuscated email addresses | `@textfilters/email` |
+| Detect phone numbers and phone-like contact sequences | `@textfilters/phone` |
+| Censor Russian profanity or inspect taxonomy metadata | `@textfilters/profanity` |
+| Block repeated, too-fast, bursty, or actor-based spam messages | `@textfilters/spam` |
+
+Install only the packages needed for your moderation surface. Add
+`@textfilters/core` when you want a shared pipeline or when a package lists it
+as a dependency in the install command.
+
+## Use Cases
+
+- Chat moderation for links, contact details, profanity, and spam behavior.
+- UGC moderation for posts, profiles, comments, listings, and marketplace
+  messages.
+- Censoring and redaction before display, indexing, search, or audit storage.
+- Composable moderation pipelines where URL, email, phone, profanity, and spam
+  checks remain independently testable.
 
 ## Installation
 
@@ -29,6 +60,16 @@ GitHub Packages requires npm authentication for installs, including public packa
 
 ```sh
 npm install @textfilters/core @textfilters/url @textfilters/phone @textfilters/profanity @textfilters/spam @textfilters/email
+```
+
+Install individual packages for narrower use cases:
+
+```sh
+npm install @textfilters/core @textfilters/url
+npm install @textfilters/core @textfilters/email
+npm install @textfilters/core @textfilters/phone
+npm install @textfilters/core @textfilters/profanity
+npm install @textfilters/core @textfilters/spam
 ```
 
 ## Usage
