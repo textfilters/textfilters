@@ -2,13 +2,22 @@
   "name": "@textfilters/profanity",
   "version": "0.11.0",
   "type": "module",
-  "description": "Profanity filtering primitives for composable text moderation.",
+  "description": "TypeScript profanity filter with Russian dictionary support, obfuscation handling, taxonomy metadata, and language-pack validation.",
   "license": "MIT",
   "keywords": [
     "text-filtering",
+    "content-moderation",
     "moderation",
+    "typescript",
+    "javascript",
+    "censoring",
+    "redaction",
     "profanity-filter",
-    "typescript"
+    "russian-profanity",
+    "language-dictionaries",
+    "obfuscation",
+    "taxonomy",
+    "content-safety"
   ],
   "sideEffects": false,
   "files": [

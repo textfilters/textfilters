@@ -1,6 +1,11 @@
 # @textfilters/profanity
 
-Profanity filtering primitives for composable text moderation.
+TypeScript profanity filter primitives for content moderation, chat moderation,
+UGC moderation, censoring, redaction, and custom moderation pipelines.
+
+Use `@textfilters/profanity` as a Russian profanity filter with built-in
+dictionary support, obfuscation handling, taxonomy metadata, language-pack
+validation, and composable APIs for a broader TypeScript text filtering library.
 
 ## Installation
 
@@ -15,6 +20,16 @@ Install with GitHub npm authentication configured. GitHub Packages requires auth
 ```sh
 npm install @textfilters/core @textfilters/profanity
 ```
+
+## Use Cases
+
+- Censor profanity in chat moderation and UGC moderation workflows.
+- Analyze matched ranges when a moderation decision needs categories,
+  severities, or rule ids.
+- Build isolated per-tenant or per-test dictionaries without mutating the shared
+  filter instance.
+- Validate maintained language dictionaries before they are used in content
+  moderation pipelines.
 
 ## Usage
 
@@ -250,6 +265,16 @@ human-maintained JSON, and conformance expectations.
 The [external language pack policy](docs/external-language-pack-policy.md)
 defines when the project is ready to create a real external package and keeps
 the built-in Russian dictionary in this package for now.
+
+## Related Textfilters Packages
+
+- `@textfilters/core` for shared pipeline, normalization, and range masking
+  primitives.
+- `@textfilters/url` for URL detection, obfuscated links, and safe link
+  censoring.
+- `@textfilters/email` for email detection and contact redaction.
+- `@textfilters/phone` for phone number detection and contact redaction.
+- `@textfilters/spam` for actor-based anti-spam guard checks.
 
 ### Taxonomy Metadata Types
 
