@@ -184,7 +184,7 @@ after text normalization.
 | Change                                     | Start Here                                                       |
 | ------------------------------------------ | ---------------------------------------------------------------- |
 | Add a runtime dictionary behavior          | `src/matchers/literals.ts` and tests.                            |
-| Add a built-in Russian corpus rule         | `src/languages/ru/profanity.json` and corpus tests.              |
+| Add a built-in Russian corpus rule         | `src/languages/ru/profanity/` and corpus tests.                  |
 | Change separator handling for built-ins    | `src/matchers/internal-rules.ts`.                                |
 | Change token acceptance or false positives | `src/ranges/boundary.ts`.                                        |
 | Change masking length behavior             | `src/token-ranges.ts`.                                           |
@@ -192,7 +192,8 @@ after text normalization.
 
 ## Adding New Built-In Rules
 
-1. Add the narrowest rule source to `src/languages/ru/profanity.json`.
+1. Add the narrowest rule source to the matching family file in
+   `src/languages/ru/profanity/`.
    Choose `match.strict`, `match.loose`, or both based on the behavior being
    added; strict and loose are compiled matcher modes, not separate source
    dictionaries. Do not add generated matcher ids or per-mode ordering fields to

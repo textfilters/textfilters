@@ -13,8 +13,8 @@ created, see the
 
 The public dictionary shape is defined by the exported
 `ProfanityLanguageDictionary` and `ProfanityLanguageRuleDefinition` types in
-`src/languages/profanity.ts`. The built-in Russian source dictionary follows
-that shape in `src/languages/ru/profanity.json`.
+`src/languages/profanity.ts`. The built-in Russian source dictionaries under
+`src/languages/ru/profanity/` follow that shape.
 
 A dictionary has a language code and a list of rules:
 
@@ -86,6 +86,22 @@ The validator reports `suspicious_id` when the id segment does not match the
 rule category. That is an authoring signal: either the taxonomy is wrong, the id
 was copied from another rule, or the rule needs a deliberate rename before it is
 released.
+
+## Composed Source Dictionaries
+
+Large language dictionaries may be maintained as multiple smaller JSON source
+files. Each source file should still use the normal dictionary shape with the
+same `language` value and a focused `rules` list. A package entrypoint can import
+those files and assemble one exported `ProfanityLanguageDictionary` for runtime
+use.
+
+Validate both the assembled dictionary and each source file. Per-file validation
+catches local authoring mistakes, while assembled validation catches cross-file
+issues such as duplicate rule ids or duplicate source patterns.
+
+When composition preserves a specific matcher order, keep that order as explicit
+source data and add regression coverage for the assembled rule count and
+representative metadata.
 
 ## Categories And Severities
 

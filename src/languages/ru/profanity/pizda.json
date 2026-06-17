@@ -1,0 +1,138 @@
+{
+  "language": "ru",
+  "rules": [
+    {
+      "id": "ru.obscene.pizda.family",
+      "category": "OBSCENE_MAT",
+      "severity": "high",
+      "source": "п[иuiі]+[з3]д(?:[а-яё]+)?",
+      "match": {
+        "strict": {},
+        "loose": {
+          "stretch": true
+        }
+      }
+    },
+    {
+      "id": "ru.obscene.pizda.digit.split.loose",
+      "category": "OBSCENE_MAT",
+      "severity": "high",
+      "source": "(?<!\\p{L})п(?=1[иuiі])1[иuiі]1?[з3]1?д1?[а@4](?!\\p{L})",
+      "match": {
+        "loose": {}
+      }
+    },
+    {
+      "id": "ru.obscene.pizda.one.loose",
+      "category": "OBSCENE_MAT",
+      "severity": "high",
+      "source": [
+        "(?<!\\p{L})",
+        "п[^\\p{L}\\p{N}\\s]*",
+        "1[^\\p{L}\\p{N}\\s]*",
+        "[з3][^\\p{L}\\p{N}\\s]*",
+        "д[^\\p{L}\\p{N}\\s]*",
+        "[а@4]",
+        "(?!\\p{L})"
+      ],
+      "match": {
+        "loose": {}
+      }
+    },
+    {
+      "id": "ru.obscene.pizdyach.family",
+      "category": "OBSCENE_MAT",
+      "severity": "high",
+      "source": "зап[иuiі1][з3]дя[ч4](?:[а-яё]+)?",
+      "match": {
+        "strict": {},
+        "loose": {
+          "stretch": true
+        }
+      }
+    },
+    {
+      "id": "ru.obscene.pizdyach.digit.split.loose",
+      "category": "OBSCENE_MAT",
+      "severity": "high",
+      "source": "(?<!\\p{L})зап(?:1|[иuiі])1?[з3]1?д1?я1?[ч4](?:[а-яё]+)?(?!\\p{L})",
+      "match": {
+        "loose": {}
+      }
+    },
+    {
+      "id": "ru.obscene.raspizdya.family",
+      "category": "OBSCENE_MAT",
+      "severity": "high",
+      "source": "расп[иuiі1][з3]дя(?:[а-яё]+)?",
+      "match": {
+        "strict": {},
+        "loose": {
+          "stretch": true
+        }
+      }
+    },
+    {
+      "id": "ru.obscene.pizd.translit",
+      "category": "OBSCENE_MAT",
+      "severity": "high",
+      "source": [
+        "(?<!\\p{L})(?:z[aа]|r[aа]s)?[pр]izd(?:[aа]|[eе][cс]|[eе][tт]s|[eе]z[hн]|[yу][oо]z[hн]|[aа]n|un|",
+        "[yу][aа]ch|[yу][aа]|[aа]i|[aа][yу])(?:[a-zа-яё]+)?(?!\\p{L})"
+      ],
+      "match": {
+        "strict": {},
+        "loose": {
+          "stretch": true
+        }
+      }
+    },
+    {
+      "id": "ru.obscene.pizda.loose",
+      "category": "OBSCENE_MAT",
+      "severity": "high",
+      "source": "п[иuiі]+[з3]д[а@4]",
+      "match": {
+        "loose": {}
+      }
+    },
+    {
+      "id": "ru.obscene.pizda.bang.loose",
+      "category": "OBSCENE_MAT",
+      "severity": "high",
+      "source": "п[^\\p{L}\\p{N}]*![^\\p{L}\\p{N}]*[з3][^\\p{L}\\p{N}]*д[^\\p{L}\\p{N}]*[а@4]",
+      "match": {
+        "loose": {}
+      }
+    },
+    {
+      "id": "ru.obscene.pizda.symbol.loose",
+      "category": "OBSCENE_MAT",
+      "severity": "high",
+      "source": "п[иuiі]+[з3]д[@4]",
+      "match": {
+        "loose": {}
+      }
+    },
+    {
+      "id": "ru.vulgar.pizdec.loose",
+      "category": "VULGAR",
+      "severity": "medium",
+      "source": "п[иuiі1]+[з3]де+ц",
+      "match": {
+        "loose": {
+          "stretch": true
+        }
+      }
+    },
+    {
+      "id": "ru.vulgar.pizdec.digit.split.loose",
+      "category": "VULGAR",
+      "severity": "medium",
+      "source": "(?<!\\p{L})п(?=1[иuiі])1[иuiі]1?[з3]1?д(?=1е)1е(?=1ц)1ц(?!\\p{L})",
+      "match": {
+        "loose": {}
+      }
+    }
+  ]
+}
