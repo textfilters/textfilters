@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.12.0](https://github.com/textfilters/profanity/compare/v0.11.0...v0.12.0) (2026-06-17)
+
+
+### Features
+
+* harden Russian default profanity coverage ([fbbb3dd](https://github.com/textfilters/profanity/commit/fbbb3ddf098803d7d7cb43d69f52095f25736938))
+* split Russian profanity dictionary files ([e02d70f](https://github.com/textfilters/profanity/commit/e02d70f83d3eefca749d3139f21f14d1d4079981))
+
 ## [0.11.0](https://github.com/textfilters/profanity/compare/v0.10.0...v0.11.0) (2026-06-14)
 
 
