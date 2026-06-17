@@ -2,13 +2,21 @@
   "name": "@textfilters/url",
   "version": "0.1.2",
   "type": "module",
-  "description": "URL and obfuscated-link filtering for composable text moderation.",
+  "description": "TypeScript URL and obfuscated link detector for content moderation, defanged domains, hxxp links, TLD matching, and safe censoring.",
   "license": "MIT",
   "keywords": [
     "text-filtering",
+    "content-moderation",
     "moderation",
-    "url-filter",
-    "typescript"
+    "typescript",
+    "javascript",
+    "censoring",
+    "redaction",
+    "url-detection",
+    "link-filter",
+    "obfuscated-links",
+    "defanged-links",
+    "domain-detection"
   ],
   "sideEffects": false,
   "files": [

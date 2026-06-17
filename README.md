@@ -1,6 +1,11 @@
 # @textfilters/url
 
-URL and obfuscated-link filtering for composable text moderation.
+TypeScript URL detection and obfuscated link filtering for content moderation,
+chat moderation, UGC moderation, censoring, and redaction workflows.
+
+Use `@textfilters/url` to find and safely censor URLs, defanged domains, hxxp
+links, obfuscated links, and known-TLD domains inside user-generated text while
+keeping the package composable with other Textfilters filters.
 
 ## Installation
 
@@ -15,6 +20,14 @@ Install with GitHub npm authentication configured. GitHub Packages requires auth
 ```sh
 npm install @textfilters/core @textfilters/url
 ```
+
+## Use Cases
+
+- Detect links in chat moderation and UGC moderation pipelines.
+- Redact direct URLs, defanged links, hxxp links, and obfuscated domains.
+- Add URL filtering to a broader TypeScript text filtering library.
+- Keep package-specific link detection separate from profanity, email, phone,
+  and spam checks.
 
 ## Usage
 
@@ -52,6 +65,16 @@ The filter masks:
 ## Architecture
 
 The parser is split into focused modules for metadata, schemes, defanged dots, domains, explicit authorities, paths, and range collection. See [docs/architecture.md](docs/architecture.md).
+
+## Related Textfilters Packages
+
+- `@textfilters/core` for shared pipeline, normalization, and range masking
+  primitives.
+- `@textfilters/email` for email detection and contact redaction.
+- `@textfilters/phone` for phone number detection and contact redaction.
+- `@textfilters/profanity` for Russian profanity filtering and taxonomy-backed
+  moderation.
+- `@textfilters/spam` for actor-based anti-spam guard checks.
 
 ## Release
 
