@@ -7,6 +7,14 @@ Use `@textfilters/profanity` as a Russian profanity filter with built-in
 dictionary support, obfuscation handling, taxonomy metadata, language-pack
 validation, and composable APIs for a broader TypeScript text filtering library.
 
+The built-in Russian dictionary covers reviewed obscene, vulgar, and insult
+families, including common roots around `бля`, `еб`, `пизд`, `хуй`, `пидор`,
+`мудак`, `сука`, `гандон`, `залупа`, `шлюха`, `хер`, `говно`, `дерьмо`,
+`срать`, `засранец`, `обосрал`, `чмо`, and selected safe transliterations.
+Coverage is paired with false-positive audit cases for neutral words, names,
+toponyms, product-like tokens, Ukrainian `підор...` words, and Latin proper-name
+contexts that overlap risky transliteration spellings.
+
 ## Installation
 
 Add the GitHub Packages registry for the `@textfilters` scope:
@@ -151,7 +159,9 @@ UTF-16 string. Taxonomy options censor only matching metadata-backed ranges.
 
 Returns `true` when the current filter instance would censor at least one range.
 Use this when a boolean moderation decision is enough and the masked text is not
-needed. Taxonomy options apply the same match narrowing as `analyze()`.
+needed. Taxonomy options apply the same match narrowing as `analyze()`. The
+boolean path checks compiled strict ranges before falling back to loose ranges,
+so a clear strict hit does not require building the full public match list.
 
 ### `createProfanityFilter(strict?, loose?): ProfanityFilter`
 
@@ -203,6 +213,11 @@ fields. Runtime dictionary terms remain normalized literals; language
 dictionaries are the supported boundary for maintained language-specific rule
 data. This release intentionally keeps the public surface small and does not
 add new languages or separate packages.
+
+The Russian dictionary is maintained as split family data with an explicit rule
+order. New high-risk family rules are expected to add nearby coverage and
+false-positive tests. See [Russian dictionary policy](docs/russian-dictionary-policy.md)
+for the built-in taxonomy, transliteration, and false-positive review policy.
 
 `validateProfanityLanguageDictionary(dictionary)` checks the source dictionary
 contract and returns stable issues with `path`, `code`, and `message` fields.
@@ -354,17 +369,23 @@ This package keeps the built-in corpus behavior covered by compatibility tests.
 
 Intentional public-package changes:
 
-- Runtime dictionary terms are treated as normalized literals, not arbitrary regular expressions.
-- Built-in package-owned rules use an internal rule compiler that is not exposed to callers.
+- Runtime dictionary terms are treated as normalized literals, not arbitrary
+  regular expressions.
+- Built-in package-owned rules use an internal rule compiler that is not exposed
+  to callers.
 - The filter exposes stable `name: "profanity"`.
-- The filter exposes `analyze(text): ProfanityMatchRange[]` for accepted match ranges and optional taxonomy metadata.
+- The filter exposes `analyze(text): ProfanityMatchRange[]` for accepted match
+  ranges and optional taxonomy metadata.
 - The filter exposes `check(text): boolean` for boolean-only detection.
-- `createProfanityFilter()` without arguments creates an instance with compiled views of the built-in Russian dictionary.
+- `createProfanityFilter()` without arguments creates an instance with compiled
+  views of the built-in Russian dictionary.
 - Masking preserves JavaScript string length for astral code points.
 
 ## Architecture
 
-See [the architecture guide](docs/architecture.md) for the matching pipeline, Mermaid diagrams, and the rationale behind the strict separation between runtime literals and internal corpus rules.
+See [the architecture guide](docs/architecture.md) for the matching pipeline,
+Mermaid diagrams, and the rationale behind the strict separation between
+runtime literals and internal corpus rules.
 
 See [the invariants guide](docs/invariants.md) for a short maintenance checklist
 covering normalization, source ranges, boundaries, loose matching, false-positive
@@ -372,7 +393,10 @@ locks, and hyphen-tail behavior.
 
 ## Release
 
-Releases are managed by Release Please from Conventional Commit history on `main`. When a Release Please release is created, the workflow runs `npm run check` and publishes the package to GitHub Packages. Release tags keep the `v*` pattern.
+Releases are managed by Release Please from Conventional Commit history on
+`main`. When a Release Please release is created, the workflow runs
+`npm run check` and publishes the package to GitHub Packages. Release tags keep
+the `v*` pattern.
 
 The package is prepared for publication to GitHub Packages, not the public npm registry.
 

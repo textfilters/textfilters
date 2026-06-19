@@ -1,7 +1,11 @@
 import type { ProfanityTaxonomyMetadata } from "../types.js";
 import { ruleIdentityMetadata } from "./rule-metadata.js";
+import { scanGuardsForSource, type PatternScanGuards } from "./scan-guards.js";
 
-export interface CompiledPattern extends ProfanityTaxonomyMetadata {
+export { patternMayStartBefore, patternMayStartIn } from "./scan-guards.js";
+
+export interface CompiledPattern
+  extends ProfanityTaxonomyMetadata, PatternScanGuards {
   readonly re: RegExp;
   readonly trimHyphenTail?: boolean;
   readonly trimHyphenTailMin?: number;
@@ -60,6 +64,7 @@ const compilePattern = (
         definition.source,
         wholeToken ? ANCHORED_UNICODE_FLAGS : GLOBAL_UNICODE_FLAGS,
       ),
+      ...scanGuardsForSource(definition.source),
       trimHyphenTail: definition.trimHyphenTail,
       trimHyphenTailMin: definition.trimHyphenTailMin,
       ...ruleIdentityMetadata(definition),

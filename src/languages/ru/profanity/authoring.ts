@@ -1,0 +1,140 @@
+import type {
+  ProfanityLanguageDictionary,
+  ProfanityLanguageLooseMatchOptions,
+  ProfanityLanguageRuleDefinition,
+  ProfanityLanguageRuleSource,
+} from "../../profanity.js";
+import type { ProfanityCategory, ProfanitySeverity } from "../../../types.js";
+
+type RussianRuleMatch = "strict" | "loose" | "strict-loose";
+
+interface RussianRuleOptions {
+  readonly id: string;
+  readonly category: ProfanityCategory;
+  readonly severity: ProfanitySeverity;
+  readonly source: ProfanityLanguageRuleSource;
+  readonly match?: RussianRuleMatch;
+  readonly loose?: ProfanityLanguageLooseMatchOptions;
+}
+
+const DEFAULT_LOOSE_MATCH = {
+  stretch: true,
+} as const satisfies ProfanityLanguageLooseMatchOptions;
+
+export const cyrillicSuffix = String.raw`(?:[а-яё]+)?`;
+
+export const russianFamilyDictionary = (
+  rules: readonly ProfanityLanguageRuleDefinition[],
+): ProfanityLanguageDictionary => ({
+  language: "ru",
+  rules,
+});
+
+export const russianRule = ({
+  id,
+  category,
+  severity,
+  source,
+  match = "strict-loose",
+  loose = DEFAULT_LOOSE_MATCH,
+}: RussianRuleOptions): ProfanityLanguageRuleDefinition => ({
+  id,
+  category,
+  severity,
+  source,
+  match: {
+    ...(match === "strict" || match === "strict-loose" ? { strict: {} } : {}),
+    ...(match === "loose" || match === "strict-loose" ? { loose } : {}),
+  },
+});
+
+export const token = (source: string): string =>
+  String.raw`(?<!\p{L})${source}(?!\p{L})`;
+
+export const regexAlternatives = (sources: readonly string[]): string =>
+  sources.join("|");
+
+export const regexGroup = (sources: readonly string[]): string =>
+  String.raw`(?:${regexAlternatives(sources)})`;
+
+export const optionalRegexGroup = (sources: readonly string[]): string =>
+  String.raw`${regexGroup(sources)}?`;
+
+export const separatedPattern = (
+  sources: readonly string[],
+  separator: string,
+): string => sources.join(separator);
+
+type PatternSequence = readonly string[];
+
+export const cyrillicAdjectiveTailParts = [
+  [String.raw`о`, String.raw`г`, String.raw`о`],
+  [String.raw`о`, String.raw`м`, String.raw`у`],
+  [String.raw`ы`, String.raw`м`, String.raw`и`],
+  [String.raw`ы`, String.raw`й`],
+  [String.raw`а`, String.raw`я`],
+  [String.raw`о`, String.raw`е`],
+  [String.raw`ы`, String.raw`е`],
+  [String.raw`у`, String.raw`ю`],
+  [String.raw`о`, String.raw`й`],
+  [String.raw`о`, String.raw`м`],
+  [String.raw`ы`, String.raw`м`],
+  [String.raw`ы`, String.raw`х`],
+] as const;
+
+export const transliteratedAdjectiveTailParts = [
+  [String.raw`[oо]`, String.raw`g`, String.raw`[oо]`],
+  [String.raw`[oо]`, String.raw`[mм]`, String.raw`[uу]`],
+  [String.raw`[uу]`, String.raw`[yу]`, String.raw`[uу]`],
+  [String.raw`[yу]`, String.raw`[mм]`, String.raw`i`],
+  [String.raw`[aа]`, String.raw`[yу]`, String.raw`[aа]`],
+  [String.raw`[oо]`, String.raw`[yу]`],
+  [String.raw`[oо]`, String.raw`[mм]`],
+  [String.raw`[yу]`, String.raw`[mм]`],
+  [String.raw`[yу]`, String.raw`[hн]`],
+  [String.raw`[yу]`, String.raw`[yу]`],
+  [String.raw`[oо]`, String.raw`[eе]`],
+  [String.raw`[yу]`, String.raw`[eе]`],
+] as const;
+
+export const prefixedPatternSequences = (
+  prefix: readonly string[],
+  sequences: readonly PatternSequence[],
+): string[][] => sequences.map((sequence) => [...prefix, ...sequence]);
+
+const longestSequencesFirst = (
+  sequences: readonly PatternSequence[],
+): PatternSequence[] =>
+  [...sequences].sort((left, right) => right.length - left.length);
+
+export const joinedPatterns = (
+  sequences: readonly PatternSequence[],
+): string[] =>
+  longestSequencesFirst(sequences).map((source) => source.join(""));
+
+export const separatedPatterns = (
+  sequences: readonly PatternSequence[],
+  separator: string,
+): string[] =>
+  longestSequencesFirst(sequences).map((source) =>
+    separatedPattern(source, separator),
+  );
+
+const NEUTRAL_CONTEXT_SEPARATOR = String.raw`(?:\s+|\s*[./@:,\-–—]+\s*)`;
+const NEUTRAL_CONTEXT_BOUNDARY = String.raw`(?![\p{L}\p{N}_-])`;
+
+const neutralContextLookahead = (source: string, neutralTail: string): string =>
+  String.raw`${source}(?:['’]s)?${NEUTRAL_CONTEXT_SEPARATOR}` +
+  String.raw`(?:${neutralTail})${NEUTRAL_CONTEXT_BOUNDARY}`;
+
+export const neutralContextGuardedSource = (
+  source: string,
+  neutralSource: string,
+  neutralTail: string,
+): string =>
+  String.raw`(?<!\p{L})(?!${neutralContextLookahead(neutralSource, neutralTail)})${source}(?!\p{L})`;
+
+export const neutralContextGuard = (
+  source: string,
+  neutralTail: string,
+): string => neutralContextGuardedSource(source, source, neutralTail);

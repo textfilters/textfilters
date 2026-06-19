@@ -1,4 +1,7 @@
-import type { CompiledPattern } from "../matchers/compile.js";
+import {
+  patternMayStartIn,
+  type CompiledPattern,
+} from "../matchers/compile.js";
 import { nextCodePointEnd } from "../normalization/text.js";
 
 export const forEachPatternMatch = (
@@ -7,6 +10,10 @@ export const forEachPatternMatch = (
   visit: (start: number, end: number, pattern: CompiledPattern) => void,
 ): void => {
   for (const pattern of patterns) {
+    if (!patternMayStartIn(pattern, normalized)) {
+      continue;
+    }
+
     pattern.re.lastIndex = 0;
     let match: RegExpExecArray | null;
 

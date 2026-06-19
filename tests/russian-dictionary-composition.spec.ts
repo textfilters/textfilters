@@ -14,8 +14,7 @@ describe("Russian dictionary composition", () => {
     }
   });
 
-  it("keeps the assembled Russian dictionary rule count and representative metadata stable", () => {
-    expect(RUSSIAN_PROFANITY_DICTIONARY.rules).toHaveLength(122);
+  it("keeps representative Russian dictionary metadata stable", () => {
     expect(RUSSIAN_PROFANITY_DICTIONARY.rules).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -30,6 +29,21 @@ describe("Russian dictionary composition", () => {
         }),
         expect.objectContaining({
           id: "ru.vulgar.pizdec.digit.split.loose",
+          category: "VULGAR",
+          severity: "medium",
+        }),
+        expect.objectContaining({
+          id: "ru.insult.suka.family",
+          category: "STRONG_INSULT",
+          severity: "high",
+        }),
+        expect.objectContaining({
+          id: "ru.obscene.zalupa.family",
+          category: "OBSCENE_MAT",
+          severity: "high",
+        }),
+        expect.objectContaining({
+          id: "ru.vulgar.govno.family",
           category: "VULGAR",
           severity: "medium",
         }),

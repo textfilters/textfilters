@@ -72,6 +72,15 @@ behavior. Strict and loose are compiled matcher views, not separate dictionaries
 or serialized matcher output. This allows compact expressions for Russian
 morphology without exposing arbitrary user regex semantics.
 
+Russian family files may be JSON source dictionaries or package-internal
+TypeScript dictionaries built with `src/languages/ru/profanity/authoring.ts`.
+That helper is not a public language-pack DSL. It only removes repeated
+built-in Russian boilerplate such as `language: "ru"`, strict-and-loose match
+objects, common suffix fragments, token boundaries, and reviewed neutral-context
+guards. The assembled dictionary still exports the same public
+`ProfanityLanguageDictionary` shape, and `order.json` remains the explicit
+source of matcher order.
+
 Reviewed loose rules may also opt into `hyphenTail` metadata from the source
 dictionary. That keeps language-specific compound trimming decisions in data
 while the runtime range code only applies the generic compiled-rule signal.
@@ -166,6 +175,7 @@ range modules decide what parts of text can be masked.
 | `src/languages/validation.ts`             | Source dictionary authoring validator and issue contract.             |
 | `src/cli/validate-language-dictionary.ts` | JSON dictionary validator CLI and text/JSON report formatting.        |
 | `src/languages/ru/*`                      | Built-in Russian profanity dictionary/profile data.                   |
+| `src/languages/ru/profanity/authoring.ts` | Internal Russian family authoring helpers, not public pack API.       |
 | `src/ranges/strict.ts`                    | Strict range collection.                                              |
 | `src/ranges/loose.ts`                     | Loose range collection.                                               |
 | `src/ranges/patterns.ts`                  | Shared global regexp iteration with zero-width protection.            |
@@ -198,10 +208,15 @@ after text normalization.
    added; strict and loose are compiled matcher modes, not separate source
    dictionaries. Do not add generated matcher ids or per-mode ordering fields to
    the dictionary.
-2. Add a positive corpus case in the relevant corpus spec under `tests/`.
-3. Add a false-positive case when the rule could overlap with common neutral
+2. Use the internal Russian authoring helper for new TypeScript family files
+   when it keeps the reviewed source shorter and clearer. Keep language-specific
+   policy in the family source or Russian profile; do not move Russian
+   allowlists into generic runtime modules.
+3. Add the rule id to `src/languages/ru/profanity/order.json`.
+4. Add a positive corpus case in the relevant corpus spec under `tests/`.
+5. Add a false-positive case when the rule could overlap with common neutral
    words.
-4. Run the full package check before publishing the branch.
+6. Run the full package check before publishing the branch.
 
 Runtime dictionary examples should be added as literal terms. Do not use the
 built-in rule syntax for tenant or request-level dictionaries.

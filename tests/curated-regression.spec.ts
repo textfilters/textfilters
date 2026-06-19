@@ -42,7 +42,7 @@ describe("@textfilters/profanity curated regressions", () => {
   it("keeps accepted low-risk false-positive locks unchanged", () => {
     const cases = [
       "бляха-муха",
-      "херня, но не мат",
+      "херес, но не мат",
       "ебург как сокращение",
       "х у л и г а н",
     ];

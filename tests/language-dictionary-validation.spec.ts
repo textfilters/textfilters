@@ -136,6 +136,17 @@ describe("language dictionary validation", () => {
             },
           },
         },
+        {
+          id: "zz.vulgar.noop",
+          category: "VULGAR",
+          severity: "low",
+          source: "qw2",
+          match: {
+            loose: {
+              hyphenTailMin: 2,
+            },
+          },
+        },
       ],
     });
 
@@ -151,6 +162,10 @@ describe("language dictionary validation", () => {
       },
       {
         path: "rules[1].match.loose.hyphenTailMin",
+        code: "invalid_loose_option_value",
+      },
+      {
+        path: "rules[2].match.loose.hyphenTailMin",
         code: "invalid_loose_option_value",
       },
     ]);

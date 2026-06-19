@@ -256,8 +256,26 @@ const hasProfanity = (
   text: string,
   options?: ProfanityMatchOptions,
 ): boolean => {
-  const matches = collectProfanityMatches(state, text, options);
-  return matches.length > 0;
+  // Normalization is same-length, so collected ranges stay source-compatible.
+  const normalized = normalizeForMatchSameLen(text);
+  const strictRanges: CollectedProfanityRange[] = [];
+
+  collectStrictRanges(normalized, state.strictPatterns, strictRanges);
+
+  if (hasMatchingCollectedRange(strictRanges, options)) {
+    return true;
+  }
+
+  const looseRanges: CollectedProfanityRange[] = [];
+  collectLooseRanges(
+    normalized,
+    text,
+    state.loosePatterns,
+    state.strictPatterns,
+    looseRanges,
+  );
+
+  return hasMatchingCollectedRange(looseRanges, options);
 };
 
 const censorText = (
@@ -324,17 +342,51 @@ const filterMatchesByTaxonomy = (
     return matches;
   }
 
-  return matches.filter(
-    (match) =>
-      (categories === undefined ||
-        (match.category !== undefined && categories.has(match.category))) &&
-      (severities === undefined ||
-        (match.severity !== undefined && severities.has(match.severity))) &&
-      (minSeverity === undefined ||
-        (match.severity !== undefined &&
-          isAtLeastSeverity(match.severity, minSeverity))),
+  return matches.filter((match) =>
+    rangeMatchesTaxonomy(match, categories, severities, minSeverity),
   );
 };
+
+const hasMatchingCollectedRange = (
+  ranges: readonly CollectedProfanityRange[],
+  options: ProfanityMatchOptions | undefined,
+): boolean => {
+  if (options === undefined || !hasTaxonomyFilters(options)) {
+    return ranges.length > 0;
+  }
+
+  const categories =
+    options.categories === undefined ? undefined : new Set(options.categories);
+  const severities =
+    options.severities === undefined ? undefined : new Set(options.severities);
+
+  return ranges.some((range) =>
+    rangeMatchesTaxonomy(range, categories, severities, options.minSeverity),
+  );
+};
+
+const hasTaxonomyFilters = (options: ProfanityMatchOptions): boolean =>
+  options.categories !== undefined ||
+  options.severities !== undefined ||
+  options.minSeverity !== undefined;
+
+const rangeMatchesTaxonomy = (
+  match: Pick<ProfanityMatchRange, "category" | "severity">,
+  categories:
+    | ReadonlySet<NonNullable<ProfanityMatchRange["category"]>>
+    | undefined,
+  severities:
+    | ReadonlySet<NonNullable<ProfanityMatchRange["severity"]>>
+    | undefined,
+  minSeverity: ProfanitySeverity | undefined,
+): boolean =>
+  (categories === undefined ||
+    (match.category !== undefined && categories.has(match.category))) &&
+  (severities === undefined ||
+    (match.severity !== undefined && severities.has(match.severity))) &&
+  (minSeverity === undefined ||
+    (match.severity !== undefined &&
+      isAtLeastSeverity(match.severity, minSeverity)));
 
 const PROFANITY_SEVERITY_RANK: Record<ProfanitySeverity, number> = {
   soft: 0,

@@ -551,6 +551,21 @@ const validateLooseMatch = (
       );
     }
   }
+
+  if (
+    typeof loose.hyphenTailMin === "number" &&
+    Number.isInteger(loose.hyphenTailMin) &&
+    loose.hyphenTailMin >= 1 &&
+    loose.hyphenTail !== true
+  ) {
+    issues.push(
+      issue(
+        `${path}.hyphenTailMin`,
+        "invalid_loose_option_value",
+        "hyphenTailMin requires hyphenTail to be true.",
+      ),
+    );
+  }
 };
 
 const validateGeneratedMetadata = (

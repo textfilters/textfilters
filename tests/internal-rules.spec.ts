@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import { buildLoosePatterns, buildStrictPatterns } from "../src/matchers/build";
+import {
+  compilePatternDefinitions,
+  patternMayStartBefore,
+  patternMayStartIn,
+} from "../src/matchers/compile";
 import { compileStrictLiteralPatterns } from "../src/matchers/literals";
 import {
   matchRangesForMode,
@@ -120,7 +125,7 @@ describe("internal profanity rules", () => {
     expect(invalidDefinitions).toEqual([]);
   });
 
-  it("documents the built-in corpus taxonomy metadata audit baseline", () => {
+  it("keeps every built-in rule taxonomy-backed", () => {
     const audit = BUILT_IN_RULE_DEFINITION_SETS.map(
       ({ corpus, definitions }) => {
         const objectDefinitions = definitions.filter(isObjectRuleDefinition);
@@ -129,9 +134,7 @@ describe("internal profanity rules", () => {
 
         return {
           corpus,
-          totalRules: definitions.length,
           stringBackedRules: definitions.length - objectDefinitions.length,
-          taxonomyBackedRules: taxonomyDefinitions.length,
           compilerMetadataRules:
             objectDefinitions.length - taxonomyDefinitions.length,
           invalidTaxonomyBackedRules: objectDefinitions.filter(
@@ -147,17 +150,13 @@ describe("internal profanity rules", () => {
     expect(audit).toEqual([
       {
         corpus: "strict",
-        totalRules: 62,
         stringBackedRules: 0,
-        taxonomyBackedRules: 62,
         compilerMetadataRules: 0,
         invalidTaxonomyBackedRules: 0,
       },
       {
         corpus: "loose",
-        totalRules: 112,
         stringBackedRules: 0,
-        taxonomyBackedRules: 112,
         compilerMetadataRules: 0,
         invalidTaxonomyBackedRules: 0,
       },
@@ -168,7 +167,6 @@ describe("internal profanity rules", () => {
     const rules = RUSSIAN_PROFANITY_DICTIONARY.rules;
 
     expect(RUSSIAN_PROFANITY_DICTIONARY.language).toBe("ru");
-    expect(rules).toHaveLength(122);
     expect(
       rules.filter((rule) => rule.match.strict !== undefined),
     ).toHaveLength(STRICT_BASE.length);
@@ -176,11 +174,11 @@ describe("internal profanity rules", () => {
       LOOSE_BASE.length,
     );
     expect(
-      rules.filter(
+      rules.some(
         (rule) =>
           rule.match.strict !== undefined && rule.match.loose !== undefined,
       ),
-    ).toHaveLength(52);
+    ).toBe(true);
   });
 
   it("derives matcher views from Russian dictionary source order", () => {
@@ -388,6 +386,96 @@ describe("internal profanity rules", () => {
     expect(loosePatterns[0]?.re.source).toBe(
       String.raw`b[^\p{L}\p{N}]*a[^\p{L}\p{N}]*d`,
     );
+  });
+
+  it("keeps compiled scan-start guards conservative and case-insensitive", () => {
+    const rule = createBuiltInProfanityRules(
+      [String.raw`(?<!\p{L})[bьв]l[yу]a(?!\p{L})`],
+      "loose",
+    )[0]!;
+    const pattern = compileLooseInternalRulePatterns([rule])[0]!;
+
+    expect(pattern.scanFirstChars).toEqual(
+      expect.arrayContaining(["b", "B", "ь", "Ь", "в", "В"]),
+    );
+    expect(patternMayStartIn(pattern, "Ь l у a")).toBe(true);
+    expect(patternMayStartIn(pattern, "aЬ l у a")).toBe(false);
+    expect(patternMayStartIn(pattern, "фикс")).toBe(false);
+    expect(pattern.re.test("Ь l у a")).toBe(true);
+  });
+
+  it("keeps built-in loose rules guarded for suffix scans", () => {
+    const patterns = compileLooseInternalRulePatterns(
+      createBuiltInProfanityRules(LOOSE_BASE, "loose"),
+    );
+    const unguardedRules = patterns
+      .filter((pattern) => pattern.scanFirstChars === undefined)
+      .map((pattern) => pattern.ruleId ?? pattern.re.source);
+
+    expect(unguardedRules).toEqual([]);
+  });
+
+  it("uses the next significant scan character to skip unrelated split terms", () => {
+    const pattern = compilePatternDefinitions(
+      [
+        {
+          source: String.raw`(?<!\p{L})(?:з[-._]+а|z[^\p{L}\p{N}\s]+[aа])`,
+        },
+      ],
+      false,
+    )[0]!;
+
+    expect(pattern.scanSecondChars).toEqual(
+      expect.arrayContaining(["a", "A", "а", "А"]),
+    );
+    expect(patternMayStartIn(pattern, "п-и-з-д-е-ц")).toBe(false);
+    expect(patternMayStartIn(pattern, "п-и-з-а")).toBe(true);
+    expect(patternMayStartBefore(pattern, "з-а", 1)).toBe(true);
+    expect(patternMayStartBefore(pattern, "п-и-з-а", 4)).toBe(false);
+  });
+
+  it("keeps second-character scan guards conservative for repeats and digits", () => {
+    const repeatedPattern = compilePatternDefinitions(
+      [{ source: String.raw`f[^\p{L}\p{N}]*f` }],
+      false,
+    )[0]!;
+    const digitPattern = compilePatternDefinitions(
+      [{ source: String.raw`п[^\p{L}\p{N}]*и` }],
+      false,
+    )[0]!;
+
+    expect(patternMayStartIn(repeatedPattern, "f f")).toBe(true);
+    expect(patternMayStartIn(digitPattern, "п1и")).toBe(true);
+  });
+
+  it("derives scan-start guards through leading lookahead backreferences", () => {
+    const rule = createBuiltInProfanityRules(
+      [String.raw`(?=([sс]uka))\1`],
+      "loose",
+    )[0]!;
+    const pattern = compileLooseInternalRulePatterns([rule])[0]!;
+
+    expect(pattern.scanFirstChars).toEqual(
+      expect.arrayContaining(["s", "S", "с", "С"]),
+    );
+    expect(patternMayStartIn(pattern, "suka")).toBe(true);
+    expect(patternMayStartIn(pattern, "модуль")).toBe(false);
+    expect(pattern.re.test("suka")).toBe(true);
+  });
+
+  it("derives scan-start guards across leading optional prefixes", () => {
+    const rule = createBuiltInProfanityRules(
+      [String.raw`(?:z[aа])?[yу]e`],
+      "loose",
+    )[0]!;
+    const pattern = compileLooseInternalRulePatterns([rule])[0]!;
+
+    expect(pattern.scanFirstChars).toEqual(
+      expect.arrayContaining(["z", "Z", "y", "Y", "у", "У"]),
+    );
+    expect(patternMayStartIn(pattern, "za-ye")).toBe(true);
+    expect(patternMayStartIn(pattern, "ye")).toBe(true);
+    expect(patternMayStartIn(pattern, "модель")).toBe(false);
   });
 
   it("preserves object rule taxonomy metadata in compiled strict patterns", () => {

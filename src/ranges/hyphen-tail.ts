@@ -1,6 +1,9 @@
 import type { TextRange } from "@textfilters/core";
 import type { StrictPatternSet } from "../matchers/build.js";
-import type { CompiledPattern } from "../matchers/compile.js";
+import {
+  patternMayStartBefore,
+  type CompiledPattern,
+} from "../matchers/compile.js";
 import { nextCodePointEnd } from "../normalization/text.js";
 import {
   isWordCharAt,
@@ -39,7 +42,6 @@ type LooseTailMatchEnd = (
 const HYPHEN_TAIL_SCAN_LOOKAHEAD = 64;
 const HYPHEN_TAIL_SCAN_MAX = 512;
 const HYPHEN_TAIL_SCAN_WORDS = 3;
-
 export const knownHyphenatedSuffixRange = (
   normalized: string,
   source: string,
@@ -105,6 +107,10 @@ const profaneTailEndInScan = (
   );
 
   for (const pattern of patterns.loose) {
+    if (!patternMayStartBefore(pattern, normalized, tailTokenLength)) {
+      continue;
+    }
+
     const re = clonePatternRegExp(pattern);
     let match: RegExpExecArray | null;
 
@@ -116,6 +122,10 @@ const profaneTailEndInScan = (
         continue;
       }
 
+      if (match.index >= tailTokenLength) {
+        break;
+      }
+
       const tailEnd = looseTailMatchEnd(
         normalized,
         source,
@@ -124,9 +134,7 @@ const profaneTailEndInScan = (
         pattern,
         patterns,
       );
-      // A loose match that starts after the first tail token should not make a
-      // neutral compound tail disappear.
-      if (tailEnd !== null && match.index < tailTokenLength) {
+      if (tailEnd !== null) {
         profaneEnd = Math.max(profaneEnd ?? 0, tailTokenLength, tailEnd);
       }
     }

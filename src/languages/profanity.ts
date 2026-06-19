@@ -65,9 +65,9 @@ const looseOptions = (
         loose: {
           ...(match.stretch === true ? { stretch: true } : {}),
           ...(match.hyphenTail === true ? { hyphenTail: true } : {}),
-          ...(match.hyphenTailMin === undefined
-            ? {}
-            : { hyphenTailMin: match.hyphenTailMin }),
+          ...(match.hyphenTail === true && match.hyphenTailMin !== undefined
+            ? { hyphenTailMin: match.hyphenTailMin }
+            : {}),
         },
       }
     : {};

@@ -1,10 +1,17 @@
 import blyaProfanity from "./profanity/blya.json" with { type: "json" };
+import chmoProfanity from "./profanity/chmo.js";
 import ebProfanity from "./profanity/eb.json" with { type: "json" };
+import gandonProfanity from "./profanity/gandon.js";
+import herProfanity from "./profanity/her.js";
 import huyProfanity from "./profanity/huy.json" with { type: "json" };
 import mudProfanity from "./profanity/mud.json" with { type: "json" };
 import pidorProfanity from "./profanity/pidor.json" with { type: "json" };
 import pizdaProfanity from "./profanity/pizda.json" with { type: "json" };
 import russianProfanityRuleOrder from "./profanity/order.json" with { type: "json" };
+import shitProfanity from "./profanity/shit.js";
+import shlyuhaProfanity from "./profanity/shlyuha.js";
+import sukaProfanity from "./profanity/suka.js";
+import zalupaProfanity from "./profanity/zalupa.js";
 import {
   dictionaryRulesForMode,
   type ProfanityLanguageDictionary,
@@ -13,11 +20,18 @@ import {
 
 export const RUSSIAN_PROFANITY_FAMILY_DICTIONARIES = [
   blyaProfanity as ProfanityLanguageDictionary,
+  chmoProfanity,
   ebProfanity as ProfanityLanguageDictionary,
+  gandonProfanity,
+  herProfanity,
   huyProfanity as ProfanityLanguageDictionary,
   mudProfanity as ProfanityLanguageDictionary,
   pidorProfanity as ProfanityLanguageDictionary,
   pizdaProfanity as ProfanityLanguageDictionary,
+  shitProfanity,
+  shlyuhaProfanity,
+  sukaProfanity,
+  zalupaProfanity,
 ] as const;
 
 const RUSSIAN_PROFANITY_RULES_BY_ID = new Map<

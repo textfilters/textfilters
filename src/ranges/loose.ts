@@ -26,15 +26,17 @@ export const collectLooseRanges = (
   loosePatterns: readonly CompiledPattern[],
   strictPatterns: StrictPatternSet,
   ranges: CollectedProfanityRange[],
-): void =>
+): void => {
+  const patterns = { loose: loosePatterns, strict: strictPatterns };
+
   forEachPatternMatch(normalized, loosePatterns, (start, end, pattern) => {
-    const patterns = { loose: loosePatterns, strict: strictPatterns };
     const range = looseRange(normalized, source, start, end, pattern, patterns);
 
     if (range !== null) {
       ranges.push(collectedRangeForPattern(range, pattern));
     }
   });
+};
 
 const looseRange = (
   normalized: string,

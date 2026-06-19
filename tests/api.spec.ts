@@ -35,6 +35,8 @@ describe("public API", () => {
         readonly strict?: Record<string, never>;
         readonly loose?: {
           readonly stretch?: boolean;
+          readonly hyphenTail?: boolean;
+          readonly hyphenTailMin?: number;
         };
       };
     }>();
@@ -481,6 +483,31 @@ describe("public API", () => {
         category: "OBSCENE_MAT",
         severity: "high",
       }),
+    );
+  });
+
+  it("keeps check results aligned with analyze and censor on long inputs", () => {
+    const strict = createProfanityFilter(
+      [
+        { source: "alpha", category: "OBSCENE_MAT", severity: "high" },
+        { source: "omega", category: "VULGAR", severity: "low" },
+      ],
+      [{ source: "beta", category: "STRONG_INSULT", severity: "medium" }],
+    );
+    const input = `alpha ${"plain ".repeat(500)}b-e-t-a omega`;
+
+    expect(strict.check(input)).toBe(true);
+    expect(strict.check(input, { categories: ["OBSCENE_MAT"] })).toBe(true);
+    expect(strict.check(input, { categories: ["STRONG_INSULT"] })).toBe(true);
+    expect(strict.check(input, { minSeverity: "high" })).toBe(true);
+    expect(strict.check(input, { severities: ["soft"] })).toBe(false);
+    expect(
+      strict
+        .analyze(input, { categories: ["STRONG_INSULT"] })
+        .map((match) => input.slice(match[0], match[1])),
+    ).toEqual(["b-e-t-a"]);
+    expect(strict.censor(input, { categories: ["VULGAR"] })).toBe(
+      input.replace("omega", "*****"),
     );
   });
 

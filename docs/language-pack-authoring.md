@@ -13,8 +13,10 @@ created, see the
 
 The public dictionary shape is defined by the exported
 `ProfanityLanguageDictionary` and `ProfanityLanguageRuleDefinition` types in
-`src/languages/profanity.ts`. The built-in Russian source dictionaries under
-`src/languages/ru/profanity/` follow that shape.
+`src/languages/profanity.ts`. External language packs should author this public
+shape directly, normally as JSON source dictionaries. The built-in Russian
+dictionary also exports that shape, but some package-owned Russian family files
+use internal TypeScript helpers to reduce repeated boilerplate.
 
 A dictionary has a language code and a list of rules:
 
@@ -100,8 +102,8 @@ catches local authoring mistakes, while assembled validation catches cross-file
 issues such as duplicate rule ids or duplicate source patterns.
 
 When composition preserves a specific matcher order, keep that order as explicit
-source data and add regression coverage for the assembled rule count and
-representative metadata.
+source data and add regression coverage for assembled rule ids, matcher order,
+and representative metadata.
 
 ## Categories And Severities
 
@@ -133,7 +135,8 @@ serialized matcher output.
   hyphenated compound tail should be trimmed unless the tail is itself profane.
   Use it only for reviewed source rules with explicit false-positive locks.
 - `loose: { "hyphenTail": true, "hyphenTailMin": 5 }` can set the minimum
-  compact prefix length required before trimming a hyphenated tail.
+  compact prefix length required before trimming a hyphenated tail. The
+  `hyphenTailMin` option is only valid together with `hyphenTail: true`.
 
 Choose strict matching when a rule should only match clear token boundaries.
 Choose loose matching when separator-obfuscated spelling is part of the intended
@@ -147,6 +150,12 @@ normalization switch.
 Source dictionaries should stay human-maintained JSON. They should describe
 language-specific source rules, taxonomy, and intended strict or loose behavior.
 They must not store generated matcher output or compiler bookkeeping.
+
+The internal Russian authoring helper is not part of this public contract. It is
+reserved for the bundled Russian dictionary because those rules ship, test, and
+release with this package. External language packs should not depend on
+`src/languages/ru/profanity/authoring.ts`, should not expect arbitrary-regex
+runtime APIs, and should not serialize helper-generated matcher output.
 
 Keep each `source` trimmed, non-empty, unique within the dictionary, and
 compilable as a Unicode regular expression. Duplicate source checks normalize
