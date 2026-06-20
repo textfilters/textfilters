@@ -19,7 +19,11 @@ import {
   yoptExpectedCoveredCases,
   yoptIntentionallyUnsupportedCases,
 } from "./yopt";
-import { zhopaCoverageMetadataCases, zhopaExpectedCoveredCases } from "./zhopa";
+import {
+  zhopaCoverageMetadataCases,
+  zhopaExpectedCoveredCases,
+  zhopaIntentionallyUnsupportedCases,
+} from "./zhopa";
 
 import type { ReviewedGapAuditCase, ReviewedGapMetadataCase } from "./types";
 
@@ -36,6 +40,7 @@ export const intentionallyUnsupportedCases: readonly ReviewedGapAuditCase[] = [
   ...sosIntentionallyUnsupportedCases,
   ...drochIntentionallyUnsupportedCases,
   ...yoptIntentionallyUnsupportedCases,
+  ...zhopaIntentionallyUnsupportedCases,
   ...mandaIntentionallyUnsupportedCases,
 ];
 
