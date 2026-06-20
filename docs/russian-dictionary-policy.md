@@ -15,6 +15,17 @@ Current reviewed family areas include roots around `бля`, `еб`, `пизд`,
 `дерьмо`, `срать`, `засранец`, `обосрал`, and `чмо`, plus selected safe
 transliterations.
 
+The package is not a broad toxicity, hate-speech, slur, harassment, or
+political insult detector. Those areas require separate policy decisions,
+profiles, or packages because they often depend on target identity, speaker
+intent, local policy, and context. Russian additions should stay focused on
+reviewed profanity, vulgarity, obscene mat, vulgar bodily terms, and strong
+direct insults with bounded false-positive risk.
+
+See [Russian profanity coverage map](russian-coverage-map.md) for current
+family coverage, known gaps, intentionally unsupported areas, and the
+maintenance checklist for new families.
+
 ## Taxonomy
 
 Use the weakest category and severity that still describes the moderation

@@ -217,7 +217,9 @@ add new languages or separate packages.
 The Russian dictionary is maintained as split family data with an explicit rule
 order. New high-risk family rules are expected to add nearby coverage and
 false-positive tests. See [Russian dictionary policy](docs/russian-dictionary-policy.md)
-for the built-in taxonomy, transliteration, and false-positive review policy.
+for the built-in taxonomy, transliteration, and false-positive review policy,
+and [Russian profanity coverage map](docs/russian-coverage-map.md) for covered,
+partial, missing, and intentionally unsupported Russian family areas.
 
 `validateProfanityLanguageDictionary(dictionary)` checks the source dictionary
 contract and returns stable issues with `path`, `code`, and `message` fields.
