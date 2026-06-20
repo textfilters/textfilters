@@ -40,7 +40,8 @@
     "format": "prettier README.md package.json src docs tests --write",
     "prepack": "npm run build",
     "pack:dry-run": "npm pack --dry-run",
-    "check": "npm run lint && npm test && npm run build && npm run pack:dry-run"
+    "smoke:dist": "node --input-type=module --eval \"const url = await import('./dist/index.js'); url.createUrlFilter().censor('go to https://example.com');\"",
+    "check": "npm run lint && npm test && npm run build && npm run smoke:dist && npm run pack:dry-run"
   },
   "dependencies": {
     "@textfilters/core": "^0.1.0"
