@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.13.1](https://github.com/textfilters/profanity/compare/v0.13.0...v0.13.1) (2026-06-20)
+
+
+### Bug Fixes
+
+* keep reviewed Russian gaps strict-only ([#89](https://github.com/textfilters/profanity/issues/89)) ([9dbd759](https://github.com/textfilters/profanity/commit/9dbd7597505a4f76e25c47d07ca4f34655f3be50))
+
 ## [0.13.0](https://github.com/textfilters/profanity/compare/v0.12.0...v0.13.0) (2026-06-20)
 
 
