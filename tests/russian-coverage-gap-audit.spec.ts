@@ -5,10 +5,7 @@ import { filter } from "../src";
 import { mask } from "./helpers";
 import { expectUnchanged } from "./russian-audit-helpers";
 
-type GapAuditStatus =
-  | "expected-covered"
-  | "expected-missing"
-  | "intentionally-unsupported";
+type GapAuditStatus = "expected-covered" | "intentionally-unsupported";
 
 interface GapAuditCase {
   readonly family: string;
@@ -26,52 +23,55 @@ interface CoverageMetadataCase {
   };
 }
 
-const expectedMissingCases: readonly GapAuditCase[] = [
+const expectedCoveredCases: readonly GapAuditCase[] = [
   {
     family: "droch",
     input: "дрочить",
-    status: "expected-missing",
-    note: "sexual vulgarity pending high-risk false-positive review",
+    status: "expected-covered",
+    note: "reviewed sexual vulgarity verb is covered",
   },
   {
     family: "droch",
     input: "дрочу",
-    status: "expected-missing",
-    note: "sexual vulgarity pending high-risk false-positive review",
+    status: "expected-covered",
+    note: "reviewed sexual vulgarity verb form is covered",
   },
   {
     family: "droch",
     input: "дрочер",
-    status: "expected-missing",
-    note: "sexual vulgarity pending high-risk false-positive review",
+    status: "expected-covered",
+    note: "reviewed sexual vulgarity noun is covered",
   },
   {
     family: "droch",
     input: "дрочила",
-    status: "expected-missing",
-    note: "sexual vulgarity pending high-risk false-positive review",
+    status: "expected-covered",
+    note: "reviewed sexual vulgarity form is covered",
+  },
+  {
+    family: "droch",
+    input: "дрочерами",
+    status: "expected-covered",
+    note: "reviewed sexual vulgarity noun inflection is covered",
   },
   {
     family: "sos",
     input: "соси",
-    status: "expected-missing",
-    note: "short risky form pending narrow reviewed matching",
+    status: "expected-covered",
+    note: "reviewed narrow short form is covered",
   },
   {
     family: "sos",
     input: "отсоси",
-    status: "expected-missing",
-    note: "prefixed risky form pending narrow reviewed matching",
+    status: "expected-covered",
+    note: "reviewed narrow prefixed form is covered",
   },
   {
     family: "sos",
     input: "сосать",
-    status: "expected-missing",
-    note: "verb form pending narrow reviewed matching",
+    status: "expected-covered",
+    note: "reviewed narrow verb form is covered",
   },
-];
-
-const expectedCoveredCases: readonly GapAuditCase[] = [
   {
     family: "huylo",
     input: "хуйло",
@@ -247,6 +247,22 @@ const intentionallyUnsupportedCases: readonly GapAuditCase[] = [
 
 const coverageMetadataCases: readonly CoverageMetadataCase[] = [
   {
+    input: "дрочить",
+    expected: {
+      ruleId: "ru.vulgar.droch.family",
+      category: "VULGAR",
+      severity: "medium",
+    },
+  },
+  {
+    input: "соси",
+    expected: {
+      ruleId: "ru.vulgar.sos.narrow",
+      category: "VULGAR",
+      severity: "medium",
+    },
+  },
+  {
     input: "хуйло",
     expected: {
       ruleId: "ru.insult.huylo.family",
@@ -289,14 +305,6 @@ const coverageMetadataCases: readonly CoverageMetadataCase[] = [
 ];
 
 describe("Russian coverage gap audit", () => {
-  it("keeps candidate gap families explicitly expected missing", () => {
-    for (const testCase of expectedMissingCases) {
-      expect(testCase.status).toBe("expected-missing");
-      expectUnchanged(testCase.input);
-      expect(filter.analyze(testCase.input), testCase.note).toEqual([]);
-    }
-  });
-
   it("keeps nearby reviewed families explicitly expected covered", () => {
     for (const testCase of expectedCoveredCases) {
       expect(testCase.status).toBe("expected-covered");
