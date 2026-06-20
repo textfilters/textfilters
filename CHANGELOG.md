@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.13.0](https://github.com/textfilters/profanity/compare/v0.12.0...v0.13.0) (2026-06-20)
+
+
+### Features
+
+* add reviewed Russian gap coverage ([#85](https://github.com/textfilters/profanity/issues/85)) ([21d5858](https://github.com/textfilters/profanity/commit/21d58588238d4d2e7a45caab3d4a48c5ee1c093a))
+* add reviewed Russian huylo coverage ([#87](https://github.com/textfilters/profanity/issues/87)) ([75464f6](https://github.com/textfilters/profanity/commit/75464f60ddae1aeb590b1fc756e35bb6d7cf6992))
+* add reviewed Russian sexual vulgarity coverage ([#88](https://github.com/textfilters/profanity/issues/88)) ([547d01a](https://github.com/textfilters/profanity/commit/547d01a92819595fc9742a030805367b99431de1))
+
 ## [0.12.0](https://github.com/textfilters/profanity/compare/v0.11.0...v0.12.0) (2026-06-17)
 
 
