@@ -40,6 +40,24 @@ runs formatting checks, tests, a TypeScript build, a minimal `dist` entrypoint
 smoke check, and `npm pack --dry-run`. The URL package also keeps a `prepack`
 build hook so direct package packing remains build-backed outside `check`.
 
+## Shared Masking Adoption Tracking
+
+URL, email, and phone all collect code-point ranges before censoring text. The
+shared helper tracked in `textfilters/core#11` is the dependency for converging
+their masking implementations without changing public APIs or detection
+semantics.
+
+| Package | Current masking status | Follow-up |
+| --- | --- | --- |
+| `@textfilters/url` | Keeps local length-preserving code-point masking to preserve current URL output around astral input and custom mask chars. | `textfilters/url#12` |
+| `@textfilters/email` | Uses core masking helpers through package glue; adoption should keep email exclusion and custom mask behavior unchanged. | `textfilters/email#20` |
+| `@textfilters/phone` | Uses core masking helpers with Unicode digit normalization, including astral digits; adoption must preserve current phone output. | `textfilters/phone#11` |
+
+Until `textfilters/core#11` lands, package-specific behavior remains the source
+of truth. Each follow-up should keep offset and length stability tests for BMP
+and relevant astral inputs, keep public APIs unchanged, and run that package's
+`npm run check`.
+
 ## Which Package Should I Use?
 
 | Need | Start with |
