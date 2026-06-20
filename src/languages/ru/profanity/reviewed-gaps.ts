@@ -55,11 +55,7 @@ const DROCH_FORMS = [
   String.raw`дрочерами`,
   String.raw`дрочерах`,
 ] as const;
-const SOS_FORMS = [
-  String.raw`соси`,
-  String.raw`отсоси`,
-  String.raw`сосать`,
-] as const;
+const SOS_FORMS = [String.raw`соси`, String.raw`отсоси`] as const;
 
 export default russianFamilyDictionary([
   russianRule({
@@ -67,35 +63,41 @@ export default russianFamilyDictionary([
     category: "VULGAR",
     severity: "medium",
     source: token(regexGroup(YOPT_FORMS)),
+    match: "strict",
   }),
   russianRule({
     id: "ru.vulgar.zhopa.family",
     category: "VULGAR",
     severity: "medium",
     source: token(regexGroup(ZHOPA_FORMS)),
+    match: "strict",
   }),
   russianRule({
     id: "ru.obscene.manda.family",
     category: "OBSCENE_MAT",
     severity: "high",
     source: token(regexGroup(MANDA_FORMS)),
+    match: "strict",
   }),
   russianRule({
     id: "ru.insult.huylo.family",
     category: "STRONG_INSULT",
     severity: "high",
     source: token(regexGroup(HUYLO_FORMS)),
+    match: "strict",
   }),
   russianRule({
     id: "ru.vulgar.droch.family",
     category: "VULGAR",
     severity: "medium",
     source: token(regexGroup(DROCH_FORMS)),
+    match: "strict",
   }),
   russianRule({
     id: "ru.vulgar.sos.narrow",
     category: "VULGAR",
     severity: "medium",
     source: token(regexGroup(SOS_FORMS)),
+    match: "strict",
   }),
 ]);

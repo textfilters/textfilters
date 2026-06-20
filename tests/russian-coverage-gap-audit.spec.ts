@@ -67,12 +67,6 @@ const expectedCoveredCases: readonly GapAuditCase[] = [
     note: "reviewed narrow prefixed form is covered",
   },
   {
-    family: "sos",
-    input: "сосать",
-    status: "expected-covered",
-    note: "reviewed narrow verb form is covered",
-  },
-  {
     family: "huylo",
     input: "хуйло",
     status: "expected-covered",
@@ -215,6 +209,24 @@ const intentionallyUnsupportedCases: readonly GapAuditCase[] = [
   },
   {
     family: "sos false-positive locks",
+    input: "СОС И помощь",
+    status: "intentionally-unsupported",
+    note: "Cyrillic distress acronym followed by a conjunction must not loose-match sos forms",
+  },
+  {
+    family: "sos false-positive locks",
+    input: "сосать леденец",
+    status: "intentionally-unsupported",
+    note: "context-only neutral usage is unsupported without a reviewed contextual rule",
+  },
+  {
+    family: "sos false-positive locks",
+    input: "сосать палец",
+    status: "intentionally-unsupported",
+    note: "context-only neutral usage is unsupported without a reviewed contextual rule",
+  },
+  {
+    family: "sos false-positive locks",
     input: "SOS",
     status: "intentionally-unsupported",
     note: "Latin acronym collision for future sos review",
@@ -242,6 +254,30 @@ const intentionallyUnsupportedCases: readonly GapAuditCase[] = [
     input: "Droid",
     status: "intentionally-unsupported",
     note: "Latin technical token collision for future transliteration review",
+  },
+  {
+    family: "yopt false-positive locks",
+    input: "Е. П. Т.",
+    status: "intentionally-unsupported",
+    note: "initial-like separated Cyrillic letters must not loose-match yopt",
+  },
+  {
+    family: "yopt false-positive locks",
+    input: "е п т",
+    status: "intentionally-unsupported",
+    note: "separated Cyrillic letters must not loose-match yopt",
+  },
+  {
+    family: "manda false-positive locks",
+    input: "к о м а н д а",
+    status: "intentionally-unsupported",
+    note: "separated neutral command word must not loose-match manda",
+  },
+  {
+    family: "manda false-positive locks",
+    input: "м а н д а т",
+    status: "intentionally-unsupported",
+    note: "separated neutral mandate word must not loose-match manda",
   },
 ];
 
