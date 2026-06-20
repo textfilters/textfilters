@@ -1,14 +1,13 @@
 import {
   cyrillicSuffix,
-  joinedPatterns,
   neutralContextGuard,
   neutralContextGuardedSource,
+  patternTailViews,
   regexAlternatives,
   regexGroup,
   russianFamilyDictionary,
   russianRule,
   separatedPattern,
-  separatedPatterns,
 } from "./authoring.js";
 
 const GANDON_NEUTRAL_TAILS = [
@@ -46,18 +45,24 @@ const GANDOSHA_TAIL_PARTS = [
   [String.raw`[uу]`],
 ] as const;
 
-const GANDON_TRANSLIT_TAILS = joinedPatterns(GANDON_TAIL_PARTS);
-const GANDOSHA_TRANSLIT_TAILS = joinedPatterns(GANDOSHA_TAIL_PARTS);
+const GANDON_SPLIT_SEPARATOR = String.raw`[-._]+`;
+const GANDON_TAILS = patternTailViews(
+  GANDON_TAIL_PARTS,
+  GANDON_SPLIT_SEPARATOR,
+);
+const GANDOSHA_TAILS = patternTailViews(
+  GANDOSHA_TAIL_PARTS,
+  GANDON_SPLIT_SEPARATOR,
+);
 const GANDON_TRANSLIT_BASE = String.raw`g(?=[aаoо])[aаoо](?=n)n(?=d)d(?=[oо])[oо]`;
 const GANDON_NEUTRAL_TAIL = regexAlternatives(GANDON_NEUTRAL_TAILS);
 const GANDON_TRANSLIT_SOURCE = regexGroup([
-  String.raw`${GANDON_TRANSLIT_BASE}(?=n)n${regexGroup(GANDON_TRANSLIT_TAILS)}?`,
+  String.raw`${GANDON_TRANSLIT_BASE}(?=n)n${regexGroup(GANDON_TAILS.joined)}?`,
   String.raw`${GANDON_TRANSLIT_BASE}(?=s)s(?=[hн])[hн]${regexGroup(
-    GANDOSHA_TRANSLIT_TAILS,
+    GANDOSHA_TAILS.joined,
   )}`,
 ]);
 
-const GANDON_SPLIT_SEPARATOR = String.raw`[-._]+`;
 const GANDON_SPLIT_BASE = separatedPattern(
   [
     String.raw`g`,
@@ -68,20 +73,12 @@ const GANDON_SPLIT_BASE = separatedPattern(
   ],
   GANDON_SPLIT_SEPARATOR,
 );
-const GANDON_SPLIT_N_TAILS = separatedPatterns(
-  GANDON_TAIL_PARTS,
-  GANDON_SPLIT_SEPARATOR,
-);
-const GANDOSHA_SPLIT_TAILS = separatedPatterns(
-  GANDOSHA_TAIL_PARTS,
-  GANDON_SPLIT_SEPARATOR,
-);
 const GANDON_SPLIT_NEUTRAL_SOURCE = String.raw`${GANDON_SPLIT_BASE}${GANDON_SPLIT_SEPARATOR}n`;
 const GANDON_SPLIT_SOURCE = String.raw`${GANDON_SPLIT_BASE}${GANDON_SPLIT_SEPARATOR}${regexGroup(
   [
-    String.raw`n(?:${GANDON_SPLIT_SEPARATOR}${regexGroup(GANDON_SPLIT_N_TAILS)})?`,
+    String.raw`n(?:${GANDON_SPLIT_SEPARATOR}${regexGroup(GANDON_TAILS.separated)})?`,
     String.raw`s${GANDON_SPLIT_SEPARATOR}[hн]${GANDON_SPLIT_SEPARATOR}${regexGroup(
-      GANDOSHA_SPLIT_TAILS,
+      GANDOSHA_TAILS.separated,
     )}`,
   ],
 )}`;

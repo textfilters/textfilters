@@ -1,7 +1,7 @@
 import {
   cyrillicSuffix,
-  joinedPatterns,
   optionalRegexGroup,
+  patternTailViews,
   regexGroup,
   russianFamilyDictionary,
   russianRule,
@@ -143,11 +143,21 @@ const SHLYUHA_OVAT_TAIL_PARTS = [
   ],
 ] as const;
 
-const SHLYUHA_CASE_TAILS = joinedPatterns(SHLYUHA_CASE_TAIL_PARTS);
-const SHLYUHA_OVAT_TAILS = joinedPatterns(SHLYUHA_OVAT_TAIL_PARTS);
-const SHLYUHA_TRANSLIT_TAILS = [...SHLYUHA_CASE_TAILS, ...SHLYUHA_OVAT_TAILS];
-const SHLYUSHKA_TRANSLIT_TAILS = SHLYUHA_CASE_TAILS;
-const SHALAVA_TRANSLIT_TAILS = joinedPatterns(SHALAVA_TAIL_PARTS);
+const SHLYUHA_SPLIT_SEP = String.raw`[-._]+`;
+const SHLYUHA_CASE_TAILS = patternTailViews(
+  SHLYUHA_CASE_TAIL_PARTS,
+  SHLYUHA_SPLIT_SEP,
+);
+const SHLYUHA_OVAT_TAILS = patternTailViews(
+  SHLYUHA_OVAT_TAIL_PARTS,
+  SHLYUHA_SPLIT_SEP,
+);
+const SHALAVA_TAILS = patternTailViews(SHALAVA_TAIL_PARTS, SHLYUHA_SPLIT_SEP);
+const SHLYUHA_TRANSLIT_TAILS = [
+  ...SHLYUHA_CASE_TAILS.joined,
+  ...SHLYUHA_OVAT_TAILS.joined,
+];
+const SHLYUSHKA_TRANSLIT_TAILS = SHLYUHA_CASE_TAILS.joined;
 const SHLYUHA_FAMILY_TAILS = [
   String.raw`ами?`,
   String.raw`ах`,
@@ -169,37 +179,24 @@ const SHLYUHA_FAMILY_SOURCE = String.raw`(?!${SHLYUHA_LAUGH_CONTEXT})шлюх${r
 const SHLYUHA_TRANSLIT_SOURCE = regexGroup([
   String.raw`s[hн]l[yу]u${regexGroup([
     String.raw`[hн]${optionalRegexGroup(SHLYUHA_TRANSLIT_TAILS)}`,
-    String.raw`[kк][hн]${regexGroup(SHLYUHA_CASE_TAILS)}`,
-    String.raw`[xх]${regexGroup(SHLYUHA_CASE_TAILS)}`,
+    String.raw`[kк][hн]${regexGroup(SHLYUHA_CASE_TAILS.joined)}`,
+    String.raw`[xх]${regexGroup(SHLYUHA_CASE_TAILS.joined)}`,
     String.raw`s[hн][kк]${regexGroup(SHLYUSHKA_TRANSLIT_TAILS)}`,
     String.raw`s[hн][eе][kк]`,
   ])}`,
-  String.raw`s[hн][aа]l[aа]v${optionalRegexGroup(SHALAVA_TRANSLIT_TAILS)}`,
+  String.raw`s[hн][aа]l[aа]v${optionalRegexGroup(SHALAVA_TAILS.joined)}`,
 ]);
 
-const SHLYUHA_SPLIT_SEP = String.raw`[-._]+`;
 const shlyuhaSplit = splitPattern(SHLYUHA_SPLIT_SEP);
 const shlyuhaSplitWithTails = splitPatternWithTails(SHLYUHA_SPLIT_SEP);
 const shlyuhaSplitWithOptionalTails =
   splitPatternWithOptionalTails(SHLYUHA_SPLIT_SEP);
 
-const SHLYUHA_SPLIT_CASE_TAILS = separatedPatterns(
-  SHLYUHA_CASE_TAIL_PARTS,
-  SHLYUHA_SPLIT_SEP,
-);
-const SHLYUHA_SPLIT_OVAT_TAILS = separatedPatterns(
-  SHLYUHA_OVAT_TAIL_PARTS,
-  SHLYUHA_SPLIT_SEP,
-);
 const SHLYUHA_SPLIT_TAILS = [
-  ...SHLYUHA_SPLIT_CASE_TAILS,
-  ...SHLYUHA_SPLIT_OVAT_TAILS,
+  ...SHLYUHA_CASE_TAILS.separated,
+  ...SHLYUHA_OVAT_TAILS.separated,
 ];
-const SHLYUSHKA_SPLIT_TAILS = SHLYUHA_SPLIT_CASE_TAILS;
-const SHALAVA_SPLIT_TAILS = separatedPatterns(
-  SHALAVA_TAIL_PARTS,
-  SHLYUHA_SPLIT_SEP,
-);
+const SHLYUSHKA_SPLIT_TAILS = SHLYUHA_CASE_TAILS.separated;
 
 const SHLYUHA_SPLIT_SOURCE = regexGroup([
   String.raw`${shlyuhaSplit([
@@ -220,7 +217,7 @@ const SHLYUHA_SPLIT_SOURCE = regexGroup([
       String.raw`[kк]`,
       String.raw`[hн]`,
     ],
-    SHLYUHA_SPLIT_CASE_TAILS,
+    SHLYUHA_CASE_TAILS.separated,
   ),
   shlyuhaSplitWithTails(
     [
@@ -231,7 +228,7 @@ const SHLYUHA_SPLIT_SOURCE = regexGroup([
       String.raw`u`,
       String.raw`[xх]`,
     ],
-    SHLYUHA_SPLIT_CASE_TAILS,
+    SHLYUHA_CASE_TAILS.separated,
   ),
   shlyuhaSplitWithTails(
     [
@@ -266,7 +263,7 @@ const SHLYUHA_SPLIT_SOURCE = regexGroup([
       String.raw`[aа]`,
       String.raw`v`,
     ],
-    SHALAVA_SPLIT_TAILS,
+    SHALAVA_TAILS.separated,
   ),
 ]);
 

@@ -5,9 +5,30 @@ import {
   RUSSIAN_PROFANITY_DICTIONARY,
   RUSSIAN_PROFANITY_FAMILY_DICTIONARIES,
 } from "../src/languages/ru";
+import { patternTailViews } from "../src/languages/ru/profanity/authoring";
 import russianProfanityRuleOrder from "../src/languages/ru/profanity/order.json" with { type: "json" };
 
 describe("Russian dictionary composition", () => {
+  it("keeps Russian authoring tail views ordered consistently", () => {
+    expect(
+      patternTailViews(
+        [
+          [String.raw`[aа]`],
+          [String.raw`[aа]`, String.raw`[mм]`, String.raw`i`],
+          [String.raw`[oо]`, String.raw`[yу]`],
+        ],
+        String.raw`[-._]+`,
+      ),
+    ).toEqual({
+      joined: [String.raw`[aа][mм]i`, String.raw`[oо][yу]`, String.raw`[aа]`],
+      separated: [
+        String.raw`[aа][-._]+[mм][-._]+i`,
+        String.raw`[oо][-._]+[yу]`,
+        String.raw`[aа]`,
+      ],
+    });
+  });
+
   it("validates each built-in Russian family dictionary with the public validator", () => {
     for (const dictionary of RUSSIAN_PROFANITY_FAMILY_DICTIONARIES) {
       expect(validateProfanityLanguageDictionary(dictionary)).toEqual([]);

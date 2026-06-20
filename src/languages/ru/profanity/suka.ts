@@ -1,14 +1,13 @@
 import {
   cyrillicSuffix,
-  joinedPatterns,
   neutralContextGuardedSource,
   optionalRegexGroup,
+  patternTailViews,
   regexAlternatives,
   regexGroup,
   russianFamilyDictionary,
   russianRule,
   separatedPattern,
-  separatedPatterns,
   splitPattern,
   splitPatternWithOptionalTails,
   splitPatternWithTails,
@@ -94,12 +93,28 @@ const SUCHIY_TRANSLIT_TAIL_PARTS = [
   [String.raw`[yу]`, String.raw`i`],
 ] as const;
 
-const SUKA_CASE_TAILS = joinedPatterns(SUKA_CASE_TAIL_PARTS);
-const SUKAR_TRANSLIT_TAILS = joinedPatterns(SUKAR_TRANSLIT_TAIL_PARTS);
-const SUKACHKA_TRANSLIT_TAILS = joinedPatterns(SUKACHKA_TRANSLIT_TAIL_PARTS);
-const SUKIN_TRANSLIT_TAILS = joinedPatterns(SUKIN_TRANSLIT_TAIL_PARTS);
+const SUKA_TRANSLIT_SPLIT_SEPARATOR = String.raw`[^\p{L}\p{N}\s]+`;
+const SUKA_CASE_TAILS = patternTailViews(
+  SUKA_CASE_TAIL_PARTS,
+  SUKA_TRANSLIT_SPLIT_SEPARATOR,
+);
+const SUKAR_TRANSLIT_TAILS = patternTailViews(
+  SUKAR_TRANSLIT_TAIL_PARTS,
+  SUKA_TRANSLIT_SPLIT_SEPARATOR,
+);
+const SUKACHKA_TRANSLIT_TAILS = patternTailViews(
+  SUKACHKA_TRANSLIT_TAIL_PARTS,
+  SUKA_TRANSLIT_SPLIT_SEPARATOR,
+);
+const SUKIN_TRANSLIT_TAILS = patternTailViews(
+  SUKIN_TRANSLIT_TAIL_PARTS,
+  SUKA_TRANSLIT_SPLIT_SEPARATOR,
+);
 const SUCHKA_TRANSLIT_TAILS = SUKACHKA_TRANSLIT_TAILS;
-const SUCHIY_TRANSLIT_TAILS = joinedPatterns(SUCHIY_TRANSLIT_TAIL_PARTS);
+const SUCHIY_TRANSLIT_TAILS = patternTailViews(
+  SUCHIY_TRANSLIT_TAIL_PARTS,
+  SUKA_TRANSLIT_SPLIT_SEPARATOR,
+);
 
 const SUKA_SPLIT_NEUTRAL_SEPARATOR = String.raw`[^\p{L}\p{N}]*`;
 const SUKA_SPLIT_NEUTRAL_BASE = separatedPattern(
@@ -109,14 +124,14 @@ const SUKA_SPLIT_NEUTRAL_BASE = separatedPattern(
 
 const SUKA_NEUTRAL_TAIL = regexAlternatives(SUKA_NEUTRAL_TAILS);
 const SUKA_TRANSLIT_SOURCE = String.raw`s[uу]${regexGroup([
-  String.raw`[kк]${regexGroup(SUKA_CASE_TAILS)}`,
-  String.raw`[kк][aа]r${optionalRegexGroup(SUKAR_TRANSLIT_TAILS)}`,
-  String.raw`[kк][aа][cс][hн][kк]${regexGroup(SUKACHKA_TRANSLIT_TAILS)}`,
-  String.raw`[kк]in${optionalRegexGroup(SUKIN_TRANSLIT_TAILS)}`,
-  String.raw`[cс][hн][aа]r${optionalRegexGroup(SUKAR_TRANSLIT_TAILS)}`,
+  String.raw`[kк]${regexGroup(SUKA_CASE_TAILS.joined)}`,
+  String.raw`[kк][aа]r${optionalRegexGroup(SUKAR_TRANSLIT_TAILS.joined)}`,
+  String.raw`[kк][aа][cс][hн][kк]${regexGroup(SUKACHKA_TRANSLIT_TAILS.joined)}`,
+  String.raw`[kк]in${optionalRegexGroup(SUKIN_TRANSLIT_TAILS.joined)}`,
+  String.raw`[cс][hн][aа]r${optionalRegexGroup(SUKAR_TRANSLIT_TAILS.joined)}`,
   String.raw`[cс][hн][eе][kк]`,
-  String.raw`[cс][hн][kк]${regexGroup(SUCHKA_TRANSLIT_TAILS)}`,
-  String.raw`[cс][hн]${regexGroup(SUCHIY_TRANSLIT_TAILS)}`,
+  String.raw`[cс][hн][kк]${regexGroup(SUCHKA_TRANSLIT_TAILS.joined)}`,
+  String.raw`[cс][hн]${regexGroup(SUCHIY_TRANSLIT_TAILS.joined)}`,
 ])}`;
 const SUKA_SPLIT_NEUTRAL_SOURCE = String.raw`${SUKA_SPLIT_NEUTRAL_BASE}${regexGroup(
   [
@@ -125,34 +140,11 @@ const SUKA_SPLIT_NEUTRAL_SOURCE = String.raw`${SUKA_SPLIT_NEUTRAL_BASE}${regexGr
   ],
 )}`;
 
-const SUKA_TRANSLIT_SPLIT_SEPARATOR = String.raw`[^\p{L}\p{N}\s]+`;
 const sukaTranslitSplit = splitPattern(SUKA_TRANSLIT_SPLIT_SEPARATOR);
 const sukaTranslitSplitWithTails = splitPatternWithTails(
   SUKA_TRANSLIT_SPLIT_SEPARATOR,
 );
 const sukaTranslitSplitWithOptionalTails = splitPatternWithOptionalTails(
-  SUKA_TRANSLIT_SPLIT_SEPARATOR,
-);
-
-const SUKA_SPLIT_CASE_TAILS = separatedPatterns(
-  SUKA_CASE_TAIL_PARTS,
-  SUKA_TRANSLIT_SPLIT_SEPARATOR,
-);
-const SUKAR_SPLIT_TAILS = separatedPatterns(
-  SUKAR_TRANSLIT_TAIL_PARTS,
-  SUKA_TRANSLIT_SPLIT_SEPARATOR,
-);
-const SUKACHKA_SPLIT_TAILS = separatedPatterns(
-  SUKACHKA_TRANSLIT_TAIL_PARTS,
-  SUKA_TRANSLIT_SPLIT_SEPARATOR,
-);
-const SUKIN_SPLIT_TAILS = separatedPatterns(
-  SUKIN_TRANSLIT_TAIL_PARTS,
-  SUKA_TRANSLIT_SPLIT_SEPARATOR,
-);
-const SUCHKA_SPLIT_TAILS = SUKACHKA_SPLIT_TAILS;
-const SUCHIY_SPLIT_TAILS = separatedPatterns(
-  SUCHIY_TRANSLIT_TAIL_PARTS,
   SUKA_TRANSLIT_SPLIT_SEPARATOR,
 );
 
@@ -165,7 +157,7 @@ const SUKA_TRANSLIT_SPLIT_SOURCE = regexGroup([
       String.raw`[aа]`,
       String.raw`r`,
     ],
-    SUKAR_SPLIT_TAILS,
+    SUKAR_TRANSLIT_TAILS.separated,
   ),
   sukaTranslitSplitWithTails(
     [
@@ -177,7 +169,7 @@ const SUKA_TRANSLIT_SPLIT_SOURCE = regexGroup([
       String.raw`[hн]`,
       String.raw`[kк]`,
     ],
-    SUKACHKA_SPLIT_TAILS,
+    SUKACHKA_TRANSLIT_TAILS.separated,
   ),
   sukaTranslitSplitWithOptionalTails(
     [
@@ -187,7 +179,7 @@ const SUKA_TRANSLIT_SPLIT_SOURCE = regexGroup([
       String.raw`i`,
       String.raw`n`,
     ],
-    SUKIN_SPLIT_TAILS,
+    SUKIN_TRANSLIT_TAILS.separated,
   ),
   sukaTranslitSplitWithOptionalTails(
     [
@@ -198,7 +190,7 @@ const SUKA_TRANSLIT_SPLIT_SOURCE = regexGroup([
       String.raw`[aа]`,
       String.raw`r`,
     ],
-    SUKAR_SPLIT_TAILS,
+    SUKAR_TRANSLIT_TAILS.separated,
   ),
   sukaTranslitSplit([
     String.raw`s`,
@@ -210,7 +202,7 @@ const SUKA_TRANSLIT_SPLIT_SOURCE = regexGroup([
   ]),
   sukaTranslitSplitWithTails(
     [String.raw`s`, String.raw`[uу]`, String.raw`[kк]`],
-    SUKA_SPLIT_CASE_TAILS,
+    SUKA_CASE_TAILS.separated,
   ),
   sukaTranslitSplitWithTails(
     [
@@ -220,11 +212,11 @@ const SUKA_TRANSLIT_SPLIT_SOURCE = regexGroup([
       String.raw`[hн]`,
       String.raw`[kк]`,
     ],
-    SUCHKA_SPLIT_TAILS,
+    SUCHKA_TRANSLIT_TAILS.separated,
   ),
   sukaTranslitSplitWithTails(
     [String.raw`s`, String.raw`[uу]`, String.raw`[cс]`, String.raw`[hн]`],
-    SUCHIY_SPLIT_TAILS,
+    SUCHIY_TRANSLIT_TAILS.separated,
   ),
 ]);
 

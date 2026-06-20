@@ -91,6 +91,11 @@ export const splitPatternWithOptionalTails =
 
 type PatternSequence = readonly string[];
 
+interface PatternTailViews {
+  readonly joined: string[];
+  readonly separated: string[];
+}
+
 export const cyrillicAdjectiveTailParts = [
   [String.raw`о`, String.raw`г`, String.raw`о`],
   [String.raw`о`, String.raw`м`, String.raw`у`],
@@ -131,18 +136,28 @@ const longestSequencesFirst = (
 ): PatternSequence[] =>
   [...sequences].sort((left, right) => right.length - left.length);
 
+export const patternTailViews = (
+  sequences: readonly PatternSequence[],
+  separator: string,
+): PatternTailViews => {
+  const orderedSequences = longestSequencesFirst(sequences);
+
+  return {
+    joined: orderedSequences.map((source) => source.join("")),
+    separated: orderedSequences.map((source) =>
+      separatedPattern(source, separator),
+    ),
+  };
+};
+
 export const joinedPatterns = (
   sequences: readonly PatternSequence[],
-): string[] =>
-  longestSequencesFirst(sequences).map((source) => source.join(""));
+): string[] => patternTailViews(sequences, "").joined;
 
 export const separatedPatterns = (
   sequences: readonly PatternSequence[],
   separator: string,
-): string[] =>
-  longestSequencesFirst(sequences).map((source) =>
-    separatedPattern(source, separator),
-  );
+): string[] => patternTailViews(sequences, separator).separated;
 
 const NEUTRAL_CONTEXT_SEPARATOR = String.raw`(?:\s+|\s*[./@:,\-–—]+\s*)`;
 const NEUTRAL_CONTEXT_BOUNDARY = String.raw`(?![\p{L}\p{N}_-])`;
