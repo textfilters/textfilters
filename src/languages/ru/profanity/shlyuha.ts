@@ -5,8 +5,10 @@ import {
   regexGroup,
   russianFamilyDictionary,
   russianRule,
-  separatedPattern,
   separatedPatterns,
+  splitPattern,
+  splitPatternWithOptionalTails,
+  splitPatternWithTails,
 } from "./authoring.js";
 
 const SHLYUHA_LAUGH_SEPARATORS = [
@@ -176,22 +178,10 @@ const SHLYUHA_TRANSLIT_SOURCE = regexGroup([
 ]);
 
 const SHLYUHA_SPLIT_SEP = String.raw`[-._]+`;
-const shlyuhaSplit = (sources: readonly string[]): string =>
-  separatedPattern(sources, SHLYUHA_SPLIT_SEP);
-const shlyuhaSplitWithTails = (
-  baseParts: readonly string[],
-  tails: readonly string[],
-): string =>
-  String.raw`${shlyuhaSplit(baseParts)}${SHLYUHA_SPLIT_SEP}${regexGroup(
-    tails,
-  )}`;
-const shlyuhaSplitWithOptionalTails = (
-  baseParts: readonly string[],
-  tails: readonly string[],
-): string =>
-  String.raw`${shlyuhaSplit(baseParts)}(?:${SHLYUHA_SPLIT_SEP}${regexGroup(
-    tails,
-  )})?`;
+const shlyuhaSplit = splitPattern(SHLYUHA_SPLIT_SEP);
+const shlyuhaSplitWithTails = splitPatternWithTails(SHLYUHA_SPLIT_SEP);
+const shlyuhaSplitWithOptionalTails =
+  splitPatternWithOptionalTails(SHLYUHA_SPLIT_SEP);
 
 const SHLYUHA_SPLIT_CASE_TAILS = separatedPatterns(
   SHLYUHA_CASE_TAIL_PARTS,

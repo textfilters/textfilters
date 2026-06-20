@@ -11,6 +11,7 @@ import {
   russianRule,
   separatedPattern,
   separatedPatterns,
+  splitPattern,
   transliteratedAdjectiveTailParts,
 } from "./authoring.js";
 
@@ -88,8 +89,7 @@ const ZALUPA_SPLIT_NEUTRAL_BASE = separatedPattern(
 const ZALUPA_SPLIT_NEUTRAL_SOURCE = String.raw`${ZALUPA_SPLIT_NEUTRAL_BASE}(?:${ZALUPA_SPLIT_NEUTRAL_SEPARATOR}[aа])?`;
 
 const ZALUPA_SPLIT_SEP = String.raw`[^\p{L}\p{N}\s]+`;
-const zalupaSplit = (sources: readonly string[]): string =>
-  separatedPattern(sources, ZALUPA_SPLIT_SEP);
+const zalupaSplit = splitPattern(ZALUPA_SPLIT_SEP);
 
 const ZALUPA_SPLIT_TRANSLIT_NOUN_TAILS = [
   String.raw`[aа]${ZALUPA_SPLIT_SEP}[mм](?:${ZALUPA_SPLIT_SEP}i)?`,

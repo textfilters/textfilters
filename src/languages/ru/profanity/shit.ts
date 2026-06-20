@@ -9,6 +9,8 @@ import {
   russianRule,
   separatedPattern,
   separatedPatterns,
+  splitPattern,
+  splitPatternLiteral,
   transliteratedAdjectiveTailParts,
 } from "./authoring.js";
 
@@ -581,12 +583,10 @@ const OBOSRAT_TRANSLIT_SPLIT_BASE = separatedPattern(
   ],
   OBOSRAT_SPLIT_SEPARATOR,
 );
-const obosratSplitTail = (parts: readonly string[]): string =>
-  separatedPattern(parts, OBOSRAT_SPLIT_SEPARATOR);
+const obosratSplitTail = splitPattern(OBOSRAT_SPLIT_SEPARATOR);
 const obosratSplitSuffix = (tail: string): string =>
   String.raw`${OBOSRAT_SPLIT_SEPARATOR}${tail}`;
-const obosratSplitLiteral = (source: string): string =>
-  obosratSplitTail(Array.from(source));
+const obosratSplitLiteral = splitPatternLiteral(OBOSRAT_SPLIT_SEPARATOR);
 
 const OBOSRAT_CYRILLIC_SPLIT_REFLEXIVE = obosratSplitTail([
   String.raw`с`,

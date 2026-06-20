@@ -65,6 +65,30 @@ export const separatedPattern = (
   separator: string,
 ): string => sources.join(separator);
 
+export const splitPattern =
+  (separator: string) =>
+  (sources: readonly string[]): string =>
+    separatedPattern(sources, separator);
+
+export const splitPatternLiteral =
+  (separator: string) =>
+  (source: string): string =>
+    splitPattern(separator)(Array.from(source));
+
+export const splitPatternWithTails =
+  (separator: string) =>
+  (baseParts: readonly string[], tails: readonly string[]): string =>
+    String.raw`${splitPattern(separator)(baseParts)}${separator}${regexGroup(
+      tails,
+    )}`;
+
+export const splitPatternWithOptionalTails =
+  (separator: string) =>
+  (baseParts: readonly string[], tails: readonly string[]): string =>
+    String.raw`${splitPattern(separator)(baseParts)}(?:${separator}${regexGroup(
+      tails,
+    )})?`;
+
 type PatternSequence = readonly string[];
 
 export const cyrillicAdjectiveTailParts = [

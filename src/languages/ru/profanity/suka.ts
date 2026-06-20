@@ -9,6 +9,9 @@ import {
   russianRule,
   separatedPattern,
   separatedPatterns,
+  splitPattern,
+  splitPatternWithOptionalTails,
+  splitPatternWithTails,
   token,
 } from "./authoring.js";
 
@@ -123,20 +126,13 @@ const SUKA_SPLIT_NEUTRAL_SOURCE = String.raw`${SUKA_SPLIT_NEUTRAL_BASE}${regexGr
 )}`;
 
 const SUKA_TRANSLIT_SPLIT_SEPARATOR = String.raw`[^\p{L}\p{N}\s]+`;
-const sukaTranslitSplit = (sources: readonly string[]): string =>
-  separatedPattern(sources, SUKA_TRANSLIT_SPLIT_SEPARATOR);
-const sukaTranslitSplitWithTails = (
-  baseParts: readonly string[],
-  tails: readonly string[],
-): string =>
-  String.raw`${sukaTranslitSplit(baseParts)}${SUKA_TRANSLIT_SPLIT_SEPARATOR}` +
-  regexGroup(tails);
-const sukaTranslitSplitWithOptionalTails = (
-  baseParts: readonly string[],
-  tails: readonly string[],
-): string =>
-  String.raw`${sukaTranslitSplit(baseParts)}(?:${SUKA_TRANSLIT_SPLIT_SEPARATOR}` +
-  String.raw`${regexGroup(tails)})?`;
+const sukaTranslitSplit = splitPattern(SUKA_TRANSLIT_SPLIT_SEPARATOR);
+const sukaTranslitSplitWithTails = splitPatternWithTails(
+  SUKA_TRANSLIT_SPLIT_SEPARATOR,
+);
+const sukaTranslitSplitWithOptionalTails = splitPatternWithOptionalTails(
+  SUKA_TRANSLIT_SPLIT_SEPARATOR,
+);
 
 const SUKA_SPLIT_CASE_TAILS = separatedPatterns(
   SUKA_CASE_TAIL_PARTS,

@@ -9,6 +9,7 @@ import {
   russianRule,
   separatedPattern,
   separatedPatterns,
+  splitPattern,
   token,
 } from "./authoring.js";
 
@@ -291,8 +292,7 @@ const HER_TRANSLIT_TAILS = [
 ] as const;
 
 const HER_TRANSLIT_SPLIT_SEPARATOR = String.raw`[-._]+`;
-const herTranslitSplit = (sources: readonly string[]): string =>
-  separatedPattern(sources, HER_TRANSLIT_SPLIT_SEPARATOR);
+const herTranslitSplit = splitPattern(HER_TRANSLIT_SPLIT_SEPARATOR);
 
 const HERNYA_TRANSLIT_SPLIT_TAILS = separatedPatterns(
   HERNYA_TRANSLIT_TAIL_PARTS,
