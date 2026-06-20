@@ -28,24 +28,6 @@ interface CoverageMetadataCase {
 
 const expectedMissingCases: readonly GapAuditCase[] = [
   {
-    family: "huylo",
-    input: "хуйло",
-    status: "expected-missing",
-    note: "whole-token political insult form is not owned by current huy rules",
-  },
-  {
-    family: "huylo",
-    input: "хуило",
-    status: "expected-missing",
-    note: "alternate spelling is not owned by current huy rules",
-  },
-  {
-    family: "huylo",
-    input: "хуила",
-    status: "expected-missing",
-    note: "inflected alternate spelling is not owned by current huy rules",
-  },
-  {
     family: "droch",
     input: "дрочить",
     status: "expected-missing",
@@ -90,6 +72,42 @@ const expectedMissingCases: readonly GapAuditCase[] = [
 ];
 
 const expectedCoveredCases: readonly GapAuditCase[] = [
+  {
+    family: "huylo",
+    input: "хуйло",
+    status: "expected-covered",
+    note: "reviewed strong-insult form is covered",
+  },
+  {
+    family: "huylo",
+    input: "хуило",
+    status: "expected-covered",
+    note: "reviewed alternate spelling is covered",
+  },
+  {
+    family: "huylo",
+    input: "хуила",
+    status: "expected-covered",
+    note: "reviewed alternate spelling inflection is covered",
+  },
+  {
+    family: "huylo",
+    input: "хуйлу",
+    status: "expected-covered",
+    note: "reviewed case form is covered",
+  },
+  {
+    family: "huylo",
+    input: "хуилом",
+    status: "expected-covered",
+    note: "reviewed alternate spelling case form is covered",
+  },
+  {
+    family: "huylo",
+    input: "хуйлах",
+    status: "expected-covered",
+    note: "reviewed plural case form is covered",
+  },
   {
     family: "yopt",
     input: "ёпт",
@@ -228,6 +246,14 @@ const intentionallyUnsupportedCases: readonly GapAuditCase[] = [
 ];
 
 const coverageMetadataCases: readonly CoverageMetadataCase[] = [
+  {
+    input: "хуйло",
+    expected: {
+      ruleId: "ru.insult.huylo.family",
+      category: "STRONG_INSULT",
+      severity: "high",
+    },
+  },
   {
     input: "ёпт",
     expected: {
