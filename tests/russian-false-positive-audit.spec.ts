@@ -4,6 +4,29 @@ import { filter } from "../src";
 
 import { expectUnchanged } from "./russian-audit-helpers";
 
+interface RiskyTransliterationContextCase {
+  readonly context:
+    | "account"
+    | "branch"
+    | "brand"
+    | "commit"
+    | "docs"
+    | "domain"
+    | "name"
+    | "package"
+    | "profile"
+    | "records"
+    | "repo"
+    | "team"
+    | "url";
+  readonly input: string;
+}
+
+interface RiskyTransliterationFamilyGroup {
+  readonly family: string;
+  readonly cases: readonly RiskyTransliterationContextCase[];
+}
+
 describe("Russian false-positive audit", () => {
   it("keeps audited Russian false positives and unsupported terms unchanged", () => {
     const cases = [
@@ -400,15 +423,121 @@ describe("Russian false-positive audit", () => {
     }
   }, 10_000);
 
+  it("keeps grouped risky transliteration contexts unchanged", () => {
+    const groups: readonly RiskyTransliterationFamilyGroup[] = [
+      {
+        family: "suka",
+        cases: [
+          { context: "brand", input: "Suka University" },
+          { context: "docs", input: "docs/Suka University guide" },
+          { context: "domain", input: "suka-university.example" },
+          { context: "url", input: "https://example.com/Suka-University" },
+          { context: "name", input: "S. Uka" },
+          { context: "records", input: "Suka, records" },
+        ],
+      },
+      {
+        family: "gandon",
+        cases: [
+          { context: "brand", input: "Gandon estate" },
+          { context: "repo", input: "Gandon/Road" },
+          { context: "profile", input: "Gandon.estate" },
+          { context: "account", input: "Gandon@house" },
+          { context: "domain", input: "gandon-estate.example" },
+          { context: "url", input: "https://example.com/Gandon-estate" },
+        ],
+      },
+      {
+        family: "zalupa",
+        cases: [
+          { context: "profile", input: "zalupa/profile" },
+          { context: "repo", input: "zalupa.profile" },
+          { context: "account", input: "zalupa@account" },
+          { context: "domain", input: "zalupa-profile.example" },
+          { context: "url", input: "https://example.com/zalupa.profile" },
+          { context: "docs", input: "docs/za-lupoy-guide" },
+        ],
+      },
+      {
+        family: "her",
+        cases: [
+          { context: "name", input: "Her name is Anna" },
+          { context: "docs", input: "Her et al." },
+          { context: "brand", input: "Hernandez" },
+          { context: "records", input: "P. Oher" },
+          { context: "team", input: "Херсонская команда" },
+          { context: "url", input: "https://example.com/her-docs" },
+        ],
+      },
+      {
+        family: "chmo",
+        cases: [
+          { context: "repo", input: "chmod" },
+          { context: "package", input: "@org/c-hmo-tools" },
+          { context: "branch", input: "feature/c-hmo-profile" },
+          { context: "team", input: "C HMO plan" },
+          { context: "domain", input: "c-hmo-plan.example" },
+          { context: "url", input: "https://example.com/C-HMO-plan" },
+        ],
+      },
+      {
+        family: "shlyuha",
+        cases: [
+          { context: "docs", input: "шлю сообщение" },
+          { context: "team", input: "шлю ха ха" },
+          { context: "name", input: "S. Halava" },
+          { context: "repo", input: "@org/s-halava-tools" },
+          { context: "domain", input: "s-halava.example" },
+          { context: "url", input: "https://example.com/S-Halava" },
+        ],
+      },
+      {
+        family: "huy",
+        cases: [
+          { context: "brand", input: "HUYA stock" },
+          { context: "name", input: "Huy Nguyen" },
+          { context: "records", input: "Huy's sauce" },
+          { context: "team", input: "K-Huy Nguyen" },
+          { context: "domain", input: "huynguyen.example" },
+          { context: "url", input: "https://example.com/HuyNguyen" },
+        ],
+      },
+      {
+        family: "eb",
+        cases: [
+          { context: "brand", input: "eBanking" },
+          { context: "package", input: "@org/e-banking-tools" },
+          { context: "branch", input: "feature/e-banking-profile" },
+          { context: "commit", input: "commit: update e-banking docs" },
+          { context: "domain", input: "e-banking.example" },
+          { context: "url", input: "https://example.com/e-banking" },
+        ],
+      },
+    ];
+
+    for (const group of groups) {
+      for (const testCase of group.cases) {
+        expect(
+          filter.censor(testCase.input),
+          `${group.family} ${testCase.context}: ${testCase.input}`,
+        ).toBe(testCase.input);
+      }
+    }
+  });
+
   it("does not treat neutral-tail prefixes as safe contexts", () => {
     const cases: Array<[string, string]> = [
       ["suka recordsxxx", "**** recordsxxx"],
       ["suka.records-fake", "****.records-fake"],
+      ["Suka Universityx", "**** Universityx"],
       ["Suka:records", "Suka:records"],
       ["Suka: records", "Suka: records"],
       ["Suka, records", "Suka, records"],
+      ["gandon/estatex", "******/estatex"],
+      ["gandon.estatex", "******.estatex"],
       ["zalupa/profilex", "******/profilex"],
       ["zalupa/profile_x", "******/profile_x"],
+      ["Zalupa URLx", "****** URLx"],
       ["Zalupa:URL", "Zalupa:URL"],
       ["Zalupa: URL", "Zalupa: URL"],
       ["Zalupa — URL", "Zalupa — URL"],
