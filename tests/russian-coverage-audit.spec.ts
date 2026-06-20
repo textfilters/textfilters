@@ -11,6 +11,50 @@ import {
   ZERO_WIDTH,
 } from "./russian-audit-helpers";
 
+interface RussianFamilyMatrix {
+  readonly root: string;
+  readonly tails: readonly string[];
+  readonly split?: boolean;
+}
+
+interface GeneratedRussianFamilyCase {
+  readonly label: string;
+  readonly input: string;
+}
+
+const splitLetters = (input: string): string => Array.from(input).join("-");
+
+const generateRussianFamilyCases = (
+  family: RussianFamilyMatrix,
+  { includeSplit }: { readonly includeSplit: boolean },
+): GeneratedRussianFamilyCase[] =>
+  family.tails.flatMap((tail) => {
+    const input = `${family.root}${tail}`;
+    const label = `${family.root}+${tail || "<empty>"}`;
+    const cases: GeneratedRussianFamilyCase[] = [
+      { label: `${label} plain`, input },
+    ];
+
+    if (includeSplit) {
+      cases.push({ label: `${label} split`, input: splitLetters(input) });
+    }
+
+    return cases;
+  });
+
+const expectGeneratedFamilyCasesMasked = (
+  families: readonly RussianFamilyMatrix[],
+  getIncludeSplit: (family: RussianFamilyMatrix) => boolean,
+): void => {
+  for (const family of families) {
+    for (const { label, input } of generateRussianFamilyCases(family, {
+      includeSplit: getIncludeSplit(family),
+    })) {
+      expect(filter.censor(input), label).toBe(mask(input));
+    }
+  }
+};
+
 describe("Russian coverage audit", () => {
   it("keeps strict and loose Russian dictionary views distinct", () => {
     const strictOnly = createProfanityFilter(STRICT_BASE, []);
@@ -662,10 +706,7 @@ describe("Russian coverage audit", () => {
   });
 
   it("covers Cyrillic split inflection matrices for expanded Russian families", () => {
-    const families: Array<{
-      readonly root: string;
-      readonly tails: readonly string[];
-    }> = [
+    const families: RussianFamilyMatrix[] = [
       {
         root: "сук",
         tails: ["а", "у", "ой", "ам", "ами", "ах", "ин", "ара", "ачка"],
@@ -838,21 +879,11 @@ describe("Russian coverage audit", () => {
       },
     ];
 
-    for (const { root, tails } of families) {
-      for (const tail of tails) {
-        const input = `${root}${tail}`;
-        expectFullyMasked(input);
-        expectFullyMasked(Array.from(input).join("-"));
-      }
-    }
+    expectGeneratedFamilyCasesMasked(families, () => true);
   });
 
   it("covers transliterated inflection matrices for expanded Russian families", () => {
-    const families: Array<{
-      readonly root: string;
-      readonly tails: readonly string[];
-      readonly split?: boolean;
-    }> = [
+    const families: RussianFamilyMatrix[] = [
       {
         root: "suk",
         tails: [
@@ -1212,16 +1243,10 @@ describe("Russian coverage audit", () => {
       },
     ];
 
-    for (const { root, tails, split } of families) {
-      for (const tail of tails) {
-        const input = `${root}${tail}`;
-        expectFullyMasked(input);
-
-        if (split === true) {
-          expectFullyMasked(input.split("").join("-"));
-        }
-      }
-    }
+    expectGeneratedFamilyCasesMasked(
+      families,
+      (family) => family.split === true,
+    );
 
     const obosratForms = [
       "obosrat",
@@ -1259,8 +1284,10 @@ describe("Russian coverage audit", () => {
     ];
 
     for (const input of obosratForms) {
-      expectFullyMasked(input);
-      expectFullyMasked(input.split("").join("-"));
+      expect(filter.censor(input), `${input} plain`).toBe(mask(input));
+      expect(filter.censor(splitLetters(input)), `${input} split`).toBe(
+        mask(splitLetters(input)),
+      );
     }
 
     const splitOnlyForms = [
