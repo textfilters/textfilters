@@ -28,17 +28,44 @@ Packages are released independently, so versions are not kept in lockstep across
 
 | Package | Purpose | Shared mutable instance or stateless API | Output shape | Range support | Metadata/options support | Runtime dependencies inside the ecosystem | Dist smoke/check status | Repository |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `@textfilters/core` | Shared contracts, normalization helpers, range masking, and pipelines. | Stateless helpers plus factory-created pipelines with mutable registration order. | Censored text, guard decisions, pipeline process results, and range helpers. | Exposes UTF-16 and code point range types plus merge/mask helpers. | Pipeline and guard contracts; no package-specific detection metadata. | None. | `check` runs lint, tests, build, dist smoke, and dry-run pack. | [`textfilters/core`](../core) |
-| `@textfilters/url` | Direct, obfuscated, defanged, and hxxp URL detection. | Shared default `filter`; `createUrlFilter` / `urlFilter` create isolated stateless censors. | Censored text through the `TextCensor` interface. | Uses code point ranges internally; ranges are not public API output. | `tlds` and `maskChar` options. | `@textfilters/core`. | `check` runs lint, tests, build, dist smoke, and dry-run pack; `prepack` also builds before packing. | [`textfilters/url`](../url) |
-| `@textfilters/email` | Direct and obfuscated email detection with contact redaction guards. | Shared default `filter`; `createEmailFilter` / `emailFilter` create isolated stateless censors. | Censored text through the `TextCensor` interface. | Uses code point ranges internally; ranges are not public API output. | Masking, obfuscation, localhost, single-label domain, and exclusion options. | `@textfilters/core`. | `check` runs lint, tests, build, dist smoke, and dry-run pack. | [`textfilters/email`](../email) |
-| `@textfilters/phone` | Phone number and phone-like sequence detection. | Shared default `filter`; `createPhoneFilter` / `phoneFilter` create isolated stateless censors. | Censored text through the `TextCensor` interface. | Uses code point ranges internally; ranges are not public API output. | `maskChar` option. | `@textfilters/core`. | `check` runs lint, tests, build, dist smoke, and dry-run pack. | [`textfilters/phone`](../phone) |
-| `@textfilters/profanity` | Russian profanity filtering, dictionary validation, obfuscation handling, and taxonomy-aware matching. | Shared mutable `filter`; `createProfanityFilter` and dictionary factories create isolated mutable filters. | `censor()` text, `check()` boolean, and `analyze()` match ranges. | Public `analyze()` ranges include source offsets and match mode. | Category, severity, rule id, match-mode metadata, filter options, and mutable strict/loose term APIs. | `@textfilters/core`. | `check` includes lint, tests, dist smoke, and dry-run pack. | [`textfilters/profanity`](../profanity) |
-| `@textfilters/spam` | Interval, duplicate, burst, and actor-based anti-spam decisions. | Factory-created stateful guards; `reset()` clears actor state. | Guard decision objects: `{ allowed: true }` or `{ allowed: false, reason }`. | Not range-based. | Timing/window/max-actor config plus typed block reasons. | `@textfilters/core`. | `check` includes lint, tests, build, dist smoke, and dry-run pack. | [`textfilters/spam`](../spam) |
+| `@textfilters/core` | Shared contracts, normalization helpers, range masking, and pipelines. | Stateless helpers plus factory-created pipelines with mutable registration order. | Censored text, guard decisions, pipeline process results, and range helpers. | Exposes UTF-16 and code point range types plus merge/mask helpers. | Pipeline and guard contracts; no package-specific detection metadata. | None. | `check` runs lint, tests, build, and dry-run pack. | [`textfilters/core`](../core) |
+| `@textfilters/url` | Direct, obfuscated, defanged, and hxxp URL detection. | Shared default `filter`; `createUrlFilter` / `urlFilter` create isolated stateless censors. | Censored text through the `TextCensor` interface. | Uses code point ranges internally; ranges are not public API output. | `tlds` and `maskChar` options. | `@textfilters/core`. | `check` runs lint, tests, build, and dry-run pack; `prepack` also builds before packing. | [`textfilters/url`](../url) |
+| `@textfilters/email` | Direct and obfuscated email detection with contact redaction guards. | Shared default `filter`; `createEmailFilter` / `emailFilter` create isolated stateless censors. | Censored text through the `TextCensor` interface. | Uses code point ranges internally; ranges are not public API output. | Masking, obfuscation, localhost, single-label domain, and exclusion options. | `@textfilters/core`. | `check` runs lint, tests, build, and dry-run pack. | [`textfilters/email`](../email) |
+| `@textfilters/phone` | Phone number and phone-like sequence detection. | Shared default `filter`; `createPhoneFilter` / `phoneFilter` create isolated stateless censors. | Censored text through the `TextCensor` interface. | Uses code point ranges internally; ranges are not public API output. | `maskChar` option. | `@textfilters/core`. | `check` runs lint, tests, build, and dry-run pack. | [`textfilters/phone`](../phone) |
+| `@textfilters/profanity` | Russian profanity filtering, dictionary validation, obfuscation handling, and taxonomy-aware matching. | Shared mutable `filter`; `createProfanityFilter` and dictionary factories create isolated mutable filters for runtime dictionary changes. | `censor()` text, `check()` boolean, and `analyze()` match ranges. | Public `analyze()` ranges include source offsets and match mode. | Category, severity, rule id, match-mode metadata, filter options, dictionary validation, compiled dictionary reuse, and mutable strict/loose term APIs. | `@textfilters/core`. | `check` includes lint, tests, build, dist smoke, and dry-run pack. | [`textfilters/profanity`](../profanity) |
+| `@textfilters/spam` | Interval, duplicate, burst, and actor-based anti-spam decisions. | Factory-created stateful guards; `reset()` clears actor state for the guard instance. | Guard decision objects: `{ allowed: true }` or `{ allowed: false, reason }`. | Not range-based. | Timing/window/max-actor config plus typed block reasons. | `@textfilters/core`. | `check` includes lint, tests, build, dist smoke, and dry-run pack. | [`textfilters/spam`](../spam) |
 
 Package repositories share the same quality-gate contract: `npm run check`
-runs formatting checks, tests, a TypeScript build, a minimal `dist` entrypoint
-smoke check, and `npm pack --dry-run`. The URL package also keeps a `prepack`
-build hook so direct package packing remains build-backed outside `check`.
+runs formatting checks, tests, a TypeScript build, and `npm pack --dry-run`.
+Packages with a `smoke:dist` script include it in `check`; the URL package also
+keeps a `prepack` build hook so direct package packing remains build-backed
+outside `check`.
+
+## Package Behavior Model
+
+The URL, email, and phone packages are text censors. Their exported `filter`
+instances are convenient shared defaults, while `createUrlFilter`,
+`createEmailFilter`, and `createPhoneFilter` create isolated censors with their
+own options. They do not expose mutable runtime dictionaries, and callers
+receive censored text rather than public match ranges.
+
+The spam package is intentionally stateful. `createSpamFilter(config?)` returns
+an in-memory guard that tracks actor message timing, duplicate content, and
+burst windows until `reset()` is called, stale actor state is pruned, or
+`maxActors` eviction removes the least-recent actor state. Create separate guard
+instances for separate moderation scopes.
+
+The profanity package is dictionary-backed and mutable. Its shared `filter` is
+the built-in Russian default for common read-only `check`, `censor`, and
+`analyze` calls. Use the package's factory-created filters when application,
+tenant, request, or test-specific runtime terms must be isolated. Profanity
+`analyze()` output can include match mode, rule ids, categories, and severities
+from the maintained dictionary.
+
+`@textfilters/core` owns the shared contracts used across the ecosystem:
+normalization helpers, `TextCensor`, pipeline composition, guard decision types,
+range merging, and UTF-16 and code point masking helpers. Package-specific
+README files document the exact masking and offset guarantees for each filter.
 
 ## Which Package Should I Use?
 
