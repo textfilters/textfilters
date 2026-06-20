@@ -8,6 +8,7 @@ import { mask } from "./helpers";
 import {
   COMBINING_ACUTE,
   expectFullyMasked,
+  expectUnchanged,
   ZERO_WIDTH,
 } from "./russian-audit-helpers";
 
@@ -220,6 +221,57 @@ describe("Russian coverage audit", () => {
       expect(filter.analyze(input), input).toEqual(
         expect.arrayContaining([expect.objectContaining(expected)]),
       );
+    }
+  });
+
+  it("documents broad pizd and huy derivative audit metadata", () => {
+    const matchedDerivatives = [
+      {
+        input: "пиздобол",
+        expected: {
+          ruleId: "ru.obscene.pizda.family",
+          category: "OBSCENE_MAT",
+          severity: "high",
+          mode: "strict",
+        },
+      },
+      {
+        input: "пиздун",
+        expected: {
+          ruleId: "ru.obscene.pizda.family",
+          category: "OBSCENE_MAT",
+          severity: "high",
+          mode: "strict",
+        },
+      },
+      {
+        input: "пиздёж",
+        expected: {
+          ruleId: "ru.obscene.pizda.family",
+          category: "OBSCENE_MAT",
+          severity: "high",
+          mode: "strict",
+        },
+      },
+    ];
+
+    for (const { input, expected } of matchedDerivatives) {
+      expect(filter.analyze(input), input).toEqual(
+        expect.arrayContaining([expect.objectContaining(expected)]),
+      );
+    }
+
+    const intentionallyUnmatchedDerivatives = [
+      "спиздить",
+      "хуемёт",
+      "хуеплёт",
+      "хуеглот",
+      "хуежопый",
+    ];
+
+    for (const input of intentionallyUnmatchedDerivatives) {
+      expectUnchanged(input);
+      expect(filter.analyze(input), input).toEqual([]);
     }
   });
 
