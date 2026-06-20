@@ -24,9 +24,12 @@ export type {
   ProfanityLanguageDictionaryValidationIssueCode,
 } from "./languages/validation.js";
 export {
+  compileProfanityDictionary,
   createProfanityFilter,
+  createProfanityFilterFromCompiledDictionary,
   createProfanityFilterFromDictionary,
   filter,
   profanityFilter,
 } from "./filter.js";
+export type { CompiledProfanityDictionary } from "./filter.js";
 export { russianProfanityDictionary } from "./languages/ru/index.js";

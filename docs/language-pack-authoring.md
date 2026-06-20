@@ -289,12 +289,18 @@ Conformance tests should also cover that
 that preserves rule ids, categories, and severities in `analyze()` output.
 
 The package-level public boundary is
-`createProfanityFilterFromDictionary(dictionary)`. External packs should avoid
-depending on internal matcher modules or compiled matcher representations.
+`createProfanityFilterFromDictionary(dictionary)`. Services that construct many
+filters from the same dictionary can use
+`compileProfanityDictionary(dictionary)` once and pass the result to
+`createProfanityFilterFromCompiledDictionary(compiled)`. The compiled dictionary
+is a snapshot of the source dictionary at compile time, and each created filter
+receives isolated mutable state. External packs should avoid depending on
+internal matcher modules or private matcher representations.
 
 Runtime mutations on a dictionary-backed filter still use normalized literals.
 Calls such as `setStrict`, `setLoose`, `addStrict`, and `addLoose` do not expose
-the dictionary's internal rule compiler to caller-provided terms.
+the dictionary's internal rule compiler to caller-provided terms, and they do
+not mutate a compiled dictionary reused by other filters.
 
 A minimal non-published template for a future external pack lives in
 [`../examples/language-pack/`](../examples/language-pack/). It uses the fake

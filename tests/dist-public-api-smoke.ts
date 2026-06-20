@@ -1,9 +1,12 @@
 import {
+  compileProfanityDictionary,
   createProfanityFilter,
+  createProfanityFilterFromCompiledDictionary,
   createProfanityFilterFromDictionary,
   filter,
   PROFANITY_FILTER_NAME,
   russianProfanityDictionary,
+  type CompiledProfanityDictionary,
   validateProfanityLanguageDictionary,
   type ProfanityCategory,
   type ProfanityFilter,
@@ -28,6 +31,8 @@ const metadata: ProfanityTaxonomyMetadata = {
   severity,
 };
 const dictionary: ProfanityLanguageDictionary = russianProfanityDictionary;
+const compiledDictionary: CompiledProfanityDictionary =
+  compileProfanityDictionary(dictionary);
 const dictionaryRule: ProfanityLanguageRuleDefinition | undefined =
   dictionary.rules[0];
 const dictionaryValidationIssues: ProfanityLanguageDictionaryValidationIssue[] =
@@ -43,6 +48,8 @@ const strict: ProfanityFilter = createProfanityFilter(
 );
 const dictionaryFilter: ProfanityFilter =
   createProfanityFilterFromDictionary(dictionary);
+const compiledDictionaryFilter: ProfanityFilter =
+  createProfanityFilterFromCompiledDictionary(compiledDictionary);
 const match: ProfanityMatchRange | undefined = strict.analyze(
   "alpha beta gamma delta",
   options,
@@ -50,6 +57,7 @@ const match: ProfanityMatchRange | undefined = strict.analyze(
 
 filter.check("plain text");
 dictionaryFilter.check("plain text");
+compiledDictionaryFilter.check("plain text");
 
 if (PROFANITY_FILTER_NAME !== "profanity") {
   throw new Error("Unexpected filter name declaration.");
@@ -61,6 +69,14 @@ if (dictionaryRule?.source === undefined) {
 
 if (dictionaryValidationIssues.length !== 0) {
   throw new Error("Unexpected dictionary validation issue surface.");
+}
+
+if (
+  compiledDictionary.language !== "ru" ||
+  compiledDictionary.strictRuleCount === 0 ||
+  compiledDictionary.looseRuleCount === 0
+) {
+  throw new Error("Unexpected compiled dictionary declaration surface.");
 }
 
 if (match?.category !== category || match.severity !== severity) {

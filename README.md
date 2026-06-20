@@ -185,7 +185,9 @@ isolated filter built from a maintained language dictionary:
 
 ```ts
 import {
+  compileProfanityDictionary,
   createProfanityFilterFromDictionary,
+  createProfanityFilterFromCompiledDictionary,
   russianProfanityDictionary,
   validateProfanityLanguageDictionary,
   type ProfanityLanguageDictionary,
@@ -194,25 +196,39 @@ import {
 const dictionary: ProfanityLanguageDictionary = russianProfanityDictionary;
 const issues = validateProfanityLanguageDictionary(dictionary);
 const russianFilter = createProfanityFilterFromDictionary(dictionary);
+const compiledRussian = compileProfanityDictionary(dictionary);
+const tenantFilter =
+  createProfanityFilterFromCompiledDictionary(compiledRussian);
 
 if (issues.length > 0) {
   throw new Error(JSON.stringify(issues, null, 2));
 }
 
 russianFilter.analyze("message text");
+tenantFilter.addStrict("tenant-only-term");
 ```
 
 `createProfanityFilterFromDictionary(dictionary)` compiles strict and loose
 views from the dictionary and returns a mutable `ProfanityFilter` instance. The
 instance is isolated from the shared `filter` export, so later calls to
 `setStrict`, `setLoose`, `addStrict`, or `addLoose` affect only that instance.
+For repeated server-side construction from the same dictionary, compile the
+dictionary once with `compileProfanityDictionary(dictionary)` and pass the
+result to `createProfanityFilterFromCompiledDictionary(compiled)`. This reuses
+the dictionary rule and matcher compilation work while still returning an
+isolated mutable filter each time. The compiled object is a snapshot of the
+dictionary at compile time; mutating the source dictionary later only affects
+future direct `createProfanityFilterFromDictionary(dictionary)` calls or a new
+explicit compilation.
 
 Dictionary-backed matches preserve semantic rule ids, categories, and
 severities in `analyze()` output, and taxonomy filters apply to those metadata
 fields. Runtime dictionary terms remain normalized literals; language
 dictionaries are the supported boundary for maintained language-specific rule
-data. This release intentionally keeps the public surface small and does not
-add new languages or separate packages.
+data. Runtime calls such as `setStrict`, `setLoose`, `addStrict`, and `addLoose`
+only mutate the returned filter instance; they do not change the compiled
+dictionary object or other filters created from it. This release intentionally
+does not add new languages or separate packages.
 
 The Russian dictionary is maintained as split family data with an explicit rule
 order. New high-risk family rules are expected to add nearby coverage and

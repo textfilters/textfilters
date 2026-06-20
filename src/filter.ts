@@ -35,8 +35,13 @@ import {
   type ProfanityTermList,
 } from "./types.js";
 import {
+  compileLooseLiteralPatterns,
+  compileStrictLiteralPatterns,
+  compileStrictPhraseLiteralPatterns,
+  compileStrictSymbolLiteralPatterns,
   normalizeLiteralTerm,
   type LiteralTermDefinition,
+  strictSymbolLiteralLengths,
 } from "./matchers/literals.js";
 
 interface FilterState {
@@ -46,16 +51,82 @@ interface FilterState {
   looseTerms: MatcherTerms;
   strictPatterns: StrictPatternSet;
   loosePatterns: CompiledPattern[];
+  strictBasePatterns?: StrictPatternSet;
+  looseBasePatterns?: readonly CompiledPattern[];
 }
+
+export interface CompiledProfanityDictionary {
+  readonly language: string;
+  readonly strictRuleCount: number;
+  readonly looseRuleCount: number;
+}
+
+interface CompiledDictionaryState {
+  readonly strictTerms: MatcherTerms;
+  readonly looseTerms: MatcherTerms;
+  readonly strictPatterns: StrictPatternSet;
+  readonly loosePatterns: readonly CompiledPattern[];
+}
+
+const compiledDictionaryStates = new WeakMap<
+  CompiledProfanityDictionary,
+  CompiledDictionaryState
+>();
+const COMPILED_DICTIONARY_STATE =
+  "__textfiltersProfanityCompiledDictionaryState";
+
+type CompiledProfanityDictionaryWithState = CompiledProfanityDictionary & {
+  readonly [COMPILED_DICTIONARY_STATE]?: CompiledDictionaryState;
+};
 
 export const createProfanityFilter = (
   strictTerms: ProfanityTermList = STRICT_BASE,
   looseTerms: ProfanityTermList = LOOSE_BASE,
 ): ProfanityFilter => createFilter(createState(strictTerms, looseTerms));
 
+export const compileProfanityDictionary = (
+  dictionary: ProfanityLanguageDictionary,
+): CompiledProfanityDictionary => {
+  const state = compileDictionaryState(dictionary);
+  const compiled: CompiledProfanityDictionary = {
+    language: dictionary.language,
+    strictRuleCount: state.strictTerms.internal.length,
+    looseRuleCount: state.looseTerms.internal.length,
+  };
+
+  compiledDictionaryStates.set(compiled, state);
+  Object.defineProperty(compiled, COMPILED_DICTIONARY_STATE, {
+    value: state,
+    enumerable: false,
+  });
+
+  return compiled;
+};
+
 export const createProfanityFilterFromDictionary = (
   dictionary: ProfanityLanguageDictionary,
-): ProfanityFilter => createFilter(createDictionaryState(dictionary));
+): ProfanityFilter =>
+  createProfanityFilterFromCompiledDictionary(
+    compileProfanityDictionary(dictionary),
+  );
+
+export const createProfanityFilterFromCompiledDictionary = (
+  dictionary: CompiledProfanityDictionary,
+): ProfanityFilter => {
+  const compiledState =
+    compiledDictionaryStates.get(dictionary) ??
+    (dictionary as CompiledProfanityDictionaryWithState)[
+      COMPILED_DICTIONARY_STATE
+    ];
+
+  if (compiledState === undefined) {
+    throw new TypeError(
+      "Expected a compiled profanity dictionary created by compileProfanityDictionary().",
+    );
+  }
+
+  return createFilter(createStateFromCompiledDictionary(compiledState));
+};
 
 function createFilter(state: FilterState): ProfanityFilter {
   return {
@@ -66,6 +137,7 @@ function createFilter(state: FilterState): ProfanityFilter {
     censor: (text, options) => censorText(state, String(text), options),
     setStrict: (list) => {
       state.strictTerms = runtimeLiteralTerms(list);
+      state.strictBasePatterns = undefined;
       rebuildStrict(state);
     },
     addStrict: (term) => {
@@ -74,6 +146,7 @@ function createFilter(state: FilterState): ProfanityFilter {
     },
     setLoose: (list) => {
       state.looseTerms = runtimeLiteralTerms(list);
+      state.looseBasePatterns = undefined;
       rebuildLoose(state);
     },
     addLoose: (term) => {
@@ -111,39 +184,99 @@ function createState(
   return state;
 }
 
-function createDictionaryState(
+function compileDictionaryState(
   dictionary: ProfanityLanguageDictionary,
-): FilterState {
-  const state: FilterState = {
-    strictTerms: builtInRuleTerms(
-      dictionaryRulesForMode(dictionary, "strict"),
-      "strict",
-    ),
-    looseTerms: builtInRuleTerms(
-      dictionaryRulesForMode(dictionary, "loose"),
-      "loose",
-    ),
-    strictPatterns: {
-      token: [],
-      symbolToken: [],
-      symbolLengths: [],
-      phrase: [],
-    },
-    loosePatterns: [],
+): CompiledDictionaryState {
+  const strictTerms = builtInRuleTerms(
+    dictionaryRulesForMode(dictionary, "strict"),
+    "strict",
+  );
+  const looseTerms = builtInRuleTerms(
+    dictionaryRulesForMode(dictionary, "loose"),
+    "loose",
+  );
+
+  return {
+    strictTerms,
+    looseTerms,
+    strictPatterns: buildStrictPatterns(strictTerms),
+    loosePatterns: buildLoosePatterns(looseTerms),
   };
+}
 
-  rebuildStrict(state);
-  rebuildLoose(state);
+function createStateFromCompiledDictionary(
+  state: CompiledDictionaryState,
+): FilterState {
+  return {
+    strictTerms: cloneMatcherTerms(state.strictTerms),
+    looseTerms: cloneMatcherTerms(state.looseTerms),
+    strictPatterns: cloneStrictPatternSet(state.strictPatterns),
+    loosePatterns: [...state.loosePatterns],
+    strictBasePatterns: cloneStrictPatternSet(state.strictPatterns),
+    looseBasePatterns: [...state.loosePatterns],
+  };
+}
 
-  return state;
+function cloneMatcherTerms(terms: MatcherTerms): MatcherTerms {
+  return {
+    internal: [...terms.internal],
+    literals: [...terms.literals],
+  };
+}
+
+function cloneStrictPatternSet(patterns: StrictPatternSet): StrictPatternSet {
+  return {
+    token: [...patterns.token],
+    symbolToken: [...patterns.symbolToken],
+    symbolLengths: [...patterns.symbolLengths],
+    phrase: [...patterns.phrase],
+  };
 }
 
 function rebuildStrict(state: FilterState): void {
-  state.strictPatterns = buildStrictPatterns(state.strictTerms);
+  state.strictPatterns =
+    state.strictBasePatterns === undefined ||
+    state.strictTerms.internal.length === 0
+      ? buildStrictPatterns(state.strictTerms)
+      : appendStrictLiteralPatterns(
+          state.strictBasePatterns,
+          state.strictTerms.literals,
+        );
 }
 
 function rebuildLoose(state: FilterState): void {
-  state.loosePatterns = buildLoosePatterns(state.looseTerms);
+  state.loosePatterns =
+    state.looseBasePatterns === undefined ||
+    state.looseTerms.internal.length === 0
+      ? buildLoosePatterns(state.looseTerms)
+      : [
+          ...state.looseBasePatterns,
+          ...compileLooseLiteralPatterns(state.looseTerms.literals),
+        ];
+}
+
+function appendStrictLiteralPatterns(
+  basePatterns: StrictPatternSet,
+  literals: readonly LiteralTermDefinition[],
+): StrictPatternSet {
+  return {
+    token: [
+      ...basePatterns.token,
+      ...compileStrictLiteralPatterns(literals, true),
+    ],
+    symbolToken: [
+      ...basePatterns.symbolToken,
+      ...compileStrictSymbolLiteralPatterns(literals),
+    ],
+    symbolLengths: [
+      ...basePatterns.symbolLengths,
+      ...strictSymbolLiteralLengths(literals),
+    ],
+    phrase: [
+      ...basePatterns.phrase,
+      ...compileStrictPhraseLiteralPatterns(literals),
+    ],
+  };
 }
 
 const builtInRuleTerms = (

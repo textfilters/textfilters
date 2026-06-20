@@ -1,5 +1,7 @@
 import {
+  compileProfanityDictionary,
   createProfanityFilter,
+  createProfanityFilterFromCompiledDictionary,
   createProfanityFilterFromDictionary,
   filter,
   PROFANITY_FILTER_NAME,
@@ -18,6 +20,11 @@ const strict = createProfanityFilter(
 const dictionaryFilter = createProfanityFilterFromDictionary(
   russianProfanityDictionary,
 );
+const compiledDictionary = compileProfanityDictionary(
+  russianProfanityDictionary,
+);
+const compiledDictionaryFilter =
+  createProfanityFilterFromCompiledDictionary(compiledDictionary);
 const input = "alpha beta gamma delta";
 
 if (PROFANITY_FILTER_NAME !== "profanity") {
@@ -30,6 +37,20 @@ if (!filter.check("привет блядь")) {
 
 if (!dictionaryFilter.check("привет блядь")) {
   throw new Error("Dist dictionary filter did not detect a built-in match.");
+}
+
+if (!compiledDictionaryFilter.check("привет блядь")) {
+  throw new Error(
+    "Dist compiled dictionary filter did not detect a built-in match.",
+  );
+}
+
+if (
+  compiledDictionary.language !== "ru" ||
+  compiledDictionary.strictRuleCount === 0 ||
+  compiledDictionary.looseRuleCount === 0
+) {
+  throw new Error("Dist compiled dictionary metadata was not exported.");
 }
 
 if (
