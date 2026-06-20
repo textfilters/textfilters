@@ -8,6 +8,7 @@ import mudProfanity from "./profanity/mud.json" with { type: "json" };
 import pidorProfanity from "./profanity/pidor.json" with { type: "json" };
 import pizdaProfanity from "./profanity/pizda.json" with { type: "json" };
 import russianProfanityRuleOrder from "./profanity/order.json" with { type: "json" };
+import reviewedGapProfanity from "./profanity/reviewed-gaps.js";
 import shitProfanity from "./profanity/shit.js";
 import shlyuhaProfanity from "./profanity/shlyuha.js";
 import sukaProfanity from "./profanity/suka.js";
@@ -28,6 +29,7 @@ export const RUSSIAN_PROFANITY_FAMILY_DICTIONARIES = [
   mudProfanity as ProfanityLanguageDictionary,
   pidorProfanity as ProfanityLanguageDictionary,
   pizdaProfanity as ProfanityLanguageDictionary,
+  reviewedGapProfanity,
   shitProfanity,
   shlyuhaProfanity,
   sukaProfanity,

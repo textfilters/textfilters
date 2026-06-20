@@ -17,85 +17,16 @@ interface GapAuditCase {
   readonly note: string;
 }
 
+interface CoverageMetadataCase {
+  readonly input: string;
+  readonly expected: {
+    readonly ruleId: string;
+    readonly category: string;
+    readonly severity: string;
+  };
+}
+
 const expectedMissingCases: readonly GapAuditCase[] = [
-  {
-    family: "yopt",
-    input: "ёпт",
-    status: "expected-missing",
-    note: "short expletive-like form pending reviewed taxonomy and neutral collision checks",
-  },
-  {
-    family: "yopt",
-    input: "епт",
-    status: "expected-missing",
-    note: "yo/e variant pending reviewed taxonomy and neutral collision checks",
-  },
-  {
-    family: "yopt",
-    input: "ёпта",
-    status: "expected-missing",
-    note: "inflected expletive-like form pending reviewed coverage",
-  },
-  {
-    family: "yopt",
-    input: "епта",
-    status: "expected-missing",
-    note: "yo/e inflected form pending reviewed coverage",
-  },
-  {
-    family: "yopt",
-    input: "ептваю",
-    status: "expected-missing",
-    note: "phrase-like form pending reviewed coverage",
-  },
-  {
-    family: "yopt",
-    input: "ёптваю",
-    status: "expected-missing",
-    note: "yo/e phrase-like form pending reviewed coverage",
-  },
-  {
-    family: "zhopa",
-    input: "жопа",
-    status: "expected-missing",
-    note: "vulgar bodily term pending positive tests and neutral-word locks",
-  },
-  {
-    family: "zhopa",
-    input: "жопу",
-    status: "expected-missing",
-    note: "case form pending positive tests and neutral-word locks",
-  },
-  {
-    family: "zhopa",
-    input: "жопой",
-    status: "expected-missing",
-    note: "case form pending positive tests and neutral-word locks",
-  },
-  {
-    family: "zhopa",
-    input: "жопный",
-    status: "expected-missing",
-    note: "adjective form pending positive tests and neutral-word locks",
-  },
-  {
-    family: "manda",
-    input: "манда",
-    status: "expected-missing",
-    note: "wider anatomical form pending separate reviewed coverage",
-  },
-  {
-    family: "manda",
-    input: "манду",
-    status: "expected-missing",
-    note: "wider anatomical case form pending separate reviewed coverage",
-  },
-  {
-    family: "manda",
-    input: "мандой",
-    status: "expected-missing",
-    note: "wider anatomical case form pending separate reviewed coverage",
-  },
   {
     family: "huylo",
     input: "хуйло",
@@ -160,10 +91,88 @@ const expectedMissingCases: readonly GapAuditCase[] = [
 
 const expectedCoveredCases: readonly GapAuditCase[] = [
   {
+    family: "yopt",
+    input: "ёпт",
+    status: "expected-covered",
+    note: "reviewed short expletive-like form is covered",
+  },
+  {
+    family: "yopt",
+    input: "епт",
+    status: "expected-covered",
+    note: "reviewed yo/e variant is covered",
+  },
+  {
+    family: "yopt",
+    input: "ёпта",
+    status: "expected-covered",
+    note: "reviewed inflected expletive-like form is covered",
+  },
+  {
+    family: "yopt",
+    input: "епта",
+    status: "expected-covered",
+    note: "reviewed yo/e inflected form is covered",
+  },
+  {
+    family: "yopt",
+    input: "ептваю",
+    status: "expected-covered",
+    note: "reviewed phrase-like form is covered",
+  },
+  {
+    family: "yopt",
+    input: "ёптваю",
+    status: "expected-covered",
+    note: "reviewed yo/e phrase-like form is covered",
+  },
+  {
+    family: "zhopa",
+    input: "жопа",
+    status: "expected-covered",
+    note: "reviewed vulgar bodily term is covered",
+  },
+  {
+    family: "zhopa",
+    input: "жопу",
+    status: "expected-covered",
+    note: "reviewed case form is covered",
+  },
+  {
+    family: "zhopa",
+    input: "жопой",
+    status: "expected-covered",
+    note: "reviewed case form is covered",
+  },
+  {
+    family: "zhopa",
+    input: "жопный",
+    status: "expected-covered",
+    note: "reviewed adjective form is covered",
+  },
+  {
+    family: "manda",
+    input: "манда",
+    status: "expected-covered",
+    note: "reviewed anatomical form is covered",
+  },
+  {
+    family: "manda",
+    input: "манду",
+    status: "expected-covered",
+    note: "reviewed anatomical case form is covered",
+  },
+  {
+    family: "manda",
+    input: "мандой",
+    status: "expected-covered",
+    note: "reviewed anatomical case form is covered",
+  },
+  {
     family: "mandavosh",
     input: "мандовошь",
     status: "expected-covered",
-    note: "nearby reviewed insult remains covered while wider manda forms stay missing",
+    note: "nearby reviewed insult remains covered with wider manda forms",
   },
 ];
 
@@ -218,6 +227,41 @@ const intentionallyUnsupportedCases: readonly GapAuditCase[] = [
   },
 ];
 
+const coverageMetadataCases: readonly CoverageMetadataCase[] = [
+  {
+    input: "ёпт",
+    expected: {
+      ruleId: "ru.vulgar.yopt.family",
+      category: "VULGAR",
+      severity: "medium",
+    },
+  },
+  {
+    input: "жопа",
+    expected: {
+      ruleId: "ru.vulgar.zhopa.family",
+      category: "VULGAR",
+      severity: "medium",
+    },
+  },
+  {
+    input: "манда",
+    expected: {
+      ruleId: "ru.obscene.manda.family",
+      category: "OBSCENE_MAT",
+      severity: "high",
+    },
+  },
+  {
+    input: "мандовошь",
+    expected: {
+      ruleId: "ru.insult.mandavosh.family",
+      category: "STRONG_INSULT",
+      severity: "high",
+    },
+  },
+];
+
 describe("Russian coverage gap audit", () => {
   it("keeps candidate gap families explicitly expected missing", () => {
     for (const testCase of expectedMissingCases) {
@@ -233,14 +277,13 @@ describe("Russian coverage gap audit", () => {
       expect(filter.censor(testCase.input), testCase.note).toBe(
         mask(testCase.input),
       );
-      expect(filter.analyze(testCase.input)).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({
-            ruleId: "ru.insult.mandavosh.family",
-            category: "STRONG_INSULT",
-            severity: "high",
-          }),
-        ]),
+    }
+  });
+
+  it("preserves metadata for reviewed gap coverage", () => {
+    for (const { input, expected } of coverageMetadataCases) {
+      expect(filter.analyze(input), input).toEqual(
+        expect.arrayContaining([expect.objectContaining(expected)]),
       );
     }
   });
