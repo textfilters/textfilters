@@ -179,6 +179,24 @@ describe("Russian coverage audit", () => {
         },
       },
       {
+        input: "подъебал",
+        expected: {
+          ruleId: "ru.obscene.eb.prefix.pod",
+          category: "OBSCENE_MAT",
+          severity: "high",
+          mode: "strict",
+        },
+      },
+      {
+        input: "подъе6ал",
+        expected: {
+          ruleId: "ru.obscene.eb.prefix.pod.six.loose",
+          category: "OBSCENE_MAT",
+          severity: "high",
+          mode: "loose",
+        },
+      },
+      {
         input: "уе6ал",
         expected: {
           ruleId: "ru.insult.eb.prefix.u.six.loose",
