@@ -34,8 +34,9 @@ npm install @textfilters/core @textfilters/profanity
 - Censor profanity in chat moderation and UGC moderation workflows.
 - Analyze matched ranges when a moderation decision needs categories,
   severities, or rule ids.
-- Build isolated per-tenant or per-test dictionaries without mutating the shared
-  filter instance.
+- Use the shared built-in Russian filter for common read-only checks.
+- Build isolated per-application, per-tenant, or per-test dictionaries when
+  runtime terms need to be changed.
 - Validate maintained language dictionaries before they are used in content
   moderation pipelines.
 
@@ -61,6 +62,24 @@ shared instance.
 
 Use `createProfanityFilter(...)` when per-request, per-tenant, or test-local
 dictionaries must be isolated from the shared mutable `filter`.
+
+### Shared Default Vs Isolated Filters
+
+Use the exported `filter` for the package's shared built-in Russian behavior
+when your code only calls `check`, `censor`, or `analyze`. It is a process-local
+object: every module that imports `filter` receives the same mutable instance.
+
+Do not call `setStrict`, `setLoose`, `addStrict`, or `addLoose` on the shared
+`filter` for application-specific, tenant-specific, request-specific, or
+test-local terms. Those calls intentionally mutate that shared instance and
+therefore affect future checks performed through the same import.
+
+Use `createProfanityFilter(...)`,
+`createProfanityFilterFromDictionary(dictionary)`, or
+`createProfanityFilterFromCompiledDictionary(compiled)` when runtime mutation is
+part of the workflow. Each factory call returns an isolated mutable filter, so
+its runtime dictionary changes do not affect the shared default filter or other
+factory-created filters.
 
 ## API
 
@@ -177,6 +196,9 @@ const builtIn = createProfanityFilter();
 
 All filter instances expose stable `name: "profanity"` plus `check`, `censor`,
 `analyze`, `setStrict`, `setLoose`, `addStrict`, and `addLoose`.
+Runtime mutation methods affect only the instance they are called on. Calling
+them on the shared `filter` mutates shared package state; calling them on a
+factory-created filter mutates only that isolated instance.
 
 ### Language Dictionaries
 
@@ -377,8 +399,10 @@ into different compiled matcher views.
 - Ranges are UTF-16 offsets into the original source string.
 - Runtime dictionaries do not support caller-provided regular expressions.
 - Runtime string terms do not receive taxonomy metadata.
-- The shared `filter` instance is mutable; use `createProfanityFilter()` for
-  isolated state.
+- The shared `filter` instance is mutable and process-local; reserve its
+  mutation methods for deliberate global changes.
+- Use factory-created filters for application-specific, tenant-specific,
+  request-specific, or test-local runtime dictionary changes.
 - Built-in corpus behavior is intentionally locked by compatibility tests.
 
 ## Compatibility And Intentional Changes
@@ -397,6 +421,9 @@ Intentional public-package changes:
 - The filter exposes `check(text): boolean` for boolean-only detection.
 - `createProfanityFilter()` without arguments creates an instance with compiled
   views of the built-in Russian dictionary.
+- The exported `filter` remains a shared mutable default for backward
+  compatibility; factory-created filters are the recommended boundary for
+  isolated runtime mutation.
 - Masking preserves JavaScript string length for astral code points.
 
 ## Architecture

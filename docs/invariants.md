@@ -26,6 +26,11 @@ Runtime dictionary terms from `createProfanityFilter(strict, loose)`,
 `setStrict`, `setLoose`, `addStrict`, and `addLoose` are normalized literals.
 They are not regular expressions.
 
+The exported `filter` is a shared mutable default instance. Its mutation methods
+are intentionally process-local shared state for backward compatibility. New
+runtime dictionary customization should prefer factory-created filters so
+application, tenant, request, or test-specific terms remain isolated.
+
 The built-in Russian corpus is package-owned, human-maintained language
 dictionary data and may use controlled internal rules. Keep user-provided terms
 out of that internal rule compiler.
