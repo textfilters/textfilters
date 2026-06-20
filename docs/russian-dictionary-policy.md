@@ -84,4 +84,7 @@ may use `src/languages/ru/profanity/authoring.ts` to share repeated boilerplate:
 The helper is internal. It must not be documented as a public API, exported from
 the package entrypoint, or used to create generated matcher JSON. The assembled
 dictionary must continue to validate as a `ProfanityLanguageDictionary`, and
-`order.json` remains the explicit rule ordering source.
+`order.json` remains the explicit Russian dictionary source-order file.
+
+See [Russian rule ordering model](russian-rule-ordering-model.md) for the
+current ordering audit and compatibility constraints.
