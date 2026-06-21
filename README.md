@@ -175,6 +175,10 @@ Packages use semantic versioning and Release Please from Conventional Commit his
 
 Packages are published to GitHub Packages first, with GitHub Releases and immutable release tags using `vX.Y.Z`. npmjs.org publication may be added later.
 
+See [npmjs.com publication plan](docs/npmjs-publication.md) for the planned
+`1.0.0+` public npm publishing policy, required secrets, workflow gates, and
+first-publish checklist.
+
 ## Support
 
 Open package-specific bugs in the relevant package repository. Open ecosystem documentation issues in this repository. For security reports, see the organization security policy in `textfilters/.github`.
