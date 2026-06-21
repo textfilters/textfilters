@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.3](https://github.com/textfilters/url/compare/v0.1.2...v0.1.3) (2026-06-21)
+
+
+### Bug Fixes
+
+* adopt core length-preserving masking ([f6a8a41](https://github.com/textfilters/url/commit/f6a8a417f20c49070b14cc1f79ac1b6b6218256e))
+
 ## [0.1.2](https://github.com/textfilters/url/compare/v0.1.1...v0.1.2) (2026-06-09)
 
 
