@@ -287,6 +287,10 @@ describe("compatibility behavior", () => {
     expect(output).toBe(`go ${"*".repeat("http://😀.com/".length)} now`);
     expect(output.length).toBe(input.length);
 
+    const customBmp = createUrlFilter({ maskChar: "#" }).censor(input);
+    expect(customBmp).toBe(`go ${"#".repeat("http://😀.com/".length)} now`);
+    expect(customBmp.length).toBe(input.length);
+
     const custom = createUrlFilter({ maskChar: "😀" }).censor(
       "go example.com now",
     );
