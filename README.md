@@ -28,10 +28,10 @@ Packages are released independently, so versions are not kept in lockstep across
 
 | Package | Purpose | Shared mutable instance or stateless API | Output shape | Range support | Metadata/options support | Runtime dependencies inside the ecosystem | Dist smoke/check status | Repository |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `@textfilters/core` | Shared contracts, normalization helpers, range masking, and pipelines. | Stateless helpers plus factory-created pipelines with mutable registration order. | Censored text, guard decisions, pipeline process results, and range helpers. | Exposes UTF-16 and code point range types plus merge/mask helpers. | Pipeline and guard contracts; no package-specific detection metadata. | None. | `check` runs lint, tests, build, and dry-run pack. | [`textfilters/core`](../core) |
-| `@textfilters/url` | Direct, obfuscated, defanged, and hxxp URL detection. | Shared default `filter`; `createUrlFilter` / `urlFilter` create isolated stateless censors. | Censored text through the `TextCensor` interface. | Uses code point ranges internally; ranges are not public API output. | `tlds` and `maskChar` options. | `@textfilters/core`. | `check` runs lint, tests, build, and dry-run pack; `prepack` also builds before packing. | [`textfilters/url`](../url) |
-| `@textfilters/email` | Direct and obfuscated email detection with contact redaction guards. | Shared default `filter`; `createEmailFilter` / `emailFilter` create isolated stateless censors. | Censored text through the `TextCensor` interface. | Uses code point ranges internally; ranges are not public API output. | Masking, obfuscation, localhost, single-label domain, and exclusion options. | `@textfilters/core`. | `check` runs lint, tests, build, and dry-run pack. | [`textfilters/email`](../email) |
-| `@textfilters/phone` | Phone number and phone-like sequence detection. | Shared default `filter`; `createPhoneFilter` / `phoneFilter` create isolated stateless censors. | Censored text through the `TextCensor` interface. | Uses code point ranges internally; ranges are not public API output. | `maskChar` option. | `@textfilters/core`. | `check` runs lint, tests, build, and dry-run pack. | [`textfilters/phone`](../phone) |
+| `@textfilters/core` | Shared contracts, normalization helpers, range masking, and pipelines. | Stateless helpers plus factory-created pipelines with mutable registration order. | Censored text, guard decisions, pipeline process results, and range helpers. | Exposes UTF-16 and code point range types plus shared merge/mask helpers. | Pipeline and guard contracts; no package-specific detection metadata. | None. | `check` runs lint, tests, build, and dry-run pack. | [`textfilters/core`](../core) |
+| `@textfilters/url` | Direct, obfuscated, defanged, and hxxp URL detection. | Shared default `filter`; `createUrlFilter` / `urlFilter` create isolated stateless censors. | Censored text through the `TextCensor` interface. | Builds URL ranges locally, then delegates length-preserving code point masking to core; ranges are not public API output. | `tlds` and `maskChar` options. | `@textfilters/core`. | `check` runs lint, tests, build, and dry-run pack; `prepack` also builds before packing. | [`textfilters/url`](../url) |
+| `@textfilters/email` | Direct and obfuscated email detection with contact redaction guards. | Shared default `filter`; `createEmailFilter` / `emailFilter` create isolated stateless censors. | Censored text through the `TextCensor` interface. | Builds email ranges locally, then delegates length-preserving code point masking to core; ranges are not public API output. | Masking, obfuscation, localhost, single-label domain, and exclusion options. | `@textfilters/core`. | `check` runs lint, tests, build, and dry-run pack. | [`textfilters/email`](../email) |
+| `@textfilters/phone` | Phone number and phone-like sequence detection. | Shared default `filter`; `createPhoneFilter` / `phoneFilter` create isolated stateless censors. | Censored text through the `TextCensor` interface. | Builds phone ranges locally, then delegates length-preserving code point masking to core; ranges are not public API output. | `maskChar` option. | `@textfilters/core`. | `check` runs lint, tests, build, and dry-run pack. | [`textfilters/phone`](../phone) |
 | `@textfilters/profanity` | Russian profanity filtering, dictionary validation, obfuscation handling, and taxonomy-aware matching. | Shared mutable `filter`; `createProfanityFilter` and dictionary factories create isolated mutable filters for runtime dictionary changes. | `censor()` text, `check()` boolean, and `analyze()` match ranges. | Public `analyze()` ranges include source offsets and match mode. | Category, severity, rule id, match-mode metadata, filter options, dictionary validation, compiled dictionary reuse, and mutable strict/loose term APIs. | `@textfilters/core`. | `check` includes lint, tests, build, dist smoke, and dry-run pack. | [`textfilters/profanity`](../profanity) |
 | `@textfilters/spam` | Interval, duplicate, burst, and actor-based anti-spam decisions. | Factory-created stateful guards; `reset()` clears actor state for the guard instance. | Guard decision objects: `{ allowed: true }` or `{ allowed: false, reason }`. | Not range-based. | Timing/window/max-actor config plus typed block reasons. | `@textfilters/core`. | `check` includes lint, tests, build, dist smoke, and dry-run pack. | [`textfilters/spam`](../spam) |
 
@@ -64,26 +64,11 @@ from the maintained dictionary.
 
 `@textfilters/core` owns the shared contracts used across the ecosystem:
 normalization helpers, `TextCensor`, pipeline composition, guard decision types,
-range merging, and UTF-16 and code point masking helpers. Package-specific
-README files document the exact masking and offset guarantees for each filter.
-
-## Shared Masking Adoption Tracking
-
-URL, email, and phone all collect code-point ranges before censoring text. The
-shared helper tracked in `textfilters/core#11` is the dependency for converging
-their masking implementations without changing public APIs or detection
-semantics.
-
-| Package | Current masking status | Follow-up |
-| --- | --- | --- |
-| `@textfilters/url` | Keeps local length-preserving code-point masking to preserve current URL output around astral input and custom mask chars. | `textfilters/url#12` |
-| `@textfilters/email` | Uses core masking helpers through package glue; adoption should keep email exclusion and custom mask behavior unchanged. | `textfilters/email#20` |
-| `@textfilters/phone` | Uses core masking helpers with Unicode digit normalization, including astral digits; adoption must preserve current phone output. | `textfilters/phone#11` |
-
-Until `textfilters/core#11` lands, package-specific behavior remains the source
-of truth. Each follow-up should keep offset and length stability tests for BMP
-and relevant astral inputs, keep public APIs unchanged, and run that package's
-`npm run check`.
+range merging, and UTF-16 and code point masking helpers. URL, email, and phone
+collect package-specific code point ranges internally and delegate final
+length-preserving masking to the shared core helper before returning censored
+text. Package-specific README files document the exact masking and offset
+guarantees for each filter.
 
 ## Which Package Should I Use?
 
