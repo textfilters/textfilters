@@ -28,6 +28,7 @@ function checkPackage(pkgSpec, packageDir) {
   const label = pkgSpec.directory;
   const packageJsonPath = join(packageDir, "package.json");
   const releaseConfigPath = join(packageDir, "release-please-config.json");
+  const releaseManifestPath = join(packageDir, contract.releaseWorkflow.manifestFile);
   const checkWorkflowPath = join(packageDir, contract.checkWorkflow.path);
   const releaseWorkflowPath = join(packageDir, contract.releaseWorkflow.path);
 
@@ -86,20 +87,10 @@ function checkPackage(pkgSpec, packageDir) {
     }
   }
 
-  if (pkgSpec.dependsOnCore) {
-    expectEqual(
-      label,
-      "dependency @textfilters/core",
-      pkg.dependencies?.["@textfilters/core"],
-      contract.manifest.coreDependencyRange,
-    );
-  } else if (pkg.dependencies?.["@textfilters/core"]) {
-    fail(label, "core package must not depend on @textfilters/core");
-  }
-
   checkWorkflow(label, checkWorkflowPath);
   checkReleaseWorkflow(label, releaseWorkflowPath);
   checkReleaseConfig(label, releaseConfigPath, pkgSpec.name);
+  checkReleaseManifest(label, releaseManifestPath, pkg.version);
 }
 
 function checkWorkflow(label, workflowPath) {
@@ -133,10 +124,13 @@ function checkReleaseWorkflow(label, workflowPath) {
   expectText(label, workflowPath, workflow, "contents: write");
   expectText(label, workflowPath, workflow, "issues: write");
   expectText(label, workflowPath, workflow, "pull-requests: write");
+  expectText(label, workflowPath, workflow, "packages: write");
   expectText(label, workflowPath, workflow, `uses: ${contract.releaseWorkflow.releaseAction}`);
   expectText(label, workflowPath, workflow, `token: ${contract.releaseWorkflow.token}`);
   expectText(label, workflowPath, workflow, `config-file: ${contract.releaseWorkflow.configFile}`);
   expectText(label, workflowPath, workflow, `manifest-file: ${contract.releaseWorkflow.manifestFile}`);
+  expectText(label, workflowPath, workflow, `needs: ${contract.releaseWorkflow.publishNeeds}`);
+  expectText(label, workflowPath, workflow, `if: ${contract.releaseWorkflow.publishCondition}`);
   expectText(label, workflowPath, workflow, `uses: ${contract.checkWorkflow.checkoutAction}`);
   expectText(label, workflowPath, workflow, `uses: ${contract.checkWorkflow.setupNodeAction}`);
   expectText(label, workflowPath, workflow, `node-version: ${contract.checkWorkflow.nodeVersion}`);
@@ -146,6 +140,14 @@ function checkReleaseWorkflow(label, workflowPath) {
   expectText(label, workflowPath, workflow, `run: ${contract.checkWorkflow.installCommand}`);
   expectText(label, workflowPath, workflow, `run: ${contract.checkWorkflow.checkCommand}`);
   expectText(label, workflowPath, workflow, `run: ${contract.releaseWorkflow.publishCommand}`);
+
+  expectOrder(
+    label,
+    workflowPath,
+    workflow,
+    `run: ${contract.checkWorkflow.checkCommand}`,
+    `run: ${contract.releaseWorkflow.publishCommand}`,
+  );
 }
 
 function checkReleaseConfig(label, releaseConfigPath, packageName) {
@@ -175,6 +177,16 @@ function checkReleaseConfig(label, releaseConfigPath, packageName) {
   );
 }
 
+function checkReleaseManifest(label, releaseManifestPath, packageVersion) {
+  if (!existsSync(releaseManifestPath)) {
+    fail(label, `missing ${contract.releaseWorkflow.manifestFile}`);
+    return;
+  }
+
+  const manifest = readJson(releaseManifestPath);
+  expectEqual(label, "release-please manifest .", manifest["."], packageVersion);
+}
+
 function readJson(path) {
   return JSON.parse(readFileSync(path, "utf8"));
 }
@@ -196,6 +208,17 @@ function expectEqual(label, name, actual, expected) {
 function expectText(label, path, text, expected) {
   if (!text.includes(expected)) {
     fail(label, `${relativePackagePath(path)} must include ${expected}`);
+  }
+}
+
+function expectOrder(label, path, text, before, after) {
+  const beforeIndex = text.indexOf(before);
+  const afterIndex = text.indexOf(after);
+  if (beforeIndex === -1 || afterIndex === -1) {
+    return;
+  }
+  if (beforeIndex > afterIndex) {
+    fail(label, `${relativePackagePath(path)} must place ${before} before ${after}`);
   }
 }
 

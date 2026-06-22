@@ -39,8 +39,9 @@ Each package repository keeps its own source, tests, and package-specific
 - Shared dev dependencies are Prettier, TypeScript, and Vitest at the versions
   recorded in `package-contract.json`.
 
-Dependent packages use the shared core dependency range recorded in the
-contract. The `core` package does not depend on itself.
+Runtime dependency compatibility is tracked separately from this repository
+workflow contract. This guard focuses on manifest shape, scripts, CI, release,
+registry, and package-management drift.
 
 ## Workflow Contract
 
@@ -57,6 +58,7 @@ is shared:
   `release-please-config.json` and `.release-please-manifest.json`.
 - Release publication only runs when Release Please reports a created release.
 - Publication runs the package check before `npm publish` to GitHub Packages.
+- The publish job keeps `packages: write` for GitHub Packages publication.
 
 ## Release Please Contract
 
@@ -65,6 +67,7 @@ Each package has a package-local `release-please-config.json` with:
 - `include-component-in-tag: false`
 - package `release-type: "node"`
 - package name matching the repository package name
+- a `.release-please-manifest.json` `.` entry matching the package version
 
 Release Please remains the release path. Packages must not be published
 manually.

@@ -3,34 +3,28 @@
   "packages": [
     {
       "directory": "core",
-      "name": "@textfilters/core",
-      "dependsOnCore": false
+      "name": "@textfilters/core"
     },
     {
       "directory": "url",
-      "name": "@textfilters/url",
-      "dependsOnCore": true
+      "name": "@textfilters/url"
     },
     {
       "directory": "email",
-      "name": "@textfilters/email",
-      "dependsOnCore": true
+      "name": "@textfilters/email"
     },
     {
       "directory": "phone",
-      "name": "@textfilters/phone",
-      "dependsOnCore": true
+      "name": "@textfilters/phone"
     },
     {
       "directory": "profanity",
       "name": "@textfilters/profanity",
-      "dependsOnCore": true,
       "allowedExtraDevDependencies": ["@types/node"]
     },
     {
       "directory": "spam",
-      "name": "@textfilters/spam",
-      "dependsOnCore": true
+      "name": "@textfilters/spam"
     }
   ],
   "manifest": {
@@ -56,8 +50,7 @@
       "prettier": "^3.8.3",
       "typescript": "^6.0.3",
       "vitest": "^4.1.7"
-    },
-    "coreDependencyRange": "^0.3.0"
+    }
   },
   "checkWorkflow": {
     "path": ".github/workflows/check.yml",
@@ -77,6 +70,8 @@
     "token": "${{ secrets.RELEASE_PLEASE_TOKEN }}",
     "configFile": "release-please-config.json",
     "manifestFile": ".release-please-manifest.json",
+    "publishNeeds": "release-please",
+    "publishCondition": "${{ needs.release-please.outputs.release_created == 'true' }}",
     "publishCommand": "npm publish --registry=https://npm.pkg.github.com"
   },
   "releasePleaseConfig": {
