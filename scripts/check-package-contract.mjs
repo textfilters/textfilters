@@ -140,12 +140,14 @@ function checkWorkflow(label, workflowPath) {
     contract.checkWorkflow.setupNodeAction,
   );
 
-  expectText(label, workflowPath, workflow, `name: ${contract.checkWorkflow.name}`);
+  expectWorkflowName(label, workflowPath, workflow, contract.checkWorkflow.name);
   expectUnfilteredEvent(label, workflowPath, pullRequestBlock, "pull_request");
+  expectPushBranchesOnly(label, workflowPath, pushBlock);
   expectBlockingJob(label, workflowPath, checkJob, "check");
   expectBlockLine(label, workflowPath, branchesBlock, "- main", 6);
   expectEffectivePermission(label, workflowPath, workflow, checkJob, "contents: read");
   expectEffectivePermission(label, workflowPath, workflow, checkJob, "packages: read");
+  expectBlockingStep(label, workflowPath, setupNodeStep, contract.checkWorkflow.setupNodeAction);
   expectStepWithInput(label, workflowPath, setupNodeStep, "node-version", contract.checkWorkflow.nodeVersion);
   expectStepWithInput(label, workflowPath, setupNodeStep, "registry-url", contract.checkWorkflow.registryUrl);
   expectStepWithInput(label, workflowPath, setupNodeStep, "scope", `"${contract.checkWorkflow.scope}"`);
@@ -223,7 +225,9 @@ function checkReleaseWorkflow(label, workflowPath) {
     contract.releaseWorkflow.publishCommand,
   );
 
-  expectText(label, workflowPath, workflow, `name: ${contract.releaseWorkflow.name}`);
+  expectWorkflowName(label, workflowPath, workflow, contract.releaseWorkflow.name);
+  expectSinglePublishCommandText(label, workflowPath, workflow);
+  expectPushBranchesOnly(label, workflowPath, pushBlock);
   expectBlockingJob(label, workflowPath, releaseJob, "release-please");
   expectBlockingJob(label, workflowPath, publishJob, "publish", contract.releaseWorkflow.publishCondition);
   expectBlockLine(label, workflowPath, branchesBlock, "- main", 6);
@@ -240,13 +244,20 @@ function checkReleaseWorkflow(label, workflowPath) {
   expectPublishGate(label, workflowPath, publishJob, publishStep);
   expectBlockLine(label, workflowPath, publishPermissionsBlock, "contents: read", 6);
   expectBlockLine(label, workflowPath, publishPermissionsBlock, "packages: write", 6);
+  expectBlockingStep(label, workflowPath, setupNodeStep, contract.checkWorkflow.setupNodeAction);
   expectStepWithInput(label, workflowPath, setupNodeStep, "node-version", contract.checkWorkflow.nodeVersion);
   expectStepWithInput(label, workflowPath, setupNodeStep, "registry-url", contract.checkWorkflow.registryUrl);
   expectStepWithInput(label, workflowPath, setupNodeStep, "scope", `"${contract.checkWorkflow.scope}"`);
   expectEnvAvailable(label, workflowPath, publishJob, installStep, "NODE_AUTH_TOKEN: ${{ github.token }}");
   expectEnvAvailable(label, workflowPath, publishJob, publishStep, "NODE_AUTH_TOKEN: ${{ github.token }}");
   expectBlockingStep(label, workflowPath, checkStep, contract.checkWorkflow.checkCommand);
-  expectBlockingStep(label, workflowPath, publishStep, contract.releaseWorkflow.publishCommand);
+  expectBlockingStep(
+    label,
+    workflowPath,
+    publishStep,
+    contract.releaseWorkflow.publishCommand,
+    contract.releaseWorkflow.publishCondition,
+  );
   expectPackageRootStep(label, workflowPath, workflow, publishJob, installStep, contract.checkWorkflow.installCommand);
   expectPackageRootStep(label, workflowPath, workflow, publishJob, checkStep, contract.checkWorkflow.checkCommand);
   expectPackageRootStep(label, workflowPath, workflow, publishJob, publishStep, contract.releaseWorkflow.publishCommand);
@@ -298,6 +309,12 @@ function checkReleaseConfig(label, releaseConfigPath, packageName) {
   if (config.packages?.["."]?.["skip-github-release"] === true) {
     fail(label, "release-please package skip-github-release must not be true");
   }
+  if (config["skip-github-pull-request"] === true) {
+    fail(label, "release-please skip-github-pull-request must not be true");
+  }
+  if (config.packages?.["."]?.["skip-github-pull-request"] === true) {
+    fail(label, "release-please package skip-github-pull-request must not be true");
+  }
   expectEqual(
     label,
     "release-please include-component-in-tag",
@@ -346,10 +363,10 @@ function checkPublishCommandScope(label, packageDir, releaseWorkflowPath) {
     if (workflowPath === releaseWorkflowPath) continue;
 
     const workflow = stripYamlComments(readFileSync(workflowPath, "utf8"));
-    if (workflow.includes(contract.releaseWorkflow.publishCommand)) {
+    if (hasNpmPublishCommand(workflow)) {
       fail(
         label,
-        `${relativePackagePath(workflowPath)} must not include ${contract.releaseWorkflow.publishCommand}`,
+        `${relativePackagePath(workflowPath)} must not include npm publish`,
       );
     }
   }
@@ -437,6 +454,12 @@ function expectText(label, path, text, expected) {
   }
 }
 
+function expectWorkflowName(label, path, workflow, name) {
+  if (!hasLineAtIndent(workflow, `name: ${name}`, 0)) {
+    fail(label, `${relativePackagePath(path)} workflow name must be ${name}`);
+  }
+}
+
 function expectStepLine(label, path, stepBlock, expected) {
   if (!hasTopLevelStepLine(stepBlock, expected)) {
     fail(label, `${relativePackagePath(path)} step must include exact ${expected}`);
@@ -493,10 +516,17 @@ function expectPublishGate(label, path, publishJob, publishStep) {
 function expectEnvAvailable(label, path, jobBlock, stepBlock, envLine) {
   const stepEnvBlock = getStepChildBlock(stepBlock, "env:");
   const stepEnvIndent = stepBaseIndent(stepBlock) + 4;
-  if (
-    hasEnvLine(jobBlock, envLine, 4) ||
-    (stepEnvBlock && hasLineAtIndent(stepEnvBlock, envLine, stepEnvIndent))
-  ) {
+  const envName = envLine.slice(0, envLine.indexOf(":") + 1);
+
+  if (stepEnvBlock && hasKeyAtIndent(stepEnvBlock, envName, stepEnvIndent)) {
+    if (hasLineAtIndent(stepEnvBlock, envLine, stepEnvIndent)) {
+      return;
+    }
+    fail(label, `${relativePackagePath(path)} step must not override ${envName} incorrectly`);
+    return;
+  }
+
+  if (hasEnvLine(jobBlock, envLine, 4)) {
     return;
   }
 
@@ -506,6 +536,14 @@ function expectEnvAvailable(label, path, jobBlock, stepBlock, envLine) {
 function expectUnfilteredEvent(label, path, eventBlock, eventName) {
   if (blockHasChildLines(eventBlock)) {
     fail(label, `${relativePackagePath(path)} ${eventName} event must not be filtered`);
+  }
+}
+
+function expectPushBranchesOnly(label, path, pushBlock) {
+  for (const key of topLevelChildKeys(pushBlock, 4)) {
+    if (key !== "branches:") {
+      fail(label, `${relativePackagePath(path)} push event must not include ${key}`);
+    }
   }
 }
 
@@ -520,13 +558,21 @@ function expectBlockingJob(label, path, jobBlock, jobName, allowedCondition = ""
   }
 }
 
-function expectBlockingStep(label, path, stepBlock, runCommand) {
-  if (hasTopLevelStepKey(stepBlock, "if:")) {
+function expectBlockingStep(label, path, stepBlock, runCommand, allowedCondition = "") {
+  const stepCondition = stepTopLevelValue(stepBlock, "if:");
+  if (stepCondition && stepCondition !== allowedCondition) {
     fail(label, `${relativePackagePath(path)} ${runCommand} step must not be conditional`);
   }
   const continueOnError = stepTopLevelValue(stepBlock, "continue-on-error:");
   if (continueOnError && continueOnError !== "false") {
     fail(label, `${relativePackagePath(path)} ${runCommand} step must not continue on error`);
+  }
+}
+
+function expectSinglePublishCommandText(label, path, workflow) {
+  const publishCommandCount = countNpmPublishCommands(workflow);
+  if (publishCommandCount !== 1) {
+    fail(label, `${relativePackagePath(path)} must include exactly one npm publish command`);
   }
 }
 
@@ -795,6 +841,25 @@ function blockHasChildLines(block) {
 function hasLineAtIndent(text, expected, indent) {
   const prefix = " ".repeat(indent);
   return text.split("\n").some((line) => line === `${prefix}${expected}`);
+}
+
+function hasNpmPublishCommand(text) {
+  return countNpmPublishCommands(text) > 0;
+}
+
+function countNpmPublishCommands(text) {
+  return text
+    .split("\n")
+    .filter((line) => /(^|\s)npm\s+publish(\s|$)/u.test(line))
+    .length;
+}
+
+function topLevelChildKeys(block, indent) {
+  return block
+    .split("\n")
+    .filter((line) => countIndent(line) === indent)
+    .map((line) => normalizedYamlLine(line))
+    .filter((line) => line.endsWith(":"));
 }
 
 function hasEnvLine(text, envLine, indent) {

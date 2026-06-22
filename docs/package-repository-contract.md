@@ -55,18 +55,18 @@ registry, and package-management drift.
 Package repositories keep copied workflows today, but their important contract
 is shared:
 
-- The `Check` workflow runs on pull requests and pushes to the exact `main`
-  branch entry. The pull request event is a top-level workflow event, and the
-  selected check job is unconditional and blocking. The pull request event is
-  not filtered by paths or event types.
+- The `Check` workflow has the exact top-level workflow name and runs on pull
+  requests and pushes to the exact `main` branch entry. The pull request event
+  is a top-level workflow event, and the selected check job is unconditional
+  and blocking. Required events are not filtered by paths or event types.
 - The check job grants read-only repository contents access and package read
   access, either through workflow-level or job-level permissions.
 - It checks out the repository, sets up Node 24 with the `@textfilters`
-  GitHub Packages registry, runs exact `npm ci`, then runs exact
-  `npm run check` in the same job. The check step is unconditional and
-  blocking.
-- The `Release Please` workflow runs on pushes to the exact `main` branch
-  entry.
+  GitHub Packages registry in a blocking setup step, runs exact `npm ci`, then
+  runs exact `npm run check` in the same job. The check step is unconditional
+  and blocking.
+- The `Release Please` workflow has the exact top-level workflow name and runs
+  on unfiltered pushes to the exact `main` branch entry.
 - Release Please uses `googleapis/release-please-action@v5` with
   `release-please-config.json` and `.release-please-manifest.json` configured
   in the action step `with` block, and the action step uses exact `id: release`.
@@ -80,11 +80,11 @@ is shared:
   Packages in the publish job, with a single publish command. The prepublish
   check and publish steps are blocking.
 - The publish job keeps `packages: write` for GitHub Packages publication, and
-  the publish step or publish job has the package registry token available.
+  the publish step or publish job has the package registry token available
+  without a conflicting step-level token override.
 - Required npm install, check, and publish commands run at the package
   repository root.
-- GitHub Packages publish commands only appear in the audited Release Please
-  workflow.
+- `npm publish` commands only appear in the audited Release Please workflow.
 
 ## Release Please Contract
 
@@ -95,6 +95,7 @@ Each package has a package-local `release-please-config.json` with:
 - package `release-type: "node"`
 - package name matching the repository package name
 - no root-level or package-level `skip-github-release: true`
+- no root-level or package-level `skip-github-pull-request: true`
 - a `.release-please-manifest.json` `.` entry matching the package version
 
 Release Please remains the release path. Packages must not be published
