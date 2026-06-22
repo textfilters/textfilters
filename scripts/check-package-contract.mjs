@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -105,6 +105,7 @@ function checkPackage(pkgSpec, packageDir) {
 
   checkWorkflow(label, checkWorkflowPath);
   checkReleaseWorkflow(label, releaseWorkflowPath);
+  checkPublishCommandScope(label, packageDir, releaseWorkflowPath);
   checkReleaseConfig(label, releaseConfigPath, pkgSpec.name);
   checkReleaseManifest(label, releaseManifestPath, pkg.version);
 }
@@ -137,7 +138,8 @@ function checkWorkflow(label, workflowPath) {
   );
 
   expectText(label, workflowPath, workflow, `name: ${contract.checkWorkflow.name}`);
-  expectText(label, workflowPath, onBlock, "pull_request:");
+  expectBlock(label, workflowPath, onBlock, "pull_request:", 2);
+  expectUnconditionalJob(label, workflowPath, checkJob, "check");
   expectBlockLine(label, workflowPath, branchesBlock, "- main", 6);
   expectEffectivePermission(label, workflowPath, workflow, checkJob, "contents: read");
   expectEffectivePermission(label, workflowPath, workflow, checkJob, "packages: read");
@@ -146,6 +148,8 @@ function checkWorkflow(label, workflowPath) {
   expectStepWithInput(label, workflowPath, setupNodeStep, "scope", `"${contract.checkWorkflow.scope}"`);
   expectEnvAvailable(label, workflowPath, checkJob, installStep, "NODE_AUTH_TOKEN: ${{ github.token }}");
   expectBlockingStep(label, workflowPath, checkStep, contract.checkWorkflow.checkCommand);
+  expectPackageRootStep(label, workflowPath, workflow, checkJob, installStep, contract.checkWorkflow.installCommand);
+  expectPackageRootStep(label, workflowPath, workflow, checkJob, checkStep, contract.checkWorkflow.checkCommand);
 
   expectStepOrder(
     label,
@@ -238,6 +242,9 @@ function checkReleaseWorkflow(label, workflowPath) {
   expectEnvAvailable(label, workflowPath, publishJob, publishStep, "NODE_AUTH_TOKEN: ${{ github.token }}");
   expectBlockingStep(label, workflowPath, checkStep, contract.checkWorkflow.checkCommand);
   expectBlockingStep(label, workflowPath, publishStep, contract.releaseWorkflow.publishCommand);
+  expectPackageRootStep(label, workflowPath, workflow, publishJob, installStep, contract.checkWorkflow.installCommand);
+  expectPackageRootStep(label, workflowPath, workflow, publishJob, checkStep, contract.checkWorkflow.checkCommand);
+  expectPackageRootStep(label, workflowPath, workflow, publishJob, publishStep, contract.releaseWorkflow.publishCommand);
 
   expectStepOrder(
     label,
@@ -321,6 +328,26 @@ function checkReleaseManifest(label, releaseManifestPath, packageVersion) {
   const manifest = readJson(releaseManifestPath);
   expectSemver(label, "release-please manifest .", manifest["."]);
   expectEqual(label, "release-please manifest .", manifest["."], packageVersion);
+}
+
+function checkPublishCommandScope(label, packageDir, releaseWorkflowPath) {
+  const workflowsDir = join(packageDir, ".github", "workflows");
+  if (!existsSync(workflowsDir)) return;
+
+  for (const entry of readdirSync(workflowsDir, { withFileTypes: true })) {
+    if (!entry.isFile() || !/\.ya?ml$/u.test(entry.name)) continue;
+
+    const workflowPath = join(workflowsDir, entry.name);
+    if (workflowPath === releaseWorkflowPath) continue;
+
+    const workflow = stripYamlComments(readFileSync(workflowPath, "utf8"));
+    if (workflowContainsRun(workflow, contract.releaseWorkflow.publishCommand)) {
+      fail(
+        label,
+        `${relativePackagePath(workflowPath)} must not include ${contract.releaseWorkflow.publishCommand}`,
+      );
+    }
+  }
 }
 
 function readJson(path) {
@@ -465,12 +492,33 @@ function expectEnvAvailable(label, path, jobBlock, stepBlock, envLine) {
   fail(label, `${relativePackagePath(path)} step must have ${envLine} available`);
 }
 
+function expectUnconditionalJob(label, path, jobBlock, jobName) {
+  if (hasJobLineKey(jobBlock, "if:", 4)) {
+    fail(label, `${relativePackagePath(path)} ${jobName} job must not be conditional`);
+  }
+}
+
 function expectBlockingStep(label, path, stepBlock, runCommand) {
   if (hasTopLevelStepKey(stepBlock, "if:")) {
     fail(label, `${relativePackagePath(path)} ${runCommand} step must not be conditional`);
   }
-  if (hasTopLevelStepLine(stepBlock, "continue-on-error: true")) {
+  const continueOnError = stepTopLevelValue(stepBlock, "continue-on-error:");
+  if (continueOnError && continueOnError !== "false") {
     fail(label, `${relativePackagePath(path)} ${runCommand} step must not continue on error`);
+  }
+}
+
+function expectPackageRootStep(label, path, workflow, jobBlock, stepBlock, runCommand) {
+  if (workflowDefaultsWorkingDirectory(workflow)) {
+    fail(label, `${relativePackagePath(path)} ${runCommand} step must not inherit a working directory`);
+  }
+  if (jobDefaultsWorkingDirectory(jobBlock)) {
+    fail(label, `${relativePackagePath(path)} ${runCommand} step must not inherit a working directory`);
+  }
+
+  const workingDirectory = stepTopLevelValue(stepBlock, "working-directory:");
+  if (workingDirectory && workingDirectory !== ".") {
+    fail(label, `${relativePackagePath(path)} ${runCommand} step must run at the package root`);
   }
 }
 
@@ -539,6 +587,13 @@ function expectJobBlockContainingRun(label, path, workflow, runCommand) {
   }
 
   return jobBlock;
+}
+
+function workflowContainsRun(workflow, runCommand) {
+  const jobsBlock = getOptionalBlock(workflow, "jobs:", 0);
+  return extractNestedBlocks(jobsBlock, 2).some((jobBlock) =>
+    extractStepBlocks(jobBlock).some((stepBlock) => stepRunCommand(stepBlock) === runCommand),
+  );
 }
 
 function expectSingleJobBlockContainingRun(label, path, workflow, runCommand) {
@@ -705,6 +760,12 @@ function hasTopLevelStepKey(stepBlock, key) {
     .some((line) => stepTopLevelLine(stepBlock, line).startsWith(key));
 }
 
+function hasJobLineKey(jobBlock, key, indent) {
+  return jobBlock
+    .split("\n")
+    .some((line) => countIndent(line) === indent && normalizedYamlLine(line).startsWith(key));
+}
+
 function hasLineAtIndent(text, expected, indent) {
   const prefix = " ".repeat(indent);
   return text.split("\n").some((line) => line === `${prefix}${expected}`);
@@ -721,6 +782,36 @@ function stepRunCommand(stepBlock) {
   return stepTopLevelLine(stepBlock, line).slice("run: ".length);
 }
 
+function stepTopLevelValue(stepBlock, key) {
+  const line = stepBlock
+    .split("\n")
+    .map((entry) => stepTopLevelLine(stepBlock, entry))
+    .find((entry) => entry.startsWith(`${key} `));
+
+  return line ? line.slice(key.length).trim() : "";
+}
+
+function workflowDefaultsWorkingDirectory(workflow) {
+  const defaultsBlock = getOptionalBlock(workflow, "defaults:", 0);
+  return defaultsWorkingDirectory(defaultsBlock, 2);
+}
+
+function jobDefaultsWorkingDirectory(jobBlock) {
+  const defaultsBlock = getOptionalBlock(jobBlock, "defaults:", 4);
+  return defaultsWorkingDirectory(defaultsBlock, 6);
+}
+
+function defaultsWorkingDirectory(defaultsBlock, runIndent) {
+  const runBlock = getOptionalBlock(defaultsBlock, "run:", runIndent);
+  return hasKeyAtIndent(runBlock, "working-directory:", runIndent + 2);
+}
+
+function hasKeyAtIndent(text, key, indent) {
+  return text
+    .split("\n")
+    .some((line) => countIndent(line) === indent && normalizedYamlLine(line).startsWith(key));
+}
+
 function getStepChildBlock(stepBlock, header) {
   const indent = stepBaseIndent(stepBlock) + 2;
   return getOptionalBlock(stepBlock, header, indent);
@@ -728,7 +819,10 @@ function getStepChildBlock(stepBlock, header) {
 
 function stepTopLevelLine(stepBlock, line) {
   const topLevelIndent = stepBaseIndent(stepBlock) + 2;
-  if (countIndent(line) !== topLevelIndent && !line.trimStart().startsWith("- ")) {
+  if (countIndent(line) === stepBaseIndent(stepBlock) && line.trimStart().startsWith("- ")) {
+    return normalizedYamlLine(line);
+  }
+  if (countIndent(line) !== topLevelIndent) {
     return "";
   }
   return normalizedYamlLine(line);

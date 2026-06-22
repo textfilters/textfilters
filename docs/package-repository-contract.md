@@ -56,7 +56,8 @@ Package repositories keep copied workflows today, but their important contract
 is shared:
 
 - The `Check` workflow runs on pull requests and pushes to the exact `main`
-  branch entry.
+  branch entry. The pull request event is a top-level workflow event, and the
+  selected check job is unconditional.
 - The check job grants read-only repository contents access and package read
   access, either through workflow-level or job-level permissions.
 - It checks out the repository, sets up Node 24 with the `@textfilters`
@@ -78,6 +79,10 @@ is shared:
   check and publish steps are blocking.
 - The publish job keeps `packages: write` for GitHub Packages publication, and
   the publish step or publish job has the package registry token available.
+- Required npm install, check, and publish commands run at the package
+  repository root.
+- GitHub Packages publish commands only appear in the audited Release Please
+  workflow.
 
 ## Release Please Contract
 
