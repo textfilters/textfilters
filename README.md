@@ -41,6 +41,13 @@ checks, tests, a TypeScript build, a package-specific dist smoke command, and
 `npm pack --dry-run`. Every package also keeps `prepack: npm run build`, so
 direct package packing remains build-backed outside `check`.
 
+The shared package repository contract lives in
+[`package-contract.json`](package-contract.json) and is documented in
+[`docs/package-repository-contract.md`](docs/package-repository-contract.md).
+Run `node scripts/check-package-contract.mjs` from this repository to audit
+checked-out package repositories for CI, release, Node/npm, package script,
+registry, and Release Please drift.
+
 For ecosystem compatibility checks, authenticate npm for GitHub Packages, then
 install the current published package set together with its compatible core line
 in a clean temporary project and run a basic pipeline smoke:

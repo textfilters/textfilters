@@ -1,0 +1,86 @@
+{
+  "packagesRoot": "..",
+  "packages": [
+    {
+      "directory": "core",
+      "name": "@textfilters/core",
+      "dependsOnCore": false
+    },
+    {
+      "directory": "url",
+      "name": "@textfilters/url",
+      "dependsOnCore": true
+    },
+    {
+      "directory": "email",
+      "name": "@textfilters/email",
+      "dependsOnCore": true
+    },
+    {
+      "directory": "phone",
+      "name": "@textfilters/phone",
+      "dependsOnCore": true
+    },
+    {
+      "directory": "profanity",
+      "name": "@textfilters/profanity",
+      "dependsOnCore": true,
+      "allowedExtraDevDependencies": ["@types/node"]
+    },
+    {
+      "directory": "spam",
+      "name": "@textfilters/spam",
+      "dependsOnCore": true
+    }
+  ],
+  "manifest": {
+    "type": "module",
+    "license": "MIT",
+    "sideEffects": false,
+    "engines": {
+      "node": ">=24"
+    },
+    "packageManager": "npm@11.16.0",
+    "publishConfig": {
+      "registry": "https://npm.pkg.github.com"
+    },
+    "requiredFiles": ["dist", "README.md", "LICENSE"],
+    "requiredScripts": {
+      "build": "tsc -p tsconfig.json",
+      "prepack": "npm run build",
+      "pack:dry-run": "npm pack --dry-run"
+    },
+    "requiredScriptNames": ["lint", "test", "build", "smoke:dist", "pack:dry-run", "check"],
+    "checkScriptMustInclude": ["npm run lint", "npm test", "npm run smoke:dist", "npm run pack:dry-run"],
+    "commonDevDependencies": {
+      "prettier": "^3.8.3",
+      "typescript": "^6.0.3",
+      "vitest": "^4.1.7"
+    },
+    "coreDependencyRange": "^0.3.0"
+  },
+  "checkWorkflow": {
+    "path": ".github/workflows/check.yml",
+    "name": "Check",
+    "nodeVersion": "24",
+    "registryUrl": "https://npm.pkg.github.com",
+    "scope": "@textfilters",
+    "checkoutAction": "actions/checkout@v6",
+    "setupNodeAction": "actions/setup-node@v6",
+    "installCommand": "npm ci",
+    "checkCommand": "npm run check"
+  },
+  "releaseWorkflow": {
+    "path": ".github/workflows/release-please.yml",
+    "name": "Release Please",
+    "releaseAction": "googleapis/release-please-action@v5",
+    "token": "${{ secrets.RELEASE_PLEASE_TOKEN }}",
+    "configFile": "release-please-config.json",
+    "manifestFile": ".release-please-manifest.json",
+    "publishCommand": "npm publish --registry=https://npm.pkg.github.com"
+  },
+  "releasePleaseConfig": {
+    "includeComponentInTag": false,
+    "releaseType": "node"
+  }
+}
