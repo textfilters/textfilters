@@ -139,4 +139,43 @@ describe("runtime literals", () => {
       }),
     ]);
   });
+
+  it("ignores dictionary-only rule fields on structured runtime literals", () => {
+    const runtime = createProfanityFilter(
+      [
+        {
+          id: "runtime.strict.bad",
+          source: "bad",
+          category: "VULGAR",
+          severity: "low",
+        },
+      ],
+      [
+        {
+          id: "runtime.loose.bad",
+          source: "bad",
+          category: "EUPHEMISM",
+          severity: "soft",
+          loose: {
+            stretch: true,
+          },
+        },
+      ],
+    );
+
+    expect(runtime.censor("baaad")).toBe("baaad");
+    expect(runtime.analyze("bad")).toEqual([
+      Object.assign([0, 3], {
+        mode: "strict",
+        category: "VULGAR",
+        severity: "low",
+      }),
+      Object.assign([0, 3], {
+        mode: "loose",
+        category: "EUPHEMISM",
+        severity: "soft",
+      }),
+    ]);
+    expect(runtime.analyze("bad")[0]).not.toHaveProperty("ruleId");
+  });
 });

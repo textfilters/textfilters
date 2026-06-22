@@ -375,8 +375,9 @@ const appendLiteralTerm = (
 const literalDefinition = (term: unknown): LiteralTermDefinition | null => {
   if (isRuleDefinition(term)) {
     return {
-      ...term,
       source: term.source.trim(),
+      ...(term.category === undefined ? {} : { category: term.category }),
+      ...(term.severity === undefined ? {} : { severity: term.severity }),
     };
   }
 

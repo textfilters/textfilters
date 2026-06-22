@@ -100,12 +100,19 @@ describe("language dictionaries", () => {
 
     expect(customFilter.check("qwr")).toBe(true);
     expect(customFilter.check("q-w-r")).toBe(true);
+    expect(customFilter.check("qwwr")).toBe(true);
     expect(customFilter.check("vnn")).toBe(true);
     expect(customFilter.analyze("qwr")[0]).toMatchObject({
       ruleId: "zz.vulgar.qwr",
       category: "VULGAR",
       severity: "low",
       mode: "strict",
+    });
+    expect(customFilter.analyze("qwwr")[0]).toMatchObject({
+      ruleId: "zz.vulgar.qwr",
+      category: "VULGAR",
+      severity: "low",
+      mode: "loose",
     });
     expect(customFilter.check("qwr", { categories: ["OBSCENE_MAT"] })).toBe(
       false,

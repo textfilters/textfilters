@@ -376,6 +376,12 @@ term such as `foo|bar` matches the literal text `foo|bar`, not `foo` or `bar`.
 Escaped punctuation from older literal spellings is accepted, so `foo\\.bar`
 matches the literal text `foo.bar`.
 
+Structured runtime terms may attach `category` and `severity` metadata to a
+literal `source`, but dictionary-only fields such as rule `id`, `match`, and
+loose compiler options are ignored by `setStrict`, `addStrict`, `setLoose`, and
+`addLoose`. Use the language dictionary API when a maintained rule needs stable
+rule ids, strict/loose views, or reviewed loose matching options.
+
 The built-in Russian dictionary is different: package-owned data may use
 controlled internal rules to represent existing behavior compactly. The JSON
 dictionary is the human-maintained source of truth; strict and loose entries are
