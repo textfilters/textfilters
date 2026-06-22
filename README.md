@@ -42,12 +42,12 @@ checks, tests, a TypeScript build, a package-specific dist smoke command, and
 direct package packing remains build-backed outside `check`.
 
 For ecosystem compatibility checks, authenticate npm for GitHub Packages, then
-install the current package set together in a clean temporary project and run a
-basic pipeline smoke:
+install the current published package set together with its compatible core line
+in a clean temporary project and run a basic pipeline smoke:
 
 ```sh
 npm config set @textfilters:registry https://npm.pkg.github.com --location=project
-npm install @textfilters/core @textfilters/url @textfilters/email @textfilters/phone @textfilters/profanity @textfilters/spam
+npm install @textfilters/core@^0.2.0 @textfilters/url @textfilters/email @textfilters/phone @textfilters/profanity @textfilters/spam
 node --input-type=module --eval "import { readFileSync } from 'node:fs'; const lock = JSON.parse(readFileSync('package-lock.json', 'utf8')); const versions = new Set(Object.entries(lock.packages).filter(([path, pkg]) => path.endsWith('node_modules/@textfilters/core') && pkg.version).map(([, pkg]) => pkg.version)); if (versions.size !== 1) throw new Error('Expected exactly one @textfilters/core version, got ' + ([...versions].join(', ') || 'none'));"
 node --input-type=module --eval "import { createTextPipeline } from '@textfilters/core'; import { filter as urlFilter } from '@textfilters/url'; import { filter as emailFilter } from '@textfilters/email'; import { filter as phoneFilter } from '@textfilters/phone'; import { filter as profanityFilter } from '@textfilters/profanity'; import { createSpamFilter } from '@textfilters/spam'; const pipeline = createTextPipeline().use(urlFilter).use(emailFilter).use(phoneFilter).use(profanityFilter); pipeline.censor('Contact user@example.com, https://example.com, or +1 555 123 4567'); createSpamFilter().check({ actorKey: 'smoke', text: 'hello' });"
 ```
