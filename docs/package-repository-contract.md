@@ -31,7 +31,8 @@ Each package repository keeps its own source, tests, and package-specific
   `https://npm.pkg.github.com`.
 - Packages are publishable manifests: `private` is not true, and package
   versions use semver.
-- Published files include `dist`, `README.md`, and `LICENSE`.
+- Published files include `dist`, `README.md`, and `LICENSE`; file-backed
+  entries must exist in the repository.
 - Repositories keep a committed npm lockfile because shared workflows use
   `npm ci`.
 - Script names include `lint`, `test`, `build`, `smoke:dist`, `pack:dry-run`,
@@ -55,24 +56,28 @@ Package repositories keep copied workflows today, but their important contract
 is shared:
 
 - The `Check` workflow runs on pull requests and pushes to `main`.
-- The workflow grants read-only repository contents access and package read
+- The check job grants read-only repository contents access and package read
   access.
 - It checks out the repository, sets up Node 24 with the `@textfilters`
-  GitHub Packages registry, runs `npm ci`, then runs `npm run check`.
+  GitHub Packages registry, runs exact `npm ci`, then runs exact
+  `npm run check` in the same job.
 - The `Release Please` workflow runs on pushes to `main`.
 - Release Please uses `googleapis/release-please-action@v5` with
-  `release-please-config.json` and `.release-please-manifest.json`.
+  `release-please-config.json` and `.release-please-manifest.json` configured
+  on the action step.
 - The Release Please job exposes `release_created` from the action step output.
 - Release publication only runs when Release Please reports a created release.
-- Publication runs the package check before `npm publish` to GitHub Packages.
+- Publication runs exact `npm run check` before exact `npm publish` to GitHub
+  Packages in the publish job.
 - The publish job keeps `packages: write` for GitHub Packages publication, and
-  the publish step has the package registry token available.
+  the publish step or publish job has the package registry token available.
 
 ## Release Please Contract
 
 Each package has a package-local `release-please-config.json` with:
 
 - `include-component-in-tag: false`
+- package `include-component-in-tag` absent or false
 - package `release-type: "node"`
 - package name matching the repository package name
 - no root-level or package-level `skip-github-release: true`
