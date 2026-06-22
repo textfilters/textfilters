@@ -114,7 +114,7 @@ function checkWorkflow(label, workflowPath) {
   if (!workflow) return;
   const onBlock = expectBlock(label, workflowPath, workflow, "on:", 0);
   const pushBlock = expectBlock(label, workflowPath, onBlock, "push:", 2);
-  const checkJob = expectJobBlockContaining(
+  const checkJob = expectJobBlockContainingRun(
     label,
     workflowPath,
     workflow,
@@ -141,9 +141,9 @@ function checkWorkflow(label, workflowPath) {
   expectEffectivePermission(label, workflowPath, workflow, checkJob, "contents: read");
   expectEffectivePermission(label, workflowPath, workflow, checkJob, "packages: read");
   expectStepWithUses(label, workflowPath, checkJob, contract.checkWorkflow.checkoutAction);
-  expectStepText(label, workflowPath, setupNodeStep, `node-version: ${contract.checkWorkflow.nodeVersion}`);
-  expectStepText(label, workflowPath, setupNodeStep, `registry-url: ${contract.checkWorkflow.registryUrl}`);
-  expectStepText(label, workflowPath, setupNodeStep, `scope: "${contract.checkWorkflow.scope}"`);
+  expectStepWithInput(label, workflowPath, setupNodeStep, "node-version", contract.checkWorkflow.nodeVersion);
+  expectStepWithInput(label, workflowPath, setupNodeStep, "registry-url", contract.checkWorkflow.registryUrl);
+  expectStepWithInput(label, workflowPath, setupNodeStep, "scope", `"${contract.checkWorkflow.scope}"`);
   expectEnvAvailable(label, workflowPath, checkJob, installStep, "NODE_AUTH_TOKEN: ${{ github.token }}");
 
   expectOrder(
@@ -174,7 +174,6 @@ function checkReleaseWorkflow(label, workflowPath) {
   if (!workflow) return;
   const onBlock = expectBlock(label, workflowPath, workflow, "on:", 0);
   const pushBlock = expectBlock(label, workflowPath, onBlock, "push:", 2);
-  const rootPermissionsBlock = expectBlock(label, workflowPath, workflow, "permissions:", 0);
   const releaseJob = expectJobBlock(label, workflowPath, workflow, "release-please");
   const releasePermissionsBlock = expectBlock(label, workflowPath, releaseJob, "permissions:", 4);
   const releaseActionStep = expectStepWithUses(
@@ -202,7 +201,7 @@ function checkReleaseWorkflow(label, workflowPath) {
     publishJob,
     contract.checkWorkflow.installCommand,
   );
-  expectStepWithRun(label, workflowPath, publishJob, contract.checkWorkflow.checkCommand);
+  const checkStep = expectStepWithRun(label, workflowPath, publishJob, contract.checkWorkflow.checkCommand);
   const publishStep = expectStepWithRun(
     label,
     workflowPath,
@@ -213,26 +212,26 @@ function checkReleaseWorkflow(label, workflowPath) {
   expectText(label, workflowPath, workflow, `name: ${contract.releaseWorkflow.name}`);
   expectText(label, workflowPath, pushBlock, "branches:");
   expectText(label, workflowPath, pushBlock, "- main");
-  expectText(label, workflowPath, rootPermissionsBlock, "contents: read");
   expectText(label, workflowPath, releasePermissionsBlock, "contents: write");
   expectText(label, workflowPath, releasePermissionsBlock, "issues: write");
   expectText(label, workflowPath, releasePermissionsBlock, "pull-requests: write");
   expectText(label, workflowPath, releaseJob, "outputs:");
   expectText(label, workflowPath, releaseJob, contract.releaseWorkflow.releaseCreatedOutput);
-  expectStepText(label, workflowPath, releaseActionStep, `id: ${contract.releaseWorkflow.releaseStepId}`);
-  expectStepText(label, workflowPath, releaseActionStep, `token: ${contract.releaseWorkflow.token}`);
-  expectStepText(label, workflowPath, releaseActionStep, `config-file: ${contract.releaseWorkflow.configFile}`);
-  expectStepText(label, workflowPath, releaseActionStep, `manifest-file: ${contract.releaseWorkflow.manifestFile}`);
+  expectStepLine(label, workflowPath, releaseActionStep, `id: ${contract.releaseWorkflow.releaseStepId}`);
+  expectStepWithInput(label, workflowPath, releaseActionStep, "token", contract.releaseWorkflow.token);
+  expectStepWithInput(label, workflowPath, releaseActionStep, "config-file", contract.releaseWorkflow.configFile);
+  expectStepWithInput(label, workflowPath, releaseActionStep, "manifest-file", contract.releaseWorkflow.manifestFile);
   expectJobLine(label, workflowPath, publishJob, `needs: ${contract.releaseWorkflow.publishNeeds}`);
   expectPublishGate(label, workflowPath, publishJob, publishStep);
   expectText(label, workflowPath, publishPermissionsBlock, "contents: read");
   expectText(label, workflowPath, publishPermissionsBlock, "packages: write");
   expectStepWithUses(label, workflowPath, publishJob, contract.checkWorkflow.checkoutAction);
-  expectStepText(label, workflowPath, setupNodeStep, `node-version: ${contract.checkWorkflow.nodeVersion}`);
-  expectStepText(label, workflowPath, setupNodeStep, `registry-url: ${contract.checkWorkflow.registryUrl}`);
-  expectStepText(label, workflowPath, setupNodeStep, `scope: "${contract.checkWorkflow.scope}"`);
+  expectStepWithInput(label, workflowPath, setupNodeStep, "node-version", contract.checkWorkflow.nodeVersion);
+  expectStepWithInput(label, workflowPath, setupNodeStep, "registry-url", contract.checkWorkflow.registryUrl);
+  expectStepWithInput(label, workflowPath, setupNodeStep, "scope", `"${contract.checkWorkflow.scope}"`);
   expectEnvAvailable(label, workflowPath, publishJob, installStep, "NODE_AUTH_TOKEN: ${{ github.token }}");
   expectEnvAvailable(label, workflowPath, publishJob, publishStep, "NODE_AUTH_TOKEN: ${{ github.token }}");
+  expectBlockingStep(label, workflowPath, checkStep, contract.checkWorkflow.checkCommand);
 
   expectOrder(
     label,
@@ -396,9 +395,18 @@ function expectText(label, path, text, expected) {
   }
 }
 
-function expectStepText(label, path, stepBlock, expected) {
-  if (!stepBlock.includes(expected)) {
-    fail(label, `${relativePackagePath(path)} step must include ${expected}`);
+function expectStepLine(label, path, stepBlock, expected) {
+  if (!hasTopLevelStepLine(stepBlock, expected)) {
+    fail(label, `${relativePackagePath(path)} step must include exact ${expected}`);
+  }
+}
+
+function expectStepWithInput(label, path, stepBlock, inputName, expectedValue) {
+  const expected = `${inputName}: ${expectedValue}`;
+  const withBlock = getStepChildBlock(stepBlock, "with:");
+
+  if (!withBlock || !hasLine(withBlock, expected)) {
+    fail(label, `${relativePackagePath(path)} step with block must include ${expected}`);
   }
 }
 
@@ -427,11 +435,21 @@ function expectPublishGate(label, path, publishJob, publishStep) {
 }
 
 function expectEnvAvailable(label, path, jobBlock, stepBlock, envLine) {
-  if (hasEnvLine(jobBlock, envLine, 4) || hasEnvLine(stepBlock, envLine, 8)) {
+  const stepEnvBlock = getStepChildBlock(stepBlock, "env:");
+  if (hasEnvLine(jobBlock, envLine, 4) || (stepEnvBlock && hasLine(stepEnvBlock, envLine))) {
     return;
   }
 
   fail(label, `${relativePackagePath(path)} step must have ${envLine} available`);
+}
+
+function expectBlockingStep(label, path, stepBlock, runCommand) {
+  if (hasTopLevelStepKey(stepBlock, "if:")) {
+    fail(label, `${relativePackagePath(path)} ${runCommand} step must not be conditional`);
+  }
+  if (hasTopLevelStepLine(stepBlock, "continue-on-error: true")) {
+    fail(label, `${relativePackagePath(path)} ${runCommand} step must not continue on error`);
+  }
 }
 
 function expectBlock(label, path, text, header, indent) {
@@ -486,19 +504,6 @@ function expectJobBlock(label, path, workflow, jobName) {
   return expectBlock(label, path, jobsBlock, `${jobName}:`, 2);
 }
 
-function expectJobBlockContaining(label, path, workflow, expected) {
-  const jobsBlock = expectBlock(label, path, workflow, "jobs:", 0);
-  const jobBlocks = extractNestedBlocks(jobsBlock, 2);
-  const jobBlock = jobBlocks.find((block) => block.includes(expected));
-
-  if (!jobBlock) {
-    fail(label, `${relativePackagePath(path)} must include ${expected} in a job`);
-    return "";
-  }
-
-  return jobBlock;
-}
-
 function expectJobBlockContainingRun(label, path, workflow, runCommand) {
   const jobsBlock = expectBlock(label, path, workflow, "jobs:", 0);
   const jobBlocks = extractNestedBlocks(jobsBlock, 2);
@@ -528,7 +533,7 @@ function expectStepWithRun(label, path, jobBlock, runCommand) {
 
 function expectStepWithUses(label, path, jobBlock, usesAction) {
   const stepBlocks = extractStepBlocks(jobBlock);
-  const stepBlock = stepBlocks.find((block) => hasLine(block, `uses: ${usesAction}`));
+  const stepBlock = stepBlocks.find((block) => hasTopLevelStepLine(block, `uses: ${usesAction}`));
 
   if (!stepBlock) {
     fail(label, `${relativePackagePath(path)} must include uses: ${usesAction} in a step`);
@@ -639,6 +644,18 @@ function hasLine(text, expected) {
   return text.split("\n").some((line) => normalizedYamlLine(line) === expected);
 }
 
+function hasTopLevelStepLine(stepBlock, expected) {
+  return stepBlock
+    .split("\n")
+    .some((line) => stepTopLevelLine(stepBlock, line) === expected);
+}
+
+function hasTopLevelStepKey(stepBlock, key) {
+  return stepBlock
+    .split("\n")
+    .some((line) => stepTopLevelLine(stepBlock, line).startsWith(key));
+}
+
 function hasLineAtIndent(text, expected, indent) {
   const prefix = " ".repeat(indent);
   return text.split("\n").some((line) => line === `${prefix}${expected}`);
@@ -650,12 +667,27 @@ function hasEnvLine(text, envLine, indent) {
 }
 
 function stepRunCommand(stepBlock) {
-  const line = stepBlock
-    .split("\n")
-    .map((entry) => normalizedYamlLine(entry))
-    .find((entry) => entry.startsWith("run: "));
+  const line = stepBlock.split("\n").find((entry) => stepTopLevelLine(stepBlock, entry).startsWith("run: "));
   if (!line) return "";
-  return line.slice("run: ".length);
+  return stepTopLevelLine(stepBlock, line).slice("run: ".length);
+}
+
+function getStepChildBlock(stepBlock, header) {
+  const indent = stepBaseIndent(stepBlock) + 2;
+  return getOptionalBlock(stepBlock, header, indent);
+}
+
+function stepTopLevelLine(stepBlock, line) {
+  const topLevelIndent = stepBaseIndent(stepBlock) + 2;
+  if (countIndent(line) !== topLevelIndent && !line.trimStart().startsWith("- ")) {
+    return "";
+  }
+  return normalizedYamlLine(line);
+}
+
+function stepBaseIndent(stepBlock) {
+  const firstLine = stepBlock.split("\n").find((line) => line.trim() !== "");
+  return firstLine ? countIndent(firstLine) : 0;
 }
 
 function normalizedYamlLine(line) {

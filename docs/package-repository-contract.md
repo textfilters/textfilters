@@ -57,18 +57,18 @@ is shared:
 
 - The `Check` workflow runs on pull requests and pushes to `main`.
 - The check job grants read-only repository contents access and package read
-  access.
+  access, either through workflow-level or job-level permissions.
 - It checks out the repository, sets up Node 24 with the `@textfilters`
   GitHub Packages registry, runs exact `npm ci`, then runs exact
   `npm run check` in the same job.
 - The `Release Please` workflow runs on pushes to `main`.
 - Release Please uses `googleapis/release-please-action@v5` with
   `release-please-config.json` and `.release-please-manifest.json` configured
-  on the action step.
+  in the action step `with` block, and the action step uses exact `id: release`.
 - The Release Please job exposes `release_created` from the action step output.
 - Release publication only runs when Release Please reports a created release.
 - Publication runs exact `npm run check` before exact `npm publish` to GitHub
-  Packages in the publish job.
+  Packages in the publish job, and the prepublish check is blocking.
 - The publish job keeps `packages: write` for GitHub Packages publication, and
   the publish step or publish job has the package registry token available.
 
