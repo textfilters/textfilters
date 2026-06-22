@@ -29,6 +29,8 @@ Each package repository keeps its own source, tests, and package-specific
 - Node baseline `engines.node: ">=24"` and package manager `npm@11.16.0`.
 - GitHub Packages publish registry:
   `https://npm.pkg.github.com`.
+- Packages are publishable manifests: `private` is not true, and package
+  versions use semver.
 - Published files include `dist`, `README.md`, and `LICENSE`.
 - Repositories keep a committed npm lockfile because shared workflows use
   `npm ci`.
@@ -36,8 +38,10 @@ Each package repository keeps its own source, tests, and package-specific
   and `check`.
 - `prepack` runs `npm run build`, and `pack:dry-run` runs
   `npm pack --dry-run`.
-- `check` runs formatting, tests, a TypeScript build before the package dist
-  smoke, and a package dry run while preserving package-specific smoke details.
+- `check` runs exact formatting, test, package dist smoke, and package dry-run
+  commands while preserving package-specific smoke details.
+- A TypeScript build runs before the package dist smoke, either directly before
+  `smoke:dist` in `check` or as the first command delegated by `smoke:dist`.
 - Shared dev dependencies are Prettier, TypeScript, and Vitest at the versions
   recorded in `package-contract.json`.
 
@@ -61,7 +65,8 @@ is shared:
 - The Release Please job exposes `release_created` from the action step output.
 - Release publication only runs when Release Please reports a created release.
 - Publication runs the package check before `npm publish` to GitHub Packages.
-- The publish job keeps `packages: write` for GitHub Packages publication.
+- The publish job keeps `packages: write` for GitHub Packages publication, and
+  the publish step has the package registry token available.
 
 ## Release Please Contract
 
@@ -70,6 +75,7 @@ Each package has a package-local `release-please-config.json` with:
 - `include-component-in-tag: false`
 - package `release-type: "node"`
 - package name matching the repository package name
+- no root-level or package-level `skip-github-release: true`
 - a `.release-please-manifest.json` `.` entry matching the package version
 
 Release Please remains the release path. Packages must not be published

@@ -8,6 +8,8 @@ const contractPath = join(repoDir, "package-contract.json");
 const contract = readJson(contractPath);
 const packagesRoot = resolve(repoDir, contract.packagesRoot);
 const failures = [];
+const SEMVER_PATTERN =
+  /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
 
 for (const pkgSpec of contract.packages) {
   const packageDir = join(packagesRoot, pkgSpec.directory);
@@ -39,7 +41,8 @@ function checkPackage(pkgSpec, packageDir) {
 
   const pkg = readJson(packageJsonPath);
   expectEqual(label, "package name", pkg.name, pkgSpec.name);
-  expectString(label, "package version", pkg.version);
+  expectAbsentPrivate(label, pkg.private);
+  expectSemver(label, "package version", pkg.version);
   expectEqual(label, "type", pkg.type, contract.manifest.type);
   expectEqual(label, "license", pkg.license, contract.manifest.license);
   expectEqual(label, "sideEffects", pkg.sideEffects, contract.manifest.sideEffects);
@@ -74,11 +77,10 @@ function checkPackage(pkgSpec, packageDir) {
     expectEqual(label, `script ${scriptName}`, pkg.scripts?.[scriptName], expected);
   }
 
-  for (const fragment of contract.manifest.checkScriptMustInclude) {
-    if (!pkg.scripts?.check?.includes(fragment)) {
-      fail(label, `check script must include ${fragment}`);
-    }
+  for (const command of contract.manifest.checkScriptMustInclude) {
+    expectScriptCommand(label, "check", pkg.scripts?.check, command);
   }
+  expectScriptCommandOrder(label, "check", pkg.scripts?.check, contract.manifest.checkScriptMustInclude);
 
   if (contract.manifest.buildMustRunBeforeDistSmoke) {
     expectBuildBeforeDistSmoke(label, pkg.scripts);
@@ -107,13 +109,16 @@ function checkPackage(pkgSpec, packageDir) {
 function checkWorkflow(label, workflowPath) {
   const workflow = readText(label, workflowPath);
   if (!workflow) return;
+  const onBlock = expectBlock(label, workflowPath, workflow, "on:", 0);
+  const pushBlock = expectBlock(label, workflowPath, onBlock, "push:", 2);
+  const permissionsBlock = expectBlock(label, workflowPath, workflow, "permissions:", 0);
 
   expectText(label, workflowPath, workflow, `name: ${contract.checkWorkflow.name}`);
-  expectText(label, workflowPath, workflow, "pull_request:");
-  expectText(label, workflowPath, workflow, "push:");
-  expectText(label, workflowPath, workflow, "- main");
-  expectText(label, workflowPath, workflow, "contents: read");
-  expectText(label, workflowPath, workflow, "packages: read");
+  expectText(label, workflowPath, onBlock, "pull_request:");
+  expectText(label, workflowPath, pushBlock, "branches:");
+  expectText(label, workflowPath, pushBlock, "- main");
+  expectText(label, workflowPath, permissionsBlock, "contents: read");
+  expectText(label, workflowPath, permissionsBlock, "packages: read");
   expectText(label, workflowPath, workflow, `uses: ${contract.checkWorkflow.checkoutAction}`);
   expectText(label, workflowPath, workflow, `uses: ${contract.checkWorkflow.setupNodeAction}`);
   expectText(label, workflowPath, workflow, `node-version: ${contract.checkWorkflow.nodeVersion}`);
@@ -135,33 +140,59 @@ function checkWorkflow(label, workflowPath) {
 function checkReleaseWorkflow(label, workflowPath) {
   const workflow = readText(label, workflowPath);
   if (!workflow) return;
+  const onBlock = expectBlock(label, workflowPath, workflow, "on:", 0);
+  const pushBlock = expectBlock(label, workflowPath, onBlock, "push:", 2);
+  const rootPermissionsBlock = expectBlock(label, workflowPath, workflow, "permissions:", 0);
+  const releaseJob = expectJobBlock(label, workflowPath, workflow, "release-please");
+  const releasePermissionsBlock = expectBlock(label, workflowPath, releaseJob, "permissions:", 4);
+  const publishJob = expectJobBlockContaining(
+    label,
+    workflowPath,
+    workflow,
+    `run: ${contract.releaseWorkflow.publishCommand}`,
+  );
+  const publishPermissionsBlock = expectBlock(label, workflowPath, publishJob, "permissions:", 4);
+  const publishStep = expectStepBlockContaining(
+    label,
+    workflowPath,
+    publishJob,
+    `run: ${contract.releaseWorkflow.publishCommand}`,
+  );
 
   expectText(label, workflowPath, workflow, `name: ${contract.releaseWorkflow.name}`);
-  expectText(label, workflowPath, workflow, "push:");
-  expectText(label, workflowPath, workflow, "- main");
-  expectText(label, workflowPath, workflow, "contents: read");
-  expectText(label, workflowPath, workflow, "contents: write");
-  expectText(label, workflowPath, workflow, "issues: write");
-  expectText(label, workflowPath, workflow, "pull-requests: write");
-  expectText(label, workflowPath, workflow, "packages: write");
-  expectText(label, workflowPath, workflow, "outputs:");
-  expectText(label, workflowPath, workflow, contract.releaseWorkflow.releaseCreatedOutput);
-  expectText(label, workflowPath, workflow, `uses: ${contract.releaseWorkflow.releaseAction}`);
-  expectText(label, workflowPath, workflow, `id: ${contract.releaseWorkflow.releaseStepId}`);
-  expectText(label, workflowPath, workflow, `token: ${contract.releaseWorkflow.token}`);
-  expectText(label, workflowPath, workflow, `config-file: ${contract.releaseWorkflow.configFile}`);
-  expectText(label, workflowPath, workflow, `manifest-file: ${contract.releaseWorkflow.manifestFile}`);
-  expectText(label, workflowPath, workflow, `needs: ${contract.releaseWorkflow.publishNeeds}`);
-  expectText(label, workflowPath, workflow, `if: ${contract.releaseWorkflow.publishCondition}`);
-  expectText(label, workflowPath, workflow, `uses: ${contract.checkWorkflow.checkoutAction}`);
-  expectText(label, workflowPath, workflow, `uses: ${contract.checkWorkflow.setupNodeAction}`);
-  expectText(label, workflowPath, workflow, `node-version: ${contract.checkWorkflow.nodeVersion}`);
-  expectText(label, workflowPath, workflow, `registry-url: ${contract.checkWorkflow.registryUrl}`);
-  expectText(label, workflowPath, workflow, `scope: "${contract.checkWorkflow.scope}"`);
-  expectText(label, workflowPath, workflow, "NODE_AUTH_TOKEN: ${{ github.token }}");
-  expectText(label, workflowPath, workflow, `run: ${contract.checkWorkflow.installCommand}`);
-  expectText(label, workflowPath, workflow, `run: ${contract.checkWorkflow.checkCommand}`);
-  expectText(label, workflowPath, workflow, `run: ${contract.releaseWorkflow.publishCommand}`);
+  expectText(label, workflowPath, pushBlock, "branches:");
+  expectText(label, workflowPath, pushBlock, "- main");
+  expectText(label, workflowPath, rootPermissionsBlock, "contents: read");
+  expectText(label, workflowPath, releasePermissionsBlock, "contents: write");
+  expectText(label, workflowPath, releasePermissionsBlock, "issues: write");
+  expectText(label, workflowPath, releasePermissionsBlock, "pull-requests: write");
+  expectText(label, workflowPath, releaseJob, "outputs:");
+  expectText(label, workflowPath, releaseJob, contract.releaseWorkflow.releaseCreatedOutput);
+  expectText(label, workflowPath, releaseJob, `uses: ${contract.releaseWorkflow.releaseAction}`);
+  expectText(label, workflowPath, releaseJob, `id: ${contract.releaseWorkflow.releaseStepId}`);
+  expectText(label, workflowPath, releaseJob, `token: ${contract.releaseWorkflow.token}`);
+  expectText(label, workflowPath, releaseJob, `config-file: ${contract.releaseWorkflow.configFile}`);
+  expectText(label, workflowPath, releaseJob, `manifest-file: ${contract.releaseWorkflow.manifestFile}`);
+  expectText(label, workflowPath, publishJob, `needs: ${contract.releaseWorkflow.publishNeeds}`);
+  expectText(label, workflowPath, publishJob, `if: ${contract.releaseWorkflow.publishCondition}`);
+  expectText(label, workflowPath, publishPermissionsBlock, "contents: read");
+  expectText(label, workflowPath, publishPermissionsBlock, "packages: write");
+  expectText(label, workflowPath, publishJob, `uses: ${contract.checkWorkflow.checkoutAction}`);
+  expectText(label, workflowPath, publishJob, `uses: ${contract.checkWorkflow.setupNodeAction}`);
+  expectText(label, workflowPath, publishJob, `node-version: ${contract.checkWorkflow.nodeVersion}`);
+  expectText(label, workflowPath, publishJob, `registry-url: ${contract.checkWorkflow.registryUrl}`);
+  expectText(label, workflowPath, publishJob, `scope: "${contract.checkWorkflow.scope}"`);
+  expectText(label, workflowPath, publishJob, `run: ${contract.checkWorkflow.installCommand}`);
+  expectText(label, workflowPath, publishJob, `run: ${contract.checkWorkflow.checkCommand}`);
+  expectText(label, workflowPath, publishStep, "NODE_AUTH_TOKEN: ${{ github.token }}");
+  expectText(label, workflowPath, publishStep, `run: ${contract.releaseWorkflow.publishCommand}`);
+  expectOrder(
+    label,
+    workflowPath,
+    publishStep,
+    "NODE_AUTH_TOKEN: ${{ github.token }}",
+    `run: ${contract.releaseWorkflow.publishCommand}`,
+  );
 
   expectOrder(
     label,
@@ -186,6 +217,12 @@ function checkReleaseConfig(label, releaseConfigPath, packageName) {
   }
 
   const config = readJson(releaseConfigPath);
+  if (config["skip-github-release"] === true) {
+    fail(label, "release-please skip-github-release must not be true");
+  }
+  if (config.packages?.["."]?.["skip-github-release"] === true) {
+    fail(label, "release-please package skip-github-release must not be true");
+  }
   expectEqual(
     label,
     "release-please include-component-in-tag",
@@ -213,7 +250,7 @@ function checkReleaseManifest(label, releaseManifestPath, packageVersion) {
   }
 
   const manifest = readJson(releaseManifestPath);
-  expectString(label, "release-please manifest .", manifest["."]);
+  expectSemver(label, "release-please manifest .", manifest["."]);
   expectEqual(label, "release-please manifest .", manifest["."], packageVersion);
 }
 
@@ -241,17 +278,52 @@ function expectString(label, name, actual) {
   }
 }
 
+function expectSemver(label, name, actual) {
+  expectString(label, name, actual);
+  if (typeof actual === "string" && !SEMVER_PATTERN.test(actual)) {
+    fail(label, `${name} must be a valid semver version`);
+  }
+}
+
+function expectAbsentPrivate(label, actual) {
+  if (actual === true) {
+    fail(label, "package must not be private");
+  }
+}
+
+function expectScriptCommand(label, scriptName, script, command) {
+  const commands = splitScriptCommands(script);
+  if (!commands.includes(command)) {
+    fail(label, `script ${scriptName} must include command ${command}`);
+  }
+}
+
+function expectScriptCommandOrder(label, scriptName, script, expectedCommands) {
+  const commands = splitScriptCommands(script);
+  let previousIndex = -1;
+
+  for (const command of expectedCommands) {
+    const commandIndex = commands.indexOf(command);
+    if (commandIndex === -1) continue;
+    if (commandIndex < previousIndex) {
+      fail(label, `script ${scriptName} must keep ${expectedCommands.join(" before ")}`);
+      return;
+    }
+    previousIndex = commandIndex;
+  }
+}
+
 function expectBuildBeforeDistSmoke(label, scripts) {
-  const check = scripts?.check ?? "";
-  const smoke = scripts?.["smoke:dist"] ?? "";
-  const checkBuildIndex = check.indexOf("npm run build");
-  const checkSmokeIndex = check.indexOf("npm run smoke:dist");
+  const checkCommands = splitScriptCommands(scripts?.check);
+  const smokeCommands = splitScriptCommands(scripts?.["smoke:dist"]);
+  const checkBuildIndex = checkCommands.indexOf("npm run build");
+  const checkSmokeIndex = checkCommands.indexOf("npm run smoke:dist");
 
   if (checkBuildIndex !== -1 && checkSmokeIndex !== -1 && checkBuildIndex < checkSmokeIndex) {
     return;
   }
 
-  if (checkSmokeIndex !== -1 && smoke.includes("npm run build")) {
+  if (checkSmokeIndex !== -1 && smokeCommands.indexOf("npm run build") === 0) {
     return;
   }
 
@@ -262,6 +334,60 @@ function expectText(label, path, text, expected) {
   if (!text.includes(expected)) {
     fail(label, `${relativePackagePath(path)} must include ${expected}`);
   }
+}
+
+function expectBlock(label, path, text, header, indent) {
+  if (!text) return "";
+
+  const lines = text.split("\n");
+  const prefix = " ".repeat(indent);
+  const start = lines.findIndex((line) => line === `${prefix}${header}`);
+
+  if (start === -1) {
+    fail(label, `${relativePackagePath(path)} must include ${header}`);
+    return "";
+  }
+
+  let end = lines.length;
+  for (let index = start + 1; index < lines.length; index += 1) {
+    if (lines[index].trim() === "") continue;
+    if (countIndent(lines[index]) <= indent) {
+      end = index;
+      break;
+    }
+  }
+
+  return lines.slice(start, end).join("\n");
+}
+
+function expectJobBlock(label, path, workflow, jobName) {
+  const jobsBlock = expectBlock(label, path, workflow, "jobs:", 0);
+  return expectBlock(label, path, jobsBlock, `${jobName}:`, 2);
+}
+
+function expectJobBlockContaining(label, path, workflow, expected) {
+  const jobsBlock = expectBlock(label, path, workflow, "jobs:", 0);
+  const jobBlocks = extractNestedBlocks(jobsBlock, 2);
+  const jobBlock = jobBlocks.find((block) => block.includes(expected));
+
+  if (!jobBlock) {
+    fail(label, `${relativePackagePath(path)} must include ${expected} in a job`);
+    return "";
+  }
+
+  return jobBlock;
+}
+
+function expectStepBlockContaining(label, path, jobBlock, expected) {
+  const stepBlocks = extractStepBlocks(jobBlock);
+  const stepBlock = stepBlocks.find((block) => block.includes(expected));
+
+  if (!stepBlock) {
+    fail(label, `${relativePackagePath(path)} must include ${expected} in a step`);
+    return "";
+  }
+
+  return stepBlock;
 }
 
 function expectOrder(label, path, text, before, after) {
@@ -277,6 +403,61 @@ function expectOrder(label, path, text, before, after) {
 
 function fail(label, message) {
   failures.push(`${label}: ${message}`);
+}
+
+function splitScriptCommands(script) {
+  if (typeof script !== "string") return [];
+  return script
+    .split(/\s+&&\s+/u)
+    .map((command) => command.trim())
+    .filter(Boolean);
+}
+
+function extractNestedBlocks(text, indent) {
+  const lines = text.split("\n");
+  const blocks = [];
+  let start = -1;
+
+  for (let index = 0; index < lines.length; index += 1) {
+    if (lines[index].trim() === "") continue;
+    if (countIndent(lines[index]) === indent && lines[index].trim().endsWith(":")) {
+      if (start !== -1) {
+        blocks.push(lines.slice(start, index).join("\n"));
+      }
+      start = index;
+    }
+  }
+
+  if (start !== -1) {
+    blocks.push(lines.slice(start).join("\n"));
+  }
+
+  return blocks;
+}
+
+function extractStepBlocks(text) {
+  const lines = text.split("\n");
+  const blocks = [];
+  let start = -1;
+
+  for (let index = 0; index < lines.length; index += 1) {
+    if (/^\s{6}-\s/u.test(lines[index])) {
+      if (start !== -1) {
+        blocks.push(lines.slice(start, index).join("\n"));
+      }
+      start = index;
+    }
+  }
+
+  if (start !== -1) {
+    blocks.push(lines.slice(start).join("\n"));
+  }
+
+  return blocks;
+}
+
+function countIndent(line) {
+  return line.length - line.trimStart().length;
 }
 
 function relativePackagePath(path) {
