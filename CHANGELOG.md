@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.13.2](https://github.com/textfilters/profanity/compare/v0.13.1...v0.13.2) (2026-06-22)
+
+
+### Bug Fixes
+
+* clarify runtime literal semantics ([#117](https://github.com/textfilters/profanity/issues/117)) ([a98743f](https://github.com/textfilters/profanity/commit/a98743f546f2795ca8f9cfa16d943e193242f584))
+
 ## [0.13.1](https://github.com/textfilters/profanity/compare/v0.13.0...v0.13.1) (2026-06-20)
 
 
