@@ -56,21 +56,24 @@ Package repositories keep copied workflows today, but their important contract
 is shared:
 
 - The `Check` workflow has the exact top-level workflow name and runs on pull
-  requests and pushes to the exact `main` branch entry. The pull request event
-  is a top-level workflow event, and the selected check job is unconditional
-  and blocking. Required events are not filtered by paths or event types.
+  requests and pushes only to the exact `main` branch entry. The pull request
+  event is a top-level workflow event, and the selected check job defines a
+  runner and is unconditional and blocking. Required events are not filtered by
+  paths or event types.
 - The check job grants read-only repository contents access and package read
-  access, either through workflow-level or job-level permissions.
+  access, either through workflow-level or block-form job-level permissions.
 - It checks out the repository, sets up Node 24 with the `@textfilters`
   GitHub Packages registry in a blocking setup step, runs exact `npm ci`, then
   runs exact `npm run check` in the same job. The check step is unconditional
   and blocking.
 - The `Release Please` workflow has the exact top-level workflow name and runs
-  on unfiltered pushes to the exact `main` branch entry.
+  on unfiltered pushes only to the exact `main` branch entry.
 - Release Please uses `googleapis/release-please-action@v5` with
   `release-please-config.json` and `.release-please-manifest.json` configured
-  in the action step `with` block, and the action step uses exact `id: release`.
-- The Release Please job and action step are unconditional and blocking.
+  in the action step `with` block, without action-level release bypass inputs,
+  and the action step uses exact `id: release`.
+- The Release Please and publish jobs define runners. The Release Please job
+  and action step are unconditional and blocking.
 - The Release Please job exposes `release_created` from the action step output
   through job-level `outputs`.
 - Release publication only runs when Release Please reports a created release,

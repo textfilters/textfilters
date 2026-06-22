@@ -144,7 +144,9 @@ function checkWorkflow(label, workflowPath) {
   expectUnfilteredEvent(label, workflowPath, pullRequestBlock, "pull_request");
   expectPushBranchesOnly(label, workflowPath, pushBlock);
   expectBlockingJob(label, workflowPath, checkJob, "check");
+  expectJobRunner(label, workflowPath, checkJob, "check");
   expectBlockLine(label, workflowPath, branchesBlock, "- main", 6);
+  expectSingleListEntry(label, workflowPath, branchesBlock, "- main", 6);
   expectEffectivePermission(label, workflowPath, workflow, checkJob, "contents: read");
   expectEffectivePermission(label, workflowPath, workflow, checkJob, "packages: read");
   expectBlockingStep(label, workflowPath, setupNodeStep, contract.checkWorkflow.setupNodeAction);
@@ -230,7 +232,10 @@ function checkReleaseWorkflow(label, workflowPath) {
   expectPushBranchesOnly(label, workflowPath, pushBlock);
   expectBlockingJob(label, workflowPath, releaseJob, "release-please");
   expectBlockingJob(label, workflowPath, publishJob, "publish", contract.releaseWorkflow.publishCondition);
+  expectJobRunner(label, workflowPath, releaseJob, "release-please");
+  expectJobRunner(label, workflowPath, publishJob, "publish");
   expectBlockLine(label, workflowPath, branchesBlock, "- main", 6);
+  expectSingleListEntry(label, workflowPath, branchesBlock, "- main", 6);
   expectBlockLine(label, workflowPath, releasePermissionsBlock, "contents: write", 6);
   expectBlockLine(label, workflowPath, releasePermissionsBlock, "issues: write", 6);
   expectBlockLine(label, workflowPath, releasePermissionsBlock, "pull-requests: write", 6);
@@ -240,6 +245,9 @@ function checkReleaseWorkflow(label, workflowPath) {
   expectStepWithInput(label, workflowPath, releaseActionStep, "token", contract.releaseWorkflow.token);
   expectStepWithInput(label, workflowPath, releaseActionStep, "config-file", contract.releaseWorkflow.configFile);
   expectStepWithInput(label, workflowPath, releaseActionStep, "manifest-file", contract.releaseWorkflow.manifestFile);
+  expectStepWithoutInput(label, workflowPath, releaseActionStep, "skip-github-release");
+  expectStepWithoutInput(label, workflowPath, releaseActionStep, "skip-github-pull-request");
+  expectStepWithoutInput(label, workflowPath, releaseActionStep, "release-type");
   expectJobLine(label, workflowPath, publishJob, `needs: ${contract.releaseWorkflow.publishNeeds}`, 4);
   expectPublishGate(label, workflowPath, publishJob, publishStep);
   expectBlockLine(label, workflowPath, publishPermissionsBlock, "contents: read", 6);
@@ -476,6 +484,15 @@ function expectStepWithInput(label, path, stepBlock, inputName, expectedValue) {
   }
 }
 
+function expectStepWithoutInput(label, path, stepBlock, inputName) {
+  const withBlock = getStepChildBlock(stepBlock, "with:");
+  const inputIndent = stepBaseIndent(stepBlock) + 4;
+
+  if (withBlock && hasKeyAtIndent(withBlock, `${inputName}:`, inputIndent)) {
+    fail(label, `${relativePackagePath(path)} step with block must not include ${inputName}`);
+  }
+}
+
 function expectJobLine(label, path, jobBlock, expected, indent) {
   if (!hasLineAtIndent(jobBlock, expected, indent)) {
     fail(label, `${relativePackagePath(path)} job must include ${expected}`);
@@ -488,10 +505,22 @@ function expectBlockLine(label, path, block, expected, indent) {
   }
 }
 
+function expectSingleListEntry(label, path, block, expected, indent) {
+  const expectedEntry = expected.startsWith("- ") ? expected.slice(2) : expected;
+  const entries = block
+    .split("\n")
+    .filter((line) => countIndent(line) === indent && line.trimStart().startsWith("- "));
+
+  if (entries.length !== 1 || normalizedYamlLine(entries[0]) !== expectedEntry) {
+    fail(label, `${relativePackagePath(path)} block must include only ${expected}`);
+  }
+}
+
 function expectEffectivePermission(label, path, workflow, jobBlock, permission) {
-  const jobPermissions = getOptionalBlock(jobBlock, "permissions:", 4);
-  const scopeBlock = jobPermissions || getOptionalBlock(workflow, "permissions:", 0);
-  const permissionIndent = jobPermissions ? 6 : 2;
+  const hasJobPermissions = hasKeyAtIndent(jobBlock, "permissions:", 4);
+  const jobPermissions = hasJobPermissions ? getOptionalBlock(jobBlock, "permissions:", 4) : "";
+  const scopeBlock = hasJobPermissions ? jobPermissions : getOptionalBlock(workflow, "permissions:", 0);
+  const permissionIndent = hasJobPermissions ? 6 : 2;
 
   if (!scopeBlock || !hasLineAtIndent(scopeBlock, permission, permissionIndent)) {
     fail(label, `${relativePackagePath(path)} job permissions must include ${permission}`);
@@ -555,6 +584,12 @@ function expectBlockingJob(label, path, jobBlock, jobName, allowedCondition = ""
   const continueOnError = jobTopLevelValue(jobBlock, "continue-on-error:", 4);
   if (continueOnError && continueOnError !== "false") {
     fail(label, `${relativePackagePath(path)} ${jobName} job must not continue on error`);
+  }
+}
+
+function expectJobRunner(label, path, jobBlock, jobName) {
+  if (!jobTopLevelValue(jobBlock, "runs-on:", 4)) {
+    fail(label, `${relativePackagePath(path)} ${jobName} job must include runs-on`);
   }
 }
 
