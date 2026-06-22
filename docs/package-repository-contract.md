@@ -36,7 +36,7 @@ Each package repository keeps its own source, tests, and package-specific
 - Repositories keep a committed npm lockfile because shared workflows use
   `npm ci`.
 - Script names include `lint`, `test`, `build`, `smoke:dist`, `pack:dry-run`,
-  and `check`.
+  and `check`, and required script bodies are non-empty.
 - `prepack` runs `npm run build`, and `pack:dry-run` runs
   `npm pack --dry-run`.
 - `check` runs exact formatting, test, package dist smoke, and package dry-run
@@ -57,7 +57,8 @@ is shared:
 
 - The `Check` workflow runs on pull requests and pushes to the exact `main`
   branch entry. The pull request event is a top-level workflow event, and the
-  selected check job is unconditional.
+  selected check job is unconditional and blocking. The pull request event is
+  not filtered by paths or event types.
 - The check job grants read-only repository contents access and package read
   access, either through workflow-level or job-level permissions.
 - It checks out the repository, sets up Node 24 with the `@textfilters`
@@ -69,11 +70,12 @@ is shared:
 - Release Please uses `googleapis/release-please-action@v5` with
   `release-please-config.json` and `.release-please-manifest.json` configured
   in the action step `with` block, and the action step uses exact `id: release`.
-- The Release Please action step is unconditional and blocking.
+- The Release Please job and action step are unconditional and blocking.
 - The Release Please job exposes `release_created` from the action step output
   through job-level `outputs`.
 - Release publication only runs when Release Please reports a created release,
-  with job-level `needs` wiring and a top-level job or publish-step gate.
+  with job-level `needs` wiring and only the expected release-created job gate
+  or publish-step gate.
 - Publication runs exact `npm run check` before exact `npm publish` to GitHub
   Packages in the publish job, with a single publish command. The prepublish
   check and publish steps are blocking.

@@ -73,6 +73,8 @@ function checkPackage(pkgSpec, packageDir) {
   for (const scriptName of contract.manifest.requiredScriptNames) {
     if (typeof pkg.scripts?.[scriptName] !== "string") {
       fail(label, `missing script ${scriptName}`);
+    } else if (pkg.scripts[scriptName].trim() === "") {
+      fail(label, `script ${scriptName} must not be empty`);
     }
   }
 
@@ -114,6 +116,7 @@ function checkWorkflow(label, workflowPath) {
   const workflow = readText(label, workflowPath);
   if (!workflow) return;
   const onBlock = expectBlock(label, workflowPath, workflow, "on:", 0);
+  const pullRequestBlock = expectBlock(label, workflowPath, onBlock, "pull_request:", 2);
   const pushBlock = expectBlock(label, workflowPath, onBlock, "push:", 2);
   const branchesBlock = expectBlock(label, workflowPath, pushBlock, "branches:", 4);
   const checkJob = expectJobBlockContainingRun(
@@ -138,8 +141,8 @@ function checkWorkflow(label, workflowPath) {
   );
 
   expectText(label, workflowPath, workflow, `name: ${contract.checkWorkflow.name}`);
-  expectBlock(label, workflowPath, onBlock, "pull_request:", 2);
-  expectUnconditionalJob(label, workflowPath, checkJob, "check");
+  expectUnfilteredEvent(label, workflowPath, pullRequestBlock, "pull_request");
+  expectBlockingJob(label, workflowPath, checkJob, "check");
   expectBlockLine(label, workflowPath, branchesBlock, "- main", 6);
   expectEffectivePermission(label, workflowPath, workflow, checkJob, "contents: read");
   expectEffectivePermission(label, workflowPath, workflow, checkJob, "packages: read");
@@ -221,6 +224,8 @@ function checkReleaseWorkflow(label, workflowPath) {
   );
 
   expectText(label, workflowPath, workflow, `name: ${contract.releaseWorkflow.name}`);
+  expectBlockingJob(label, workflowPath, releaseJob, "release-please");
+  expectBlockingJob(label, workflowPath, publishJob, "publish", contract.releaseWorkflow.publishCondition);
   expectBlockLine(label, workflowPath, branchesBlock, "- main", 6);
   expectBlockLine(label, workflowPath, releasePermissionsBlock, "contents: write", 6);
   expectBlockLine(label, workflowPath, releasePermissionsBlock, "issues: write", 6);
@@ -341,7 +346,7 @@ function checkPublishCommandScope(label, packageDir, releaseWorkflowPath) {
     if (workflowPath === releaseWorkflowPath) continue;
 
     const workflow = stripYamlComments(readFileSync(workflowPath, "utf8"));
-    if (workflowContainsRun(workflow, contract.releaseWorkflow.publishCommand)) {
+    if (workflow.includes(contract.releaseWorkflow.publishCommand)) {
       fail(
         label,
         `${relativePackagePath(workflowPath)} must not include ${contract.releaseWorkflow.publishCommand}`,
@@ -472,7 +477,13 @@ function expectEffectivePermission(label, path, workflow, jobBlock, permission) 
 
 function expectPublishGate(label, path, publishJob, publishStep) {
   const condition = `if: ${contract.releaseWorkflow.publishCondition}`;
-  if (hasLineAtIndent(publishJob, condition, 4) || hasTopLevelStepLine(publishStep, condition)) {
+  const jobCondition = jobTopLevelValue(publishJob, "if:", 4);
+
+  if (jobCondition && jobCondition !== contract.releaseWorkflow.publishCondition) {
+    fail(label, `${relativePackagePath(path)} publish job if must be ${contract.releaseWorkflow.publishCondition}`);
+    return;
+  }
+  if (jobCondition === contract.releaseWorkflow.publishCondition || hasTopLevelStepLine(publishStep, condition)) {
     return;
   }
 
@@ -492,9 +503,20 @@ function expectEnvAvailable(label, path, jobBlock, stepBlock, envLine) {
   fail(label, `${relativePackagePath(path)} step must have ${envLine} available`);
 }
 
-function expectUnconditionalJob(label, path, jobBlock, jobName) {
-  if (hasJobLineKey(jobBlock, "if:", 4)) {
+function expectUnfilteredEvent(label, path, eventBlock, eventName) {
+  if (blockHasChildLines(eventBlock)) {
+    fail(label, `${relativePackagePath(path)} ${eventName} event must not be filtered`);
+  }
+}
+
+function expectBlockingJob(label, path, jobBlock, jobName, allowedCondition = "") {
+  const jobCondition = jobTopLevelValue(jobBlock, "if:", 4);
+  if (jobCondition && jobCondition !== allowedCondition) {
     fail(label, `${relativePackagePath(path)} ${jobName} job must not be conditional`);
+  }
+  const continueOnError = jobTopLevelValue(jobBlock, "continue-on-error:", 4);
+  if (continueOnError && continueOnError !== "false") {
+    fail(label, `${relativePackagePath(path)} ${jobName} job must not continue on error`);
   }
 }
 
@@ -587,13 +609,6 @@ function expectJobBlockContainingRun(label, path, workflow, runCommand) {
   }
 
   return jobBlock;
-}
-
-function workflowContainsRun(workflow, runCommand) {
-  const jobsBlock = getOptionalBlock(workflow, "jobs:", 0);
-  return extractNestedBlocks(jobsBlock, 2).some((jobBlock) =>
-    extractStepBlocks(jobBlock).some((stepBlock) => stepRunCommand(stepBlock) === runCommand),
-  );
 }
 
 function expectSingleJobBlockContainingRun(label, path, workflow, runCommand) {
@@ -760,10 +775,21 @@ function hasTopLevelStepKey(stepBlock, key) {
     .some((line) => stepTopLevelLine(stepBlock, line).startsWith(key));
 }
 
-function hasJobLineKey(jobBlock, key, indent) {
-  return jobBlock
+function jobTopLevelValue(jobBlock, key, indent) {
+  const line = jobBlock
     .split("\n")
-    .some((line) => countIndent(line) === indent && normalizedYamlLine(line).startsWith(key));
+    .map((entry) => (countIndent(entry) === indent ? normalizedYamlLine(entry) : ""))
+    .find((entry) => entry.startsWith(`${key} `));
+
+  return line ? line.slice(key.length).trim() : "";
+}
+
+function blockHasChildLines(block) {
+  const lines = block.split("\n").filter((line) => line.trim() !== "");
+  const header = lines[0] ?? "";
+  const headerIndent = countIndent(header);
+
+  return lines.slice(1).some((line) => countIndent(line) > headerIndent);
 }
 
 function hasLineAtIndent(text, expected, indent) {
