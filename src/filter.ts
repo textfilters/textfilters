@@ -33,6 +33,7 @@ import {
   type ProfanityMatchRange,
   type ProfanitySeverity,
   type ProfanityTermList,
+  type ReadonlyProfanityFilter,
 } from "./types.js";
 import {
   compileLooseLiteralPatterns,
@@ -154,6 +155,29 @@ function createFilter(state: FilterState): ProfanityFilter {
       rebuildLoose(state);
     },
   };
+}
+
+function createReadOnlyFilter(
+  filter: ProfanityFilter,
+): ReadonlyProfanityFilter {
+  const readOnlyFilter = Object.freeze({
+    name: filter.name,
+    analyze: filter.analyze,
+    check: filter.check,
+    censor: filter.censor,
+    setStrict: rejectReadOnlyFilterMutation,
+    addStrict: rejectReadOnlyFilterMutation,
+    setLoose: rejectReadOnlyFilterMutation,
+    addLoose: rejectReadOnlyFilterMutation,
+  });
+
+  return readOnlyFilter;
+}
+
+function rejectReadOnlyFilterMutation(): never {
+  throw new TypeError(
+    "The shared profanity filter is read-only. Use createProfanityFilter() or a dictionary factory to create a mutable filter.",
+  );
 }
 
 function createState(
@@ -536,4 +560,6 @@ const isAtLeastSeverity = (
   PROFANITY_SEVERITY_RANK[severity] >= PROFANITY_SEVERITY_RANK[minSeverity];
 
 export const profanityFilter = createProfanityFilter;
-export const filter = createProfanityFilter(STRICT_BASE, LOOSE_BASE);
+export const filter: ReadonlyProfanityFilter = createReadOnlyFilter(
+  createProfanityFilter(STRICT_BASE, LOOSE_BASE),
+);

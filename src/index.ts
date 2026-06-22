@@ -8,6 +8,7 @@ export type {
   ProfanitySeverity,
   ProfanityTaxonomyMetadata,
   ProfanityTermList,
+  ReadonlyProfanityFilter,
 } from "./types.js";
 export type {
   ProfanityLanguageDictionary,

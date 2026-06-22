@@ -56,23 +56,23 @@ const tenantSafeText = tenantFilter.censor("message text");
 ```
 
 The default shared instance is exported as `filter` and uses the built-in strict
-and loose term lists. It is mutable through `setStrict`, `setLoose`,
-`addStrict`, and `addLoose`, so changes affect later calls that use the same
-shared instance.
+and loose term lists. It is read-only for shared use: `check`, `censor`, and
+`analyze` are available, while `setStrict`, `setLoose`, `addStrict`, and
+`addLoose` throw instead of mutating process-wide state.
 
 Use `createProfanityFilter(...)` when per-request, per-tenant, or test-local
-dictionaries must be isolated from the shared mutable `filter`.
+dictionaries must be mutable and isolated from the shared `filter`.
 
 ### Shared Default Vs Isolated Filters
 
 Use the exported `filter` for the package's shared built-in Russian behavior
 when your code only calls `check`, `censor`, or `analyze`. It is a process-local
-object: every module that imports `filter` receives the same mutable instance.
+read-only object: every module that imports `filter` receives the same instance,
+and mutation methods throw to protect shared dictionary state.
 
-Do not call `setStrict`, `setLoose`, `addStrict`, or `addLoose` on the shared
-`filter` for application-specific, tenant-specific, request-specific, or
-test-local terms. Those calls intentionally mutate that shared instance and
-therefore affect future checks performed through the same import.
+Do not use the shared `filter` for application-specific, tenant-specific,
+request-specific, or test-local terms. Use a factory-created filter for those
+runtime dictionaries.
 
 Use `createProfanityFilter(...)`,
 `createProfanityFilterFromDictionary(dictionary)`, or
@@ -194,11 +194,12 @@ const looseOnly = createProfanityFilter([], ["banned"]);
 const builtIn = createProfanityFilter();
 ```
 
-All filter instances expose stable `name: "profanity"` plus `check`, `censor`,
-`analyze`, `setStrict`, `setLoose`, `addStrict`, and `addLoose`.
-Runtime mutation methods affect only the instance they are called on. Calling
-them on the shared `filter` mutates shared package state; calling them on a
-factory-created filter mutates only that isolated instance.
+All factory-created filter instances expose stable `name: "profanity"` plus
+`check`, `censor`, `analyze`, `setStrict`, `setLoose`, `addStrict`, and
+`addLoose`. Runtime mutation methods affect only the instance they are called
+on. The shared `filter` is typed as `ReadonlyProfanityFilter`, keeps the same
+read methods, and rejects mutation methods at runtime for JavaScript consumers;
+factory-created filters remain the mutable boundary.
 
 ### Language Dictionaries
 
@@ -405,9 +406,9 @@ into different compiled matcher views.
 - Ranges are UTF-16 offsets into the original source string.
 - Runtime dictionaries do not support caller-provided regular expressions.
 - Runtime string terms do not receive taxonomy metadata.
-- The shared `filter` instance is mutable and process-local; reserve its
-  mutation methods for deliberate global changes.
-- Use factory-created filters for application-specific, tenant-specific,
+- The shared `filter` instance is process-local and read-only; use its
+  `check`, `censor`, and `analyze` methods for built-in Russian behavior.
+- Use factory-created mutable filters for application-specific, tenant-specific,
   request-specific, or test-local runtime dictionary changes.
 - Built-in corpus behavior is intentionally locked by compatibility tests.
 
@@ -427,9 +428,8 @@ Intentional public-package changes:
 - The filter exposes `check(text): boolean` for boolean-only detection.
 - `createProfanityFilter()` without arguments creates an instance with compiled
   views of the built-in Russian dictionary.
-- The exported `filter` remains a shared mutable default for backward
-  compatibility; factory-created filters are the recommended boundary for
-  isolated runtime mutation.
+- The exported `filter` is a shared read-only default; factory-created filters
+  are the mutable boundary for isolated runtime mutation.
 - Masking preserves JavaScript string length for astral code points.
 
 ## Architecture

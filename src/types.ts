@@ -32,11 +32,14 @@ export interface ProfanityMatchRange extends Readonly<
 
 export const PROFANITY_FILTER_NAME = "profanity";
 
-export interface ProfanityFilter {
+export interface ReadonlyProfanityFilter {
   readonly name: typeof PROFANITY_FILTER_NAME;
   analyze(text: string, options?: ProfanityMatchOptions): ProfanityMatchRange[];
   check(text: string, options?: ProfanityMatchOptions): boolean;
   censor(text: string, options?: ProfanityMatchOptions): string;
+}
+
+export interface ProfanityFilter extends ReadonlyProfanityFilter {
   setStrict(list: ProfanityTermList): void;
   setLoose(list: ProfanityTermList): void;
   addStrict(term: unknown): void;

@@ -19,6 +19,7 @@ import {
   type ProfanityMatchRange,
   type ProfanitySeverity,
   type ProfanityTaxonomyMetadata,
+  type ReadonlyProfanityFilter,
   russianProfanityDictionary,
   validateProfanityLanguageDictionary,
 } from "../src";
@@ -141,9 +142,36 @@ describe("public API", () => {
     >();
   });
 
+  it("exports the shared default filter as a read-only type", () => {
+    expectTypeOf(filter).toEqualTypeOf<ReadonlyProfanityFilter>();
+    expectTypeOf(createProfanityFilter()).toMatchTypeOf<{
+      setStrict(list: readonly unknown[]): void;
+      setLoose(list: readonly unknown[]): void;
+      addStrict(term: unknown): void;
+      addLoose(term: unknown): void;
+    }>();
+  });
+
   it("exposes the default instance and the compatible factory alias", () => {
     expect(filter.name).toBe(PROFANITY_FILTER_NAME);
     expect(profanityFilter(["fff"], []).censor("fff ggg")).toBe("*** ggg");
+  });
+
+  it("keeps the shared default filter read-only", () => {
+    const errorMessage =
+      "The shared profanity filter is read-only. Use createProfanityFilter() or a dictionary factory to create a mutable filter.";
+
+    expect(Object.isFrozen(filter)).toBe(true);
+    expect(() => filter.addStrict("shared-only")).toThrow(errorMessage);
+    expect(() => filter.addLoose("sharedloose")).toThrow(errorMessage);
+    expect(() => filter.setStrict(["replacement-only"])).toThrow(errorMessage);
+    expect(() => filter.setLoose(["replacementloose"])).toThrow(errorMessage);
+
+    expect(filter.check("блядь")).toBe(true);
+    expect(filter.check("shared-only")).toBe(false);
+    expect(filter.check("s-h-a-r-e-d-l-o-o-s-e")).toBe(false);
+    expect(filter.check("replacement-only")).toBe(false);
+    expect(filter.check("r-e-p-l-a-c-e-m-e-n-t-l-o-o-s-e")).toBe(false);
   });
 
   it("exposes a stable filter name and check helper", () => {
@@ -733,6 +761,18 @@ describe("public API", () => {
     expect(createProfanityFilter([], ["хуйня-фикс"]).censor("хуйня-фикс")).toBe(
       mask("хуйня-фикс"),
     );
+  });
+
+  it("keeps factory-created filters mutable after the default export is read-only", () => {
+    const mutable = createProfanityFilter([], []);
+
+    mutable.addStrict("strict-only");
+    mutable.addLoose("looseonly");
+
+    expect(mutable.check("strict-only")).toBe(true);
+    expect(mutable.check("l-o-o-s-e-o-n-l-y")).toBe(true);
+    expect(filter.check("strict-only")).toBe(false);
+    expect(filter.check("l-o-o-s-e-o-n-l-y")).toBe(false);
   });
 
   it("keeps built-in rules active when appending runtime literals", () => {

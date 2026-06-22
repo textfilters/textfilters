@@ -17,6 +17,7 @@ import {
   type ProfanityMatchRange,
   type ProfanitySeverity,
   type ProfanityTaxonomyMetadata,
+  type ReadonlyProfanityFilter,
 } from "../dist/index.js";
 
 const category: ProfanityCategory = "OBSCENE_MAT";
@@ -50,14 +51,19 @@ const dictionaryFilter: ProfanityFilter =
   createProfanityFilterFromDictionary(dictionary);
 const compiledDictionaryFilter: ProfanityFilter =
   createProfanityFilterFromCompiledDictionary(compiledDictionary);
+const sharedFilter: ReadonlyProfanityFilter = filter;
 const match: ProfanityMatchRange | undefined = strict.analyze(
   "alpha beta gamma delta",
   options,
 )[0];
 
 filter.check("plain text");
+sharedFilter.censor("plain text");
 dictionaryFilter.check("plain text");
 compiledDictionaryFilter.check("plain text");
+
+// @ts-expect-error The shared default filter is read-only.
+filter.addStrict("not-allowed");
 
 if (PROFANITY_FILTER_NAME !== "profanity") {
   throw new Error("Unexpected filter name declaration.");
