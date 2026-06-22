@@ -30,12 +30,14 @@ Each package repository keeps its own source, tests, and package-specific
 - GitHub Packages publish registry:
   `https://npm.pkg.github.com`.
 - Published files include `dist`, `README.md`, and `LICENSE`.
+- Repositories keep a committed npm lockfile because shared workflows use
+  `npm ci`.
 - Script names include `lint`, `test`, `build`, `smoke:dist`, `pack:dry-run`,
   and `check`.
 - `prepack` runs `npm run build`, and `pack:dry-run` runs
   `npm pack --dry-run`.
-- `check` runs formatting, tests, the package dist smoke, and a package dry
-  run while preserving package-specific smoke details.
+- `check` runs formatting, tests, a TypeScript build before the package dist
+  smoke, and a package dry run while preserving package-specific smoke details.
 - Shared dev dependencies are Prettier, TypeScript, and Vitest at the versions
   recorded in `package-contract.json`.
 
@@ -56,6 +58,7 @@ is shared:
 - The `Release Please` workflow runs on pushes to `main`.
 - Release Please uses `googleapis/release-please-action@v5` with
   `release-please-config.json` and `.release-please-manifest.json`.
+- The Release Please job exposes `release_created` from the action step output.
 - Release publication only runs when Release Please reports a created release.
 - Publication runs the package check before `npm publish` to GitHub Packages.
 - The publish job keeps `packages: write` for GitHub Packages publication.

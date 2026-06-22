@@ -39,6 +39,7 @@ function checkPackage(pkgSpec, packageDir) {
 
   const pkg = readJson(packageJsonPath);
   expectEqual(label, "package name", pkg.name, pkgSpec.name);
+  expectString(label, "package version", pkg.version);
   expectEqual(label, "type", pkg.type, contract.manifest.type);
   expectEqual(label, "license", pkg.license, contract.manifest.license);
   expectEqual(label, "sideEffects", pkg.sideEffects, contract.manifest.sideEffects);
@@ -57,6 +58,12 @@ function checkPackage(pkgSpec, packageDir) {
     }
   }
 
+  if (
+    !contract.manifest.requiredLockfiles.some((lockfile) => existsSync(join(packageDir, lockfile)))
+  ) {
+    fail(label, `missing one of ${contract.manifest.requiredLockfiles.join(", ")}`);
+  }
+
   for (const scriptName of contract.manifest.requiredScriptNames) {
     if (typeof pkg.scripts?.[scriptName] !== "string") {
       fail(label, `missing script ${scriptName}`);
@@ -71,6 +78,10 @@ function checkPackage(pkgSpec, packageDir) {
     if (!pkg.scripts?.check?.includes(fragment)) {
       fail(label, `check script must include ${fragment}`);
     }
+  }
+
+  if (contract.manifest.buildMustRunBeforeDistSmoke) {
+    expectBuildBeforeDistSmoke(label, pkg.scripts);
   }
 
   for (const [dependency, expected] of Object.entries(contract.manifest.commonDevDependencies)) {
@@ -111,6 +122,14 @@ function checkWorkflow(label, workflowPath) {
   expectText(label, workflowPath, workflow, "NODE_AUTH_TOKEN: ${{ github.token }}");
   expectText(label, workflowPath, workflow, `run: ${contract.checkWorkflow.installCommand}`);
   expectText(label, workflowPath, workflow, `run: ${contract.checkWorkflow.checkCommand}`);
+
+  expectOrder(
+    label,
+    workflowPath,
+    workflow,
+    `run: ${contract.checkWorkflow.installCommand}`,
+    `run: ${contract.checkWorkflow.checkCommand}`,
+  );
 }
 
 function checkReleaseWorkflow(label, workflowPath) {
@@ -125,7 +144,10 @@ function checkReleaseWorkflow(label, workflowPath) {
   expectText(label, workflowPath, workflow, "issues: write");
   expectText(label, workflowPath, workflow, "pull-requests: write");
   expectText(label, workflowPath, workflow, "packages: write");
+  expectText(label, workflowPath, workflow, "outputs:");
+  expectText(label, workflowPath, workflow, contract.releaseWorkflow.releaseCreatedOutput);
   expectText(label, workflowPath, workflow, `uses: ${contract.releaseWorkflow.releaseAction}`);
+  expectText(label, workflowPath, workflow, `id: ${contract.releaseWorkflow.releaseStepId}`);
   expectText(label, workflowPath, workflow, `token: ${contract.releaseWorkflow.token}`);
   expectText(label, workflowPath, workflow, `config-file: ${contract.releaseWorkflow.configFile}`);
   expectText(label, workflowPath, workflow, `manifest-file: ${contract.releaseWorkflow.manifestFile}`);
@@ -141,6 +163,13 @@ function checkReleaseWorkflow(label, workflowPath) {
   expectText(label, workflowPath, workflow, `run: ${contract.checkWorkflow.checkCommand}`);
   expectText(label, workflowPath, workflow, `run: ${contract.releaseWorkflow.publishCommand}`);
 
+  expectOrder(
+    label,
+    workflowPath,
+    workflow,
+    `run: ${contract.checkWorkflow.installCommand}`,
+    `run: ${contract.checkWorkflow.checkCommand}`,
+  );
   expectOrder(
     label,
     workflowPath,
@@ -184,6 +213,7 @@ function checkReleaseManifest(label, releaseManifestPath, packageVersion) {
   }
 
   const manifest = readJson(releaseManifestPath);
+  expectString(label, "release-please manifest .", manifest["."]);
   expectEqual(label, "release-please manifest .", manifest["."], packageVersion);
 }
 
@@ -203,6 +233,29 @@ function expectEqual(label, name, actual, expected) {
   if (actual !== expected) {
     fail(label, `${name} expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
   }
+}
+
+function expectString(label, name, actual) {
+  if (typeof actual !== "string" || actual.length === 0) {
+    fail(label, `${name} must be a non-empty string`);
+  }
+}
+
+function expectBuildBeforeDistSmoke(label, scripts) {
+  const check = scripts?.check ?? "";
+  const smoke = scripts?.["smoke:dist"] ?? "";
+  const checkBuildIndex = check.indexOf("npm run build");
+  const checkSmokeIndex = check.indexOf("npm run smoke:dist");
+
+  if (checkBuildIndex !== -1 && checkSmokeIndex !== -1 && checkBuildIndex < checkSmokeIndex) {
+    return;
+  }
+
+  if (checkSmokeIndex !== -1 && smoke.includes("npm run build")) {
+    return;
+  }
+
+  fail(label, "check script must run or delegate npm run build before smoke:dist");
 }
 
 function expectText(label, path, text, expected) {

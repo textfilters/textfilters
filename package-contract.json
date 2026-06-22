@@ -45,7 +45,14 @@
       "pack:dry-run": "npm pack --dry-run"
     },
     "requiredScriptNames": ["lint", "test", "build", "smoke:dist", "pack:dry-run", "check"],
-    "checkScriptMustInclude": ["npm run lint", "npm test", "npm run smoke:dist", "npm run pack:dry-run"],
+    "requiredLockfiles": ["package-lock.json", "npm-shrinkwrap.json"],
+    "checkScriptMustInclude": [
+      "npm run lint",
+      "npm test",
+      "npm run smoke:dist",
+      "npm run pack:dry-run"
+    ],
+    "buildMustRunBeforeDistSmoke": true,
     "commonDevDependencies": {
       "prettier": "^3.8.3",
       "typescript": "^6.0.3",
@@ -70,6 +77,8 @@
     "token": "${{ secrets.RELEASE_PLEASE_TOKEN }}",
     "configFile": "release-please-config.json",
     "manifestFile": ".release-please-manifest.json",
+    "releaseStepId": "release",
+    "releaseCreatedOutput": "release_created: ${{ steps.release.outputs.release_created }}",
     "publishNeeds": "release-please",
     "publishCondition": "${{ needs.release-please.outputs.release_created == 'true' }}",
     "publishCommand": "npm publish --registry=https://npm.pkg.github.com"
