@@ -114,19 +114,21 @@ function checkWorkflow(label, workflowPath) {
   if (!workflow) return;
   const onBlock = expectBlock(label, workflowPath, workflow, "on:", 0);
   const pushBlock = expectBlock(label, workflowPath, onBlock, "push:", 2);
+  const branchesBlock = expectBlock(label, workflowPath, pushBlock, "branches:", 4);
   const checkJob = expectJobBlockContainingRun(
     label,
     workflowPath,
     workflow,
     contract.checkWorkflow.checkCommand,
   );
+  const checkoutStep = expectStepWithUses(label, workflowPath, checkJob, contract.checkWorkflow.checkoutAction);
   const installStep = expectStepWithRun(
     label,
     workflowPath,
     checkJob,
     contract.checkWorkflow.installCommand,
   );
-  expectStepWithRun(label, workflowPath, checkJob, contract.checkWorkflow.checkCommand);
+  const checkStep = expectStepWithRun(label, workflowPath, checkJob, contract.checkWorkflow.checkCommand);
   const setupNodeStep = expectStepWithUses(
     label,
     workflowPath,
@@ -136,36 +138,38 @@ function checkWorkflow(label, workflowPath) {
 
   expectText(label, workflowPath, workflow, `name: ${contract.checkWorkflow.name}`);
   expectText(label, workflowPath, onBlock, "pull_request:");
-  expectText(label, workflowPath, pushBlock, "branches:");
-  expectText(label, workflowPath, pushBlock, "- main");
+  expectBlockLine(label, workflowPath, branchesBlock, "- main", 6);
   expectEffectivePermission(label, workflowPath, workflow, checkJob, "contents: read");
   expectEffectivePermission(label, workflowPath, workflow, checkJob, "packages: read");
-  expectStepWithUses(label, workflowPath, checkJob, contract.checkWorkflow.checkoutAction);
   expectStepWithInput(label, workflowPath, setupNodeStep, "node-version", contract.checkWorkflow.nodeVersion);
   expectStepWithInput(label, workflowPath, setupNodeStep, "registry-url", contract.checkWorkflow.registryUrl);
   expectStepWithInput(label, workflowPath, setupNodeStep, "scope", `"${contract.checkWorkflow.scope}"`);
   expectEnvAvailable(label, workflowPath, checkJob, installStep, "NODE_AUTH_TOKEN: ${{ github.token }}");
+  expectBlockingStep(label, workflowPath, checkStep, contract.checkWorkflow.checkCommand);
 
-  expectOrder(
+  expectStepOrder(
     label,
     workflowPath,
     checkJob,
-    `uses: ${contract.checkWorkflow.checkoutAction}`,
-    `run: ${contract.checkWorkflow.installCommand}`,
+    checkoutStep,
+    installStep,
+    `checkout before ${contract.checkWorkflow.installCommand}`,
   );
-  expectOrder(
+  expectStepOrder(
     label,
     workflowPath,
     checkJob,
-    `uses: ${contract.checkWorkflow.setupNodeAction}`,
-    `run: ${contract.checkWorkflow.installCommand}`,
+    setupNodeStep,
+    installStep,
+    `setup-node before ${contract.checkWorkflow.installCommand}`,
   );
-  expectOrder(
+  expectStepOrder(
     label,
     workflowPath,
     checkJob,
-    `run: ${contract.checkWorkflow.installCommand}`,
-    `run: ${contract.checkWorkflow.checkCommand}`,
+    installStep,
+    checkStep,
+    `${contract.checkWorkflow.installCommand} before ${contract.checkWorkflow.checkCommand}`,
   );
 }
 
@@ -174,21 +178,24 @@ function checkReleaseWorkflow(label, workflowPath) {
   if (!workflow) return;
   const onBlock = expectBlock(label, workflowPath, workflow, "on:", 0);
   const pushBlock = expectBlock(label, workflowPath, onBlock, "push:", 2);
+  const branchesBlock = expectBlock(label, workflowPath, pushBlock, "branches:", 4);
   const releaseJob = expectJobBlock(label, workflowPath, workflow, "release-please");
   const releasePermissionsBlock = expectBlock(label, workflowPath, releaseJob, "permissions:", 4);
+  const releaseOutputsBlock = expectBlock(label, workflowPath, releaseJob, "outputs:", 4);
   const releaseActionStep = expectStepWithUses(
     label,
     workflowPath,
     releaseJob,
     contract.releaseWorkflow.releaseAction,
   );
-  const publishJob = expectJobBlockContainingRun(
+  const publishJob = expectSingleJobBlockContainingRun(
     label,
     workflowPath,
     workflow,
     contract.releaseWorkflow.publishCommand,
   );
   const publishPermissionsBlock = expectBlock(label, workflowPath, publishJob, "permissions:", 4);
+  const checkoutStep = expectStepWithUses(label, workflowPath, publishJob, contract.checkWorkflow.checkoutAction);
   const setupNodeStep = expectStepWithUses(
     label,
     workflowPath,
@@ -210,56 +217,59 @@ function checkReleaseWorkflow(label, workflowPath) {
   );
 
   expectText(label, workflowPath, workflow, `name: ${contract.releaseWorkflow.name}`);
-  expectText(label, workflowPath, pushBlock, "branches:");
-  expectText(label, workflowPath, pushBlock, "- main");
-  expectText(label, workflowPath, releasePermissionsBlock, "contents: write");
-  expectText(label, workflowPath, releasePermissionsBlock, "issues: write");
-  expectText(label, workflowPath, releasePermissionsBlock, "pull-requests: write");
-  expectText(label, workflowPath, releaseJob, "outputs:");
-  expectText(label, workflowPath, releaseJob, contract.releaseWorkflow.releaseCreatedOutput);
+  expectBlockLine(label, workflowPath, branchesBlock, "- main", 6);
+  expectBlockLine(label, workflowPath, releasePermissionsBlock, "contents: write", 6);
+  expectBlockLine(label, workflowPath, releasePermissionsBlock, "issues: write", 6);
+  expectBlockLine(label, workflowPath, releasePermissionsBlock, "pull-requests: write", 6);
+  expectBlockLine(label, workflowPath, releaseOutputsBlock, contract.releaseWorkflow.releaseCreatedOutput, 6);
+  expectBlockingStep(label, workflowPath, releaseActionStep, contract.releaseWorkflow.releaseAction);
   expectStepLine(label, workflowPath, releaseActionStep, `id: ${contract.releaseWorkflow.releaseStepId}`);
   expectStepWithInput(label, workflowPath, releaseActionStep, "token", contract.releaseWorkflow.token);
   expectStepWithInput(label, workflowPath, releaseActionStep, "config-file", contract.releaseWorkflow.configFile);
   expectStepWithInput(label, workflowPath, releaseActionStep, "manifest-file", contract.releaseWorkflow.manifestFile);
-  expectJobLine(label, workflowPath, publishJob, `needs: ${contract.releaseWorkflow.publishNeeds}`);
+  expectJobLine(label, workflowPath, publishJob, `needs: ${contract.releaseWorkflow.publishNeeds}`, 4);
   expectPublishGate(label, workflowPath, publishJob, publishStep);
-  expectText(label, workflowPath, publishPermissionsBlock, "contents: read");
-  expectText(label, workflowPath, publishPermissionsBlock, "packages: write");
-  expectStepWithUses(label, workflowPath, publishJob, contract.checkWorkflow.checkoutAction);
+  expectBlockLine(label, workflowPath, publishPermissionsBlock, "contents: read", 6);
+  expectBlockLine(label, workflowPath, publishPermissionsBlock, "packages: write", 6);
   expectStepWithInput(label, workflowPath, setupNodeStep, "node-version", contract.checkWorkflow.nodeVersion);
   expectStepWithInput(label, workflowPath, setupNodeStep, "registry-url", contract.checkWorkflow.registryUrl);
   expectStepWithInput(label, workflowPath, setupNodeStep, "scope", `"${contract.checkWorkflow.scope}"`);
   expectEnvAvailable(label, workflowPath, publishJob, installStep, "NODE_AUTH_TOKEN: ${{ github.token }}");
   expectEnvAvailable(label, workflowPath, publishJob, publishStep, "NODE_AUTH_TOKEN: ${{ github.token }}");
   expectBlockingStep(label, workflowPath, checkStep, contract.checkWorkflow.checkCommand);
+  expectBlockingStep(label, workflowPath, publishStep, contract.releaseWorkflow.publishCommand);
 
-  expectOrder(
+  expectStepOrder(
     label,
     workflowPath,
     publishJob,
-    `uses: ${contract.checkWorkflow.checkoutAction}`,
-    `run: ${contract.checkWorkflow.installCommand}`,
+    checkoutStep,
+    installStep,
+    `checkout before ${contract.checkWorkflow.installCommand}`,
   );
-  expectOrder(
+  expectStepOrder(
     label,
     workflowPath,
     publishJob,
-    `uses: ${contract.checkWorkflow.setupNodeAction}`,
-    `run: ${contract.checkWorkflow.installCommand}`,
+    setupNodeStep,
+    installStep,
+    `setup-node before ${contract.checkWorkflow.installCommand}`,
   );
-  expectOrder(
+  expectStepOrder(
     label,
     workflowPath,
     publishJob,
-    `run: ${contract.checkWorkflow.installCommand}`,
-    `run: ${contract.checkWorkflow.checkCommand}`,
+    installStep,
+    checkStep,
+    `${contract.checkWorkflow.installCommand} before ${contract.checkWorkflow.checkCommand}`,
   );
-  expectOrder(
+  expectStepOrder(
     label,
     workflowPath,
     publishJob,
-    `run: ${contract.checkWorkflow.checkCommand}`,
-    `run: ${contract.releaseWorkflow.publishCommand}`,
+    checkStep,
+    publishStep,
+    `${contract.checkWorkflow.checkCommand} before ${contract.releaseWorkflow.publishCommand}`,
   );
 }
 
@@ -404,30 +414,38 @@ function expectStepLine(label, path, stepBlock, expected) {
 function expectStepWithInput(label, path, stepBlock, inputName, expectedValue) {
   const expected = `${inputName}: ${expectedValue}`;
   const withBlock = getStepChildBlock(stepBlock, "with:");
+  const inputIndent = stepBaseIndent(stepBlock) + 4;
 
-  if (!withBlock || !hasLine(withBlock, expected)) {
+  if (!withBlock || !hasLineAtIndent(withBlock, expected, inputIndent)) {
     fail(label, `${relativePackagePath(path)} step with block must include ${expected}`);
   }
 }
 
-function expectJobLine(label, path, jobBlock, expected) {
-  if (!hasLine(jobBlock, expected)) {
+function expectJobLine(label, path, jobBlock, expected, indent) {
+  if (!hasLineAtIndent(jobBlock, expected, indent)) {
     fail(label, `${relativePackagePath(path)} job must include ${expected}`);
+  }
+}
+
+function expectBlockLine(label, path, block, expected, indent) {
+  if (!hasLineAtIndent(block, expected, indent)) {
+    fail(label, `${relativePackagePath(path)} block must include exact ${expected}`);
   }
 }
 
 function expectEffectivePermission(label, path, workflow, jobBlock, permission) {
   const jobPermissions = getOptionalBlock(jobBlock, "permissions:", 4);
   const scopeBlock = jobPermissions || getOptionalBlock(workflow, "permissions:", 0);
+  const permissionIndent = jobPermissions ? 6 : 2;
 
-  if (!scopeBlock || !hasLine(scopeBlock, permission)) {
+  if (!scopeBlock || !hasLineAtIndent(scopeBlock, permission, permissionIndent)) {
     fail(label, `${relativePackagePath(path)} job permissions must include ${permission}`);
   }
 }
 
 function expectPublishGate(label, path, publishJob, publishStep) {
   const condition = `if: ${contract.releaseWorkflow.publishCondition}`;
-  if (hasLineAtIndent(publishJob, condition, 4) || hasLine(publishStep, condition)) {
+  if (hasLineAtIndent(publishJob, condition, 4) || hasTopLevelStepLine(publishStep, condition)) {
     return;
   }
 
@@ -436,7 +454,11 @@ function expectPublishGate(label, path, publishJob, publishStep) {
 
 function expectEnvAvailable(label, path, jobBlock, stepBlock, envLine) {
   const stepEnvBlock = getStepChildBlock(stepBlock, "env:");
-  if (hasEnvLine(jobBlock, envLine, 4) || (stepEnvBlock && hasLine(stepEnvBlock, envLine))) {
+  const stepEnvIndent = stepBaseIndent(stepBlock) + 4;
+  if (
+    hasEnvLine(jobBlock, envLine, 4) ||
+    (stepEnvBlock && hasLineAtIndent(stepEnvBlock, envLine, stepEnvIndent))
+  ) {
     return;
   }
 
@@ -519,6 +541,30 @@ function expectJobBlockContainingRun(label, path, workflow, runCommand) {
   return jobBlock;
 }
 
+function expectSingleJobBlockContainingRun(label, path, workflow, runCommand) {
+  const jobsBlock = expectBlock(label, path, workflow, "jobs:", 0);
+  const jobBlocks = extractNestedBlocks(jobsBlock, 2);
+  const matchingJobs = jobBlocks.filter((block) =>
+    extractStepBlocks(block).some((stepBlock) => stepRunCommand(stepBlock) === runCommand),
+  );
+  const publishCommandCount = matchingJobs.reduce(
+    (count, block) =>
+      count +
+      extractStepBlocks(block).filter((stepBlock) => stepRunCommand(stepBlock) === runCommand).length,
+    0,
+  );
+
+  if (matchingJobs.length === 0) {
+    fail(label, `${relativePackagePath(path)} must include run: ${runCommand} in a job`);
+    return "";
+  }
+  if (publishCommandCount !== 1) {
+    fail(label, `${relativePackagePath(path)} must include exactly one run: ${runCommand} step`);
+  }
+
+  return matchingJobs[0];
+}
+
 function expectStepWithRun(label, path, jobBlock, runCommand) {
   const stepBlocks = extractStepBlocks(jobBlock);
   const stepBlock = stepBlocks.find((block) => stepRunCommand(block) === runCommand);
@@ -543,14 +589,17 @@ function expectStepWithUses(label, path, jobBlock, usesAction) {
   return stepBlock;
 }
 
-function expectOrder(label, path, text, before, after) {
-  const beforeIndex = text.indexOf(before);
-  const afterIndex = text.indexOf(after);
+function expectStepOrder(label, path, jobBlock, beforeStep, afterStep, description) {
+  if (!beforeStep || !afterStep) return;
+
+  const stepBlocks = extractStepBlocks(jobBlock);
+  const beforeIndex = stepBlocks.indexOf(beforeStep);
+  const afterIndex = stepBlocks.indexOf(afterStep);
   if (beforeIndex === -1 || afterIndex === -1) {
     return;
   }
   if (beforeIndex > afterIndex) {
-    fail(label, `${relativePackagePath(path)} must place ${before} before ${after}`);
+    fail(label, `${relativePackagePath(path)} must place ${description}`);
   }
 }
 
@@ -663,7 +712,7 @@ function hasLineAtIndent(text, expected, indent) {
 
 function hasEnvLine(text, envLine, indent) {
   const envBlock = getOptionalBlock(text, "env:", indent);
-  return envBlock ? hasLine(envBlock, envLine) : false;
+  return envBlock ? hasLineAtIndent(envBlock, envLine, indent + 2) : false;
 }
 
 function stepRunCommand(stepBlock) {

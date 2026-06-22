@@ -55,20 +55,27 @@ registry, and package-management drift.
 Package repositories keep copied workflows today, but their important contract
 is shared:
 
-- The `Check` workflow runs on pull requests and pushes to `main`.
+- The `Check` workflow runs on pull requests and pushes to the exact `main`
+  branch entry.
 - The check job grants read-only repository contents access and package read
   access, either through workflow-level or job-level permissions.
 - It checks out the repository, sets up Node 24 with the `@textfilters`
   GitHub Packages registry, runs exact `npm ci`, then runs exact
-  `npm run check` in the same job.
-- The `Release Please` workflow runs on pushes to `main`.
+  `npm run check` in the same job. The check step is unconditional and
+  blocking.
+- The `Release Please` workflow runs on pushes to the exact `main` branch
+  entry.
 - Release Please uses `googleapis/release-please-action@v5` with
   `release-please-config.json` and `.release-please-manifest.json` configured
   in the action step `with` block, and the action step uses exact `id: release`.
-- The Release Please job exposes `release_created` from the action step output.
-- Release publication only runs when Release Please reports a created release.
+- The Release Please action step is unconditional and blocking.
+- The Release Please job exposes `release_created` from the action step output
+  through job-level `outputs`.
+- Release publication only runs when Release Please reports a created release,
+  with job-level `needs` wiring and a top-level job or publish-step gate.
 - Publication runs exact `npm run check` before exact `npm publish` to GitHub
-  Packages in the publish job, and the prepublish check is blocking.
+  Packages in the publish job, with a single publish command. The prepublish
+  check and publish steps are blocking.
 - The publish job keeps `packages: write` for GitHub Packages publication, and
   the publish step or publish job has the package registry token available.
 
