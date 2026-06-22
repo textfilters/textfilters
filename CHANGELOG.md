@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.13.3](https://github.com/textfilters/profanity/compare/v0.13.2...v0.13.3) (2026-06-22)
+
+
+### Bug Fixes
+
+* make default filter read-only ([#119](https://github.com/textfilters/profanity/issues/119)) ([6055bb1](https://github.com/textfilters/profanity/commit/6055bb1943b7bbe069d8618e880b1da681ec5ae9))
+
 ## [0.13.2](https://github.com/textfilters/profanity/compare/v0.13.1...v0.13.2) (2026-06-22)
 
 
