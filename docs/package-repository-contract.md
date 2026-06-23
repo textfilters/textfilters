@@ -35,8 +35,8 @@ Each package repository keeps its own source, tests, and package-specific
   versions use semver.
 - Published files include `dist`, `README.md`, and `LICENSE`; file-backed
   entries must exist in the repository. Package file entries must not exclude
-  required output, and `dist` must not contain its own `.npmignore` or
-  `.gitignore`.
+  required output, and `dist` must not contain `.npmignore` or `.gitignore`
+  files at any depth.
 - Repositories keep a committed npm lockfile because shared workflows use
   `npm ci`.
 - Script names include `lint`, `test`, `build`, `smoke:dist`, `pack:dry-run`,
@@ -58,12 +58,15 @@ Each package repository keeps its own source, tests, and package-specific
   recorded in `package-contract.json`.
 - Package scripts must not contain `npm publish` or publish aliases, mutate
   GitHub Actions environment files, or set npm config environment variables that
-  alter publication; release publication stays in the audited Release Please
-  workflow.
+  alter publication. Package scripts also must not write publish-altering npm
+  config with `npm config set` or `npm set`; release publication stays in the
+  audited Release Please workflow.
+- Packages and locked dependencies must not expose an `npm` binary that can
+  shadow the npm CLI inside npm-run-script PATH handling.
 - Packages must not define npm workspaces.
-- Package-level npm configuration must not set `dry-run`, `script-shell`,
-  workspace options, `tag`, `userconfig`, `globalconfig`, `ignore-scripts`, or
-  a non-contract registry.
+- Package-level npm configuration must not set `access`, `dry-run`,
+  `script-shell`, workspace options, `tag`, `userconfig`, `globalconfig`,
+  `ignore-scripts`, or a non-contract registry.
 
 Runtime dependency compatibility is tracked separately from this repository
 workflow contract. This guard focuses on manifest shape, scripts, CI, release,
@@ -76,13 +79,14 @@ is shared:
 
 - Workflow files do not use YAML anchors or aliases for control blocks,
   environment, defaults, jobs, or steps; copied workflows stay explicit.
+  Escaped YAML keys are treated the same as their decoded keys.
 - The `Check` workflow has the exact top-level workflow name and runs on pull
   requests and pushes only to the exact `main` branch entry. The pull request
   event is a top-level workflow event, and the selected check job defines a
-  runner, has no job dependencies, defines no matrix strategy, and is
-  unconditional and blocking. Required events are not filtered by paths or event
-  types, including inline flow-mapping filters. No extra events or jobs are
-  configured.
+  runner, has no job dependencies, defines no matrix strategy, container, or
+  services, and is unconditional and blocking. Required events are not filtered
+  by paths or event types, including inline flow-mapping filters. No extra
+  events or jobs are configured.
 - The check job grants read-only repository contents access and package read
   access only, either through workflow-level or block-form job-level
   permissions.
@@ -102,10 +106,10 @@ is shared:
   exact `id: release`. The Release Please job contains only this audited action
   step.
 - The Release Please and publish jobs define runners. The Release Please job
-  has no job dependencies, neither release job defines a matrix strategy, and
-  the Release Please job and action step are unconditional and blocking. Release
-  Please job permissions are exactly `contents: write`, `issues: write`, and
-  `pull-requests: write`.
+  has no job dependencies, neither release job defines a matrix strategy,
+  container, or services, and the Release Please job and action step are
+  unconditional and blocking. Release Please job permissions are exactly
+  `contents: write`, `issues: write`, and `pull-requests: write`.
 - The Release Please job exposes `release_created` from the action step output
   through job-level `outputs`.
 - Release publication only runs when Release Please reports a created release,
@@ -128,7 +132,8 @@ is shared:
 - `npm publish` commands, including publish aliases, shell-escaped command
   words, and any `npm` invocation that reaches a publish command token before a
   shell boundary, only appear in the audited Release Please workflow. Other
-  workflows must not run Release Please actions.
+  workflows must not run Release Please actions or invoke local workflow scripts
+  or local composite actions.
 
 ## Release Please Contract
 
