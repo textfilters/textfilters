@@ -11,12 +11,26 @@ const failures = [];
 const SEMVER_PATTERN =
   /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
 const BUILD_SCRIPT_COMMAND = "npm run build";
+const TRUSTED_GITHUB_RUNNER = "ubuntu-latest";
 const NPM_PUBLISH_SUBCOMMANDS = new Set(["publish", "pu", "pub", "publ", "publi", "publis"]);
+const NOOP_DIST_SMOKE_COMMANDS = new Set(["true", ":"]);
+const DEPENDENCY_INSTALL_LIFECYCLE_SCRIPTS = [
+  "preinstall",
+  "install",
+  "postinstall",
+  "prepublish",
+  "prepublishOnly",
+  "preprepare",
+  "prepare",
+  "postprepare",
+];
 const BLOCKED_NPM_CONFIG_KEYS = [
   "access",
   "dry-run",
   "globalconfig",
   "ignore-scripts",
+  "node-options",
+  "prefix",
   "script-shell",
   "tag",
   "userconfig",
@@ -29,7 +43,7 @@ const BLOCKED_NPM_CONFIG_ENV_KEYS = new Set(
     `npm_config_${contract.checkWorkflow.scope}:registry:`,
   ].map((key) => normalizeEnvKeyName(key)),
 );
-const BLOCKED_AUDITED_NPM_ENV_KEYS = ["BASH_ENV:", "NODE_OPTIONS:"];
+const BLOCKED_AUDITED_NPM_ENV_KEYS = ["BASH_ENV:", "HOME:", "NODE_OPTIONS:"];
 
 for (const pkgSpec of contract.packages) {
   const packageDir = join(packagesRoot, pkgSpec.directory);
@@ -55,6 +69,7 @@ function checkPackage(pkgSpec, packageDir) {
   const releaseWorkflowPath = join(packageDir, contract.releaseWorkflow.path);
   const npmrcPath = join(packageDir, ".npmrc");
   const lockfilePaths = contract.manifest.requiredLockfiles.map((lockfile) => join(packageDir, lockfile));
+  const npmCiLockfile = npmCiLockfilePath(packageDir);
 
   if (!existsSync(packageJsonPath)) {
     fail(label, "missing package.json");
@@ -114,7 +129,8 @@ function checkPackage(pkgSpec, packageDir) {
   expectNoPublishEnvMutationInScripts(label, pkg.scripts);
   expectNoPublishLifecycleScripts(label, pkg.scripts);
   expectNoWorkspaces(label, pkg);
-  expectNoNpmBinaryShadowing(label, pkg, lockfilePaths);
+  expectNoNpmBinaryShadowing(label, pkg, npmCiLockfile);
+  expectNoDependencyInstallLifecycleScripts(label, npmCiLockfile);
   expectSafeNpmConfig(label, npmrcPath);
 
   if (contract.manifest.buildMustRunBeforeDistSmoke) {
@@ -485,6 +501,12 @@ function checkPublishCommandScope(label, packageDir, releaseWorkflowPath) {
         `${relativePackagePath(workflowPath)} must not include ${contract.releaseWorkflow.releaseAction}`,
       );
     }
+    if (workflowHasPackageWritePermission(workflow)) {
+      fail(label, `${relativePackagePath(workflowPath)} must not grant packages: write`);
+    }
+    if (workflowUsesPublishAction(workflow)) {
+      fail(label, `${relativePackagePath(workflowPath)} must not use publish-capable actions`);
+    }
     if (hasLocalWorkflowExecution(workflow)) {
       fail(label, `${relativePackagePath(workflowPath)} must not invoke local workflow scripts or actions`);
     }
@@ -651,6 +673,10 @@ function expectDistSmokeWork(label, smokeCommands) {
   if (smokeCommands.length === 0) return;
   if (smokeCommands.includes("exit 0")) {
     fail(label, "smoke:dist script must not exit before dist smoke work");
+    return;
+  }
+  if (smokeCommands.some((command) => NOOP_DIST_SMOKE_COMMANDS.has(command))) {
+    fail(label, "smoke:dist script must not be a no-op");
     return;
   }
   if (smokeCommands.every((command) => command === "npm run build")) {
@@ -881,8 +907,13 @@ function expectBlockingJob(label, path, jobBlock, jobName, allowedCondition = ""
 }
 
 function expectJobRunner(label, path, jobBlock, jobName) {
-  if (!jobTopLevelValue(jobBlock, "runs-on:", 4)) {
+  const runner = jobTopLevelValue(jobBlock, "runs-on:", 4);
+  if (!runner) {
     fail(label, `${relativePackagePath(path)} ${jobName} job must include runs-on`);
+    return;
+  }
+  if (runner !== TRUSTED_GITHUB_RUNNER) {
+    fail(label, `${relativePackagePath(path)} ${jobName} job runs-on must be ${TRUSTED_GITHUB_RUNNER}`);
   }
 }
 
@@ -1225,7 +1256,7 @@ function expectNoWorkspaces(label, pkg) {
   }
 }
 
-function expectNoNpmBinaryShadowing(label, pkg, lockfilePaths) {
+function expectNoNpmBinaryShadowing(label, pkg, lockfilePath) {
   if (packageDeclaresNpmBin(pkg)) {
     fail(label, "package bin must not include npm");
   }
@@ -1241,13 +1272,27 @@ function expectNoNpmBinaryShadowing(label, pkg, lockfilePaths) {
     }
   }
 
-  const lockfilePath = lockfilePaths.find((candidate) => existsSync(candidate));
   if (!lockfilePath) return;
 
   const lockfile = readJson(lockfilePath);
   for (const [entryPath, entry] of Object.entries(lockfile.packages ?? {})) {
     if (packageDeclaresNpmBin(entry, entryPath)) {
       fail(label, `${relativePackagePath(lockfilePath)} must not include npm binary from ${entryPath || "."}`);
+    }
+  }
+}
+
+function expectNoDependencyInstallLifecycleScripts(label, lockfilePath) {
+  if (!lockfilePath) return;
+
+  const lockfile = readJson(lockfilePath);
+  for (const [entryPath, entry] of Object.entries(lockfile.packages ?? {})) {
+    if (!entryPath || !entry || typeof entry !== "object") continue;
+
+    for (const scriptName of DEPENDENCY_INSTALL_LIFECYCLE_SCRIPTS) {
+      if (typeof entry.scripts?.[scriptName] === "string") {
+        fail(label, `${relativePackagePath(lockfilePath)} dependency ${entryPath} must not define ${scriptName}`);
+      }
     }
   }
 }
@@ -1277,11 +1322,21 @@ function expectSafeNpmConfig(label, npmrcPath) {
   }
 
   for (const key of ["registry", `${contract.checkWorkflow.scope}:registry`]) {
-    const value = npmConfigValue(npmrc, key);
-    if (value && value !== contract.manifest.publishConfig.registry) {
+    const entry = npmConfigEntry(npmrc, key);
+    if (entry.present && entry.value !== contract.manifest.publishConfig.registry) {
       fail(label, `.npmrc ${key} must be ${contract.manifest.publishConfig.registry}`);
     }
   }
+}
+
+function npmCiLockfilePath(packageDir) {
+  const shrinkwrapPath = join(packageDir, "npm-shrinkwrap.json");
+  if (existsSync(shrinkwrapPath)) {
+    return shrinkwrapPath;
+  }
+
+  const packageLockPath = join(packageDir, "package-lock.json");
+  return existsSync(packageLockPath) ? packageLockPath : "";
 }
 
 function stripYamlComments(text) {
@@ -1405,13 +1460,87 @@ function hasNpmPublishCommand(text) {
 }
 
 function countNpmPublishCommands(text) {
-  return shellContinuationText(text)
-    .split("\n")
-    .reduce((count, line) => count + countNpmPublishCommandsInLine(line), 0);
+  return shellScanTexts(text).reduce(
+    (count, commandText) =>
+      count +
+      shellContinuationText(commandText)
+        .split("\n")
+        .reduce((lineCount, line) => lineCount + countNpmPublishCommandsInLine(line), 0),
+    0,
+  );
 }
 
 function shellContinuationText(text) {
   return text.replace(/\\[ \t]*\n[ \t]*/gu, "");
+}
+
+function shellScanTexts(text) {
+  const lines = text.split("\n");
+  const commandTexts = [];
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    const normalizedLine = normalizedYamlLine(line);
+
+    if (yamlKey(normalizedLine) === "run:") {
+      const runValue = yamlValue(normalizedLine);
+      if (/^[|>]/u.test(runValue)) {
+        const block = yamlRunBlockCommandText(lines, index, countIndent(line), runValue);
+        commandTexts.push(block.commandText);
+        index = block.endIndex;
+      } else {
+        commandTexts.push(runValue);
+      }
+      continue;
+    }
+
+    commandTexts.push(line);
+  }
+
+  return commandTexts;
+}
+
+function yamlRunBlockCommandText(lines, startIndex, runIndent, runValue) {
+  const blockLines = [];
+  let endIndex = startIndex;
+
+  for (let index = startIndex + 1; index < lines.length; index += 1) {
+    const line = lines[index];
+    if (line.trim() !== "" && countIndent(line) <= runIndent) {
+      break;
+    }
+    blockLines.push(line.trim());
+    endIndex = index;
+  }
+
+  return {
+    commandText: runValue.startsWith(">") ? foldYamlBlockScalarLines(blockLines) : blockLines.join("\n"),
+    endIndex,
+  };
+}
+
+function foldYamlBlockScalarLines(lines) {
+  const foldedLines = [];
+  let currentLine = "";
+
+  for (const line of lines) {
+    if (line === "") {
+      if (currentLine) {
+        foldedLines.push(currentLine);
+        currentLine = "";
+      }
+      foldedLines.push("");
+      continue;
+    }
+
+    currentLine = currentLine ? `${currentLine} ${line}` : line;
+  }
+
+  if (currentLine) {
+    foldedLines.push(currentLine);
+  }
+
+  return foldedLines.join("\n");
 }
 
 function lineHasNpmPublishCommand(line) {
@@ -1446,7 +1575,7 @@ function countNpmPublishCommandsInLine(line) {
 
 function shellTokens(line) {
   return line
-    .replace(/(\d*(?:>>|<<|[<>])|[;&|])/gu, " $1 ")
+    .replace(/(\d*(?:>>|<<|[<>])|[;&|(){}])/gu, " $1 ")
     .trim()
     .split(/\s+/u)
     .filter(Boolean);
@@ -1632,6 +1761,34 @@ function textHasBlockedNpmConfigEnvKey(text) {
   return false;
 }
 
+function workflowHasPackageWritePermission(workflow) {
+  return workflow
+    .split("\n")
+    .some((line) => {
+      const normalizedLine = normalizedYamlLine(line);
+      const value = yamlValue(normalizedLine);
+      return (
+        (yamlKey(normalizedLine) === "packages:" && value.replace(/^['"]|['"]$/gu, "") === "write") ||
+        inlineMappingHasPackageWrite(value)
+      );
+    });
+}
+
+function inlineMappingHasPackageWrite(value) {
+  return /(?:[{,]\s*)["']?packages["']?\s*:\s*["']?write["']?\s*(?:[,}])/u.test(value);
+}
+
+function workflowUsesPublishAction(workflow) {
+  return workflow
+    .split("\n")
+    .some((line) => {
+      const normalizedLine = normalizedYamlLine(line);
+      if (yamlKey(normalizedLine) !== "uses:") return false;
+      const action = yamlValue(normalizedLine).replace(/^['"]|['"]$/gu, "");
+      return !isLocalPathToken(action) && action.toLowerCase().includes("publish");
+    });
+}
+
 function scriptHasBlockedNpmConfigCommand(script) {
   return shellContinuationText(script)
     .split("\n")
@@ -1665,7 +1822,7 @@ function lineHasBlockedNpmConfigCommand(line) {
 
 function npmCommandWritesBlockedConfig(commandTokens) {
   for (let index = 0; index < commandTokens.length; index += 1) {
-    if (commandTokens[index] === "config") {
+    if (commandTokens[index] === "config" || commandTokens[index] === "c") {
       const setIndex = commandTokens.indexOf("set", index + 1);
       if (setIndex !== -1 && commandHasBlockedNpmConfigKey(commandTokens.slice(setIndex + 1))) {
         return true;
@@ -1693,7 +1850,7 @@ function commandHasBlockedNpmConfigKey(tokens) {
 }
 
 function hasNpmConfigKey(text, key) {
-  return npmConfigValue(text, key) !== "";
+  return npmConfigEntry(text, key).present;
 }
 
 function isBlockedNpmConfigKey(key) {
@@ -1705,14 +1862,24 @@ function isBlockedNpmConfigKey(key) {
 }
 
 function npmConfigValue(text, key) {
-  const normalizedKey = normalizeNpmConfigKey(key);
-  const entry = text
-    .split("\n")
-    .map((line) => line.trim())
-    .filter((line) => line && line.includes("=") && !line.startsWith("#") && !line.startsWith(";"))
-    .find((line) => normalizeNpmConfigKey(line.slice(0, line.indexOf("=")).trim()) === normalizedKey);
+  return npmConfigEntry(text, key).value;
+}
 
-  return entry ? entry.slice(entry.indexOf("=") + 1).trim() : "";
+function npmConfigEntry(text, key) {
+  const normalizedKey = normalizeNpmConfigKey(key);
+  for (const rawLine of text.split("\n")) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith("#") || line.startsWith(";")) continue;
+
+    const separatorIndex = line.indexOf("=");
+    const entryKey = separatorIndex === -1 ? line : line.slice(0, separatorIndex).trim();
+    const value = separatorIndex === -1 ? "" : line.slice(separatorIndex + 1).trim();
+    if (normalizeNpmConfigKey(entryKey) === normalizedKey) {
+      return { present: true, value };
+    }
+  }
+
+  return { present: false, value: "" };
 }
 
 function normalizeNpmConfigKey(key) {
@@ -1838,7 +2005,10 @@ function hasLocalWorkflowExecution(workflow) {
       }
     }
 
-    if (/^uses:\s*['"]?\.\.?\//u.test(normalizedLine)) {
+    if (
+      yamlKey(normalizedLine) === "uses:" &&
+      isLocalPathToken(yamlValue(normalizedLine).replace(/^['"]|['"]$/gu, ""))
+    ) {
       return true;
     }
 
@@ -1856,6 +2026,10 @@ function hasLocalWorkflowExecution(workflow) {
 }
 
 function shellLineInvokesLocalCode(line) {
+  if (lineReferencesWorkspaceLocalPath(line)) {
+    return true;
+  }
+
   const tokens = shellTokens(line).map((token) => shellWordValue(token));
   return tokens.some((token, index) => {
     if (isShellBoundaryToken(token) || isShellRedirectionToken(token)) return false;
@@ -1865,7 +2039,18 @@ function shellLineInvokesLocalCode(line) {
 }
 
 function isLocalPathToken(token) {
-  return token.startsWith("./") || token.startsWith("../") || token.startsWith("scripts/");
+  return (
+    token.startsWith("./") ||
+    token.startsWith("../") ||
+    token.startsWith("scripts/") ||
+    token.startsWith("$GITHUB_WORKSPACE/") ||
+    token.startsWith("${GITHUB_WORKSPACE}/") ||
+    /^\$\{\{\s*github\.workspace\s*\}\}\//u.test(token)
+  );
+}
+
+function lineReferencesWorkspaceLocalPath(line) {
+  return /(?:\$GITHUB_WORKSPACE|\$\{GITHUB_WORKSPACE\}|\$\{\{\s*github\.workspace\s*\}\})\//u.test(line);
 }
 
 function shellWordValue(token) {

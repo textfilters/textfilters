@@ -37,8 +37,9 @@ Each package repository keeps its own source, tests, and package-specific
   entries must exist in the repository. Package file entries must not exclude
   required output, and `dist` must not contain `.npmignore` or `.gitignore`
   files at any depth.
-- Repositories keep a committed npm lockfile because shared workflows use
-  `npm ci`.
+- Repositories keep the npm lockfile that `npm ci` will honor. If both
+  `npm-shrinkwrap.json` and `package-lock.json` exist, the shrinkwrap file is
+  audited because npm gives it precedence.
 - Script names include `lint`, `test`, `build`, `smoke:dist`, `pack:dry-run`,
   and `check`, and required script bodies are non-empty.
 - `prepack` runs `npm run build`, and `pack:dry-run` runs
@@ -52,21 +53,23 @@ Each package repository keeps its own source, tests, and package-specific
   runs or append extra commands after the audit.
 - A TypeScript build runs before the package dist smoke, either directly before
   `smoke:dist` in `check` or as the first command delegated by `smoke:dist`;
-  delegated smoke scripts do real smoke work beyond rebuilding and must not use
-  an explicit successful early exit.
+  delegated smoke scripts do real smoke work beyond rebuilding and must not be
+  no-op commands or use an explicit successful early exit.
 - Shared dev dependencies are Prettier, TypeScript, and Vitest at the versions
   recorded in `package-contract.json`.
 - Package scripts must not contain `npm publish` or publish aliases, mutate
   GitHub Actions environment files, or set npm config environment variables that
   alter publication. Package scripts also must not write publish-altering npm
-  config with `npm config set` or `npm set`; release publication stays in the
-  audited Release Please workflow.
+  config with `npm config set`, `npm c set`, or `npm set`; release publication
+  stays in the audited Release Please workflow.
 - Packages and locked dependencies must not expose an `npm` binary that can
   shadow the npm CLI inside npm-run-script PATH handling.
+- Locked dependency packages must not define install-time lifecycle scripts.
 - Packages must not define npm workspaces.
 - Package-level npm configuration must not set `access`, `dry-run`,
   `script-shell`, workspace options, `tag`, `userconfig`, `globalconfig`,
-  `ignore-scripts`, or a non-contract registry.
+  `ignore-scripts`, `node-options`, `prefix`, or a non-contract registry.
+  Valueless npmrc keys are treated as configured keys.
 
 Runtime dependency compatibility is tracked separately from this repository
 workflow contract. This guard focuses on manifest shape, scripts, CI, release,
@@ -82,11 +85,11 @@ is shared:
   Escaped YAML keys are treated the same as their decoded keys.
 - The `Check` workflow has the exact top-level workflow name and runs on pull
   requests and pushes only to the exact `main` branch entry. The pull request
-  event is a top-level workflow event, and the selected check job defines a
-  runner, has no job dependencies, defines no matrix strategy, container, or
-  services, and is unconditional and blocking. Required events are not filtered
-  by paths or event types, including inline flow-mapping filters. No extra
-  events or jobs are configured.
+  event is a top-level workflow event, and the selected check job runs on the
+  trusted `ubuntu-latest` runner, has no job dependencies, defines no matrix
+  strategy, container, or services, and is unconditional and blocking. Required
+  events are not filtered by paths or event types, including inline
+  flow-mapping filters. No extra events or jobs are configured.
 - The check job grants read-only repository contents access and package read
   access only, either through workflow-level or block-form job-level
   permissions.
@@ -105,11 +108,11 @@ is shared:
   the expected token, config file, and manifest file, and the action step uses
   exact `id: release`. The Release Please job contains only this audited action
   step.
-- The Release Please and publish jobs define runners. The Release Please job
-  has no job dependencies, neither release job defines a matrix strategy,
-  container, or services, and the Release Please job and action step are
-  unconditional and blocking. Release Please job permissions are exactly
-  `contents: write`, `issues: write`, and `pull-requests: write`.
+- The Release Please and publish jobs run on the trusted `ubuntu-latest`
+  runner. The Release Please job has no job dependencies, neither release job
+  defines a matrix strategy, container, or services, and the Release Please job
+  and action step are unconditional and blocking. Release Please job permissions
+  are exactly `contents: write`, `issues: write`, and `pull-requests: write`.
 - The Release Please job exposes `release_created` from the action step output
   through job-level `outputs`.
 - Release publication only runs when Release Please reports a created release,
@@ -128,12 +131,13 @@ is shared:
   config scope, including scoped registry environment overrides.
 - Required npm install, check, and publish commands run at the package
   repository root with the default shell and without PATH, Bash startup file,
-  Node startup option, or indirect npm config overrides.
+  Node startup option, HOME, or indirect npm config overrides.
 - `npm publish` commands, including publish aliases, shell-escaped command
-  words, and any `npm` invocation that reaches a publish command token before a
-  shell boundary, only appear in the audited Release Please workflow. Other
-  workflows must not run Release Please actions or invoke local workflow scripts
-  or local composite actions.
+  words, folded YAML run blocks, grouped shell commands, and any `npm`
+  invocation that reaches a publish command token before a shell boundary, only
+  appear in the audited Release Please workflow. Other workflows must not grant
+  package write permissions, use publish-capable actions, run Release Please
+  actions, or invoke local workflow scripts or local composite actions.
 
 ## Release Please Contract
 
