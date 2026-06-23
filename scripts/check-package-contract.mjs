@@ -10,15 +10,6 @@ const packagesRoot = resolve(repoDir, contract.packagesRoot);
 const failures = [];
 const SEMVER_PATTERN =
   /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
-const NPM_OPTIONS_WITH_VALUE = new Set([
-  "--cache",
-  "--prefix",
-  "--registry",
-  "--tag",
-  "--userconfig",
-  "--workspace",
-  "-w",
-]);
 
 for (const pkgSpec of contract.packages) {
   const packageDir = join(packagesRoot, pkgSpec.directory);
@@ -157,9 +148,16 @@ function checkWorkflow(label, workflowPath) {
   );
 
   expectWorkflowName(label, workflowPath, workflow, contract.checkWorkflow.name);
+  expectWorkflowJobs(label, workflowPath, workflow, ["check:"]);
   expectEventKeys(label, workflowPath, onBlock, ["pull_request:", "push:"]);
   expectUnfilteredEvent(label, workflowPath, pullRequestBlock, "pull_request");
   expectPushBranchesOnly(label, workflowPath, pushBlock);
+  expectExactSteps(label, workflowPath, checkJob, "check", [
+    checkoutStep,
+    setupNodeStep,
+    installStep,
+    checkStep,
+  ]);
   expectBlockingJob(label, workflowPath, checkJob, "check");
   expectJobRunner(label, workflowPath, checkJob, "check");
   expectBlockLine(label, workflowPath, branchesBlock, "- main", 6);
@@ -245,10 +243,19 @@ function checkReleaseWorkflow(label, workflowPath) {
   );
 
   expectWorkflowName(label, workflowPath, workflow, contract.releaseWorkflow.name);
+  expectWorkflowJobs(label, workflowPath, workflow, ["release-please:", "publish:"]);
   expectEventKeys(label, workflowPath, onBlock, ["push:"]);
   expectSinglePublishCommandText(label, workflowPath, workflow);
   expectSingleActionText(label, workflowPath, workflow, contract.releaseWorkflow.releaseAction);
   expectPushBranchesOnly(label, workflowPath, pushBlock);
+  expectExactSteps(label, workflowPath, releaseJob, "release-please", [releaseActionStep]);
+  expectExactSteps(label, workflowPath, publishJob, "publish", [
+    checkoutStep,
+    setupNodeStep,
+    installStep,
+    checkStep,
+    publishStep,
+  ]);
   expectBlockingJob(label, workflowPath, releaseJob, "release-please");
   expectBlockingJob(
     label,
@@ -514,18 +521,28 @@ function expectBuildBeforeDistSmoke(label, scripts) {
   const checkBuildIndex = checkCommands.indexOf("npm run build");
   const checkSmokeIndex = checkCommands.indexOf("npm run smoke:dist");
 
+  expectDistSmokeWork(label, smokeCommands);
+
   if (checkBuildIndex !== -1 && checkSmokeIndex !== -1 && checkBuildIndex < checkSmokeIndex) {
     return;
   }
 
   if (checkSmokeIndex !== -1 && smokeCommands.indexOf("npm run build") === 0 && smokeCommands.length > 1) {
-    if (smokeCommands.slice(1).includes("exit 0")) {
-      fail(label, "smoke:dist script must not exit before dist smoke work");
-    }
     return;
   }
 
   fail(label, "check script must run or delegate npm run build before smoke:dist");
+}
+
+function expectDistSmokeWork(label, smokeCommands) {
+  if (smokeCommands.length === 0) return;
+  if (smokeCommands.includes("exit 0")) {
+    fail(label, "smoke:dist script must not exit before dist smoke work");
+    return;
+  }
+  if (smokeCommands.every((command) => command === "npm run build")) {
+    fail(label, "smoke:dist script must do more than build");
+  }
 }
 
 function expectText(label, path, text, expected) {
@@ -762,6 +779,23 @@ function expectSingleActionText(label, path, workflow, action) {
   }
 }
 
+function expectWorkflowJobs(label, path, workflow, expectedJobKeys) {
+  const jobsBlock = expectBlock(label, path, workflow, "jobs:", 0);
+  const actualJobKeys = topLevelChildKeys(jobsBlock, 2);
+
+  for (const jobKey of expectedJobKeys) {
+    if (!actualJobKeys.includes(jobKey)) {
+      fail(label, `${relativePackagePath(path)} jobs block must include ${jobKey}`);
+    }
+  }
+
+  for (const jobKey of actualJobKeys) {
+    if (!expectedJobKeys.includes(jobKey)) {
+      fail(label, `${relativePackagePath(path)} jobs block must not include ${jobKey}`);
+    }
+  }
+}
+
 function expectEventKeys(label, path, onBlock, expectedKeys) {
   const actualKeys = topLevelChildKeys(onBlock, 2);
 
@@ -936,6 +970,19 @@ function expectStepOrder(label, path, jobBlock, beforeStep, afterStep, descripti
   }
   if (beforeIndex > afterIndex) {
     fail(label, `${relativePackagePath(path)} must place ${description}`);
+  }
+}
+
+function expectExactSteps(label, path, jobBlock, jobName, expectedSteps) {
+  if (!jobBlock || expectedSteps.some((stepBlock) => !stepBlock)) return;
+
+  const stepBlocks = extractStepBlocks(jobBlock);
+  const stepsMatch =
+    stepBlocks.length === expectedSteps.length &&
+    expectedSteps.every((stepBlock, index) => stepBlocks[index] === stepBlock);
+
+  if (!stepsMatch) {
+    fail(label, `${relativePackagePath(path)} ${jobName} job must contain only audited steps`);
   }
 }
 
@@ -1146,8 +1193,7 @@ function hasNpmPublishCommand(text) {
 function countNpmPublishCommands(text) {
   return shellContinuationText(text)
     .split("\n")
-    .filter((line) => lineHasNpmPublishCommand(line))
-    .length;
+    .reduce((count, line) => count + countNpmPublishCommandsInLine(line), 0);
 }
 
 function shellContinuationText(text) {
@@ -1155,34 +1201,41 @@ function shellContinuationText(text) {
 }
 
 function lineHasNpmPublishCommand(line) {
-  const tokens = line.trim().split(/\s+/u);
+  return countNpmPublishCommandsInLine(line) > 0;
+}
+
+function countNpmPublishCommandsInLine(line) {
+  const tokens = shellTokens(line);
+  let publishCommandCount = 0;
 
   for (let index = 0; index < tokens.length; index += 1) {
     if (unquoteShellToken(tokens[index]) !== "npm") continue;
 
-    let commandIndex = index + 1;
-    while (commandIndex < tokens.length) {
+    for (let commandIndex = index + 1; commandIndex < tokens.length; commandIndex += 1) {
       const token = unquoteShellToken(tokens[commandIndex]);
-      if (token === "--") {
-        commandIndex += 1;
+      if (isShellBoundaryToken(token)) {
         break;
       }
-      if (!token.startsWith("-")) break;
-
-      commandIndex += npmOptionConsumesNextToken(token) ? 2 : 1;
-    }
-
-    if (unquoteShellToken(tokens[commandIndex] ?? "") === "publish") {
-      return true;
+      if (token === "publish") {
+        publishCommandCount += 1;
+        break;
+      }
     }
   }
 
-  return false;
+  return publishCommandCount;
 }
 
-function npmOptionConsumesNextToken(token) {
-  if (token.includes("=")) return false;
-  return NPM_OPTIONS_WITH_VALUE.has(token);
+function shellTokens(line) {
+  return line
+    .replace(/([;&|<>])/gu, " $1 ")
+    .trim()
+    .split(/\s+/u)
+    .filter(Boolean);
+}
+
+function isShellBoundaryToken(token) {
+  return token === ";" || token === "&" || token === "|" || token === "<" || token === ">";
 }
 
 function blockEntriesAtIndent(text, indent) {

@@ -45,7 +45,8 @@ Each package repository keeps its own source, tests, and package-specific
   short-circuit before any required command runs.
 - A TypeScript build runs before the package dist smoke, either directly before
   `smoke:dist` in `check` or as the first command delegated by `smoke:dist`;
-  delegated smoke scripts do more than rebuild.
+  delegated smoke scripts do real smoke work beyond rebuilding and must not use
+  an explicit successful early exit.
 - Shared dev dependencies are Prettier, TypeScript, and Vitest at the versions
   recorded in `package-contract.json`.
 - Package scripts must not contain `npm publish`; release publication stays in
@@ -67,7 +68,7 @@ is shared:
   requests and pushes only to the exact `main` branch entry. The pull request
   event is a top-level workflow event, and the selected check job defines a
   runner, has no job dependencies, and is unconditional and blocking. Required
-  events are not filtered by paths or event types, and no extra events are
+  events are not filtered by paths or event types. No extra events or jobs are
   configured.
 - The check job grants read-only repository contents access and package read
   access only, either through workflow-level or block-form job-level
@@ -75,15 +76,18 @@ is shared:
 - It checks out the repository exactly once without checkout inputs, sets up
   Node 24 once with the `@textfilters` GitHub Packages registry in a blocking
   setup step, runs exact `npm ci`, then runs exact `npm run check` in the same
-  job. The install and check steps use the default shell and npm script shell,
-  are unconditional, and are blocking.
+  job. The check job contains only these audited steps. The install and check
+  steps use the default shell and npm script shell, are unconditional, and are
+  blocking.
 - The `Release Please` workflow has the exact top-level workflow name and runs
-  only on unfiltered pushes to the exact `main` branch entry.
+  only on unfiltered pushes to the exact `main` branch entry. Its jobs are
+  limited to the audited Release Please and publish jobs.
 - Release Please uses exactly one `googleapis/release-please-action@v5` step
   with `release-please-config.json` and `.release-please-manifest.json`
   configured in the action step `with` block. Its action inputs are limited to
   the expected token, config file, and manifest file, and the action step uses
-  exact `id: release`.
+  exact `id: release`. The Release Please job contains only this audited action
+  step.
 - The Release Please and publish jobs define runners. The Release Please job
   has no job dependencies, and the Release Please job and action step are
   unconditional and blocking. Release Please job permissions are exactly
@@ -95,7 +99,10 @@ is shared:
   or publish-step gate.
 - Publication runs exact `npm ci`, then exact `npm run check`, then exact
   `npm publish` to GitHub Packages in the publish job, with a single publish
-  command. The install, prepublish check, and publish steps are blocking.
+  command. The publish job contains only the audited checkout, setup, install,
+  check, and publish steps, so no command can mutate release inputs between
+  check and publication. The install, prepublish check, and publish steps are
+  blocking.
 - The publish job permissions are exactly `contents: read` and
   `packages: write`, and the publish step or publish job has the package
   registry token available without a conflicting step-level token override or
@@ -103,9 +110,10 @@ is shared:
   config scope.
 - Required npm install, check, and publish commands run at the package
   repository root with the default shell.
-- `npm publish` commands, including npm invocations with options before the
-  `publish` subcommand or shell continuations, only appear in the audited
-  Release Please workflow. Other workflows must not run Release Please actions.
+- `npm publish` commands, including any `npm` invocation that reaches a
+  `publish` token before a shell boundary and shell continuations, only appear
+  in the audited Release Please workflow. Other workflows must not run Release
+  Please actions.
 
 ## Release Please Contract
 
