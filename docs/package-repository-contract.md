@@ -42,7 +42,8 @@ Each package repository keeps its own source, tests, and package-specific
 - `check` runs exact formatting, test, package dist smoke, and package dry-run
   commands while preserving package-specific smoke details.
 - A TypeScript build runs before the package dist smoke, either directly before
-  `smoke:dist` in `check` or as the first command delegated by `smoke:dist`.
+  `smoke:dist` in `check` or as the first command delegated by `smoke:dist`;
+  delegated smoke scripts do more than rebuild.
 - Shared dev dependencies are Prettier, TypeScript, and Vitest at the versions
   recorded in `package-contract.json`.
 
@@ -58,22 +59,25 @@ is shared:
 - The `Check` workflow has the exact top-level workflow name and runs on pull
   requests and pushes only to the exact `main` branch entry. The pull request
   event is a top-level workflow event, and the selected check job defines a
-  runner and is unconditional and blocking. Required events are not filtered by
-  paths or event types.
+  runner, has no job dependencies, and is unconditional and blocking. Required
+  events are not filtered by paths or event types, and no extra events are
+  configured.
 - The check job grants read-only repository contents access and package read
-  access, either through workflow-level or block-form job-level permissions.
-- It checks out the repository, sets up Node 24 with the `@textfilters`
-  GitHub Packages registry in a blocking setup step, runs exact `npm ci`, then
-  runs exact `npm run check` in the same job. The check step is unconditional
-  and blocking.
+  access only, either through workflow-level or block-form job-level
+  permissions.
+- It checks out the repository without checkout inputs, sets up Node 24 once
+  with the `@textfilters` GitHub Packages registry in a blocking setup step,
+  runs exact `npm ci`, then runs exact `npm run check` in the same job. The
+  check step is unconditional and blocking.
 - The `Release Please` workflow has the exact top-level workflow name and runs
-  on unfiltered pushes only to the exact `main` branch entry.
+  only on unfiltered pushes to the exact `main` branch entry.
 - Release Please uses `googleapis/release-please-action@v5` with
   `release-please-config.json` and `.release-please-manifest.json` configured
   in the action step `with` block, without action-level release bypass inputs,
   and the action step uses exact `id: release`.
 - The Release Please and publish jobs define runners. The Release Please job
-  and action step are unconditional and blocking.
+  has no job dependencies, and the Release Please job and action step are
+  unconditional and blocking.
 - The Release Please job exposes `release_created` from the action step output
   through job-level `outputs`.
 - Release publication only runs when Release Please reports a created release,
@@ -84,7 +88,7 @@ is shared:
   check and publish steps are blocking.
 - The publish job keeps `packages: write` for GitHub Packages publication, and
   the publish step or publish job has the package registry token available
-  without a conflicting step-level token override.
+  without a conflicting step-level token override or dry-run npm configuration.
 - Required npm install, check, and publish commands run at the package
   repository root.
 - `npm publish` commands only appear in the audited Release Please workflow.

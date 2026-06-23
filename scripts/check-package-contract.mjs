@@ -133,7 +133,7 @@ function checkWorkflow(label, workflowPath) {
     contract.checkWorkflow.installCommand,
   );
   const checkStep = expectStepWithRun(label, workflowPath, checkJob, contract.checkWorkflow.checkCommand);
-  const setupNodeStep = expectStepWithUses(
+  const setupNodeStep = expectSingleStepWithUses(
     label,
     workflowPath,
     checkJob,
@@ -141,14 +141,15 @@ function checkWorkflow(label, workflowPath) {
   );
 
   expectWorkflowName(label, workflowPath, workflow, contract.checkWorkflow.name);
+  expectEventKeys(label, workflowPath, onBlock, ["pull_request:", "push:"]);
   expectUnfilteredEvent(label, workflowPath, pullRequestBlock, "pull_request");
   expectPushBranchesOnly(label, workflowPath, pushBlock);
   expectBlockingJob(label, workflowPath, checkJob, "check");
   expectJobRunner(label, workflowPath, checkJob, "check");
   expectBlockLine(label, workflowPath, branchesBlock, "- main", 6);
   expectSingleListEntry(label, workflowPath, branchesBlock, "- main", 6);
-  expectEffectivePermission(label, workflowPath, workflow, checkJob, "contents: read");
-  expectEffectivePermission(label, workflowPath, workflow, checkJob, "packages: read");
+  expectEffectivePermissions(label, workflowPath, workflow, checkJob, ["contents: read", "packages: read"]);
+  expectNoStepChildBlock(label, workflowPath, checkoutStep, "with:");
   expectBlockingStep(label, workflowPath, setupNodeStep, contract.checkWorkflow.setupNodeAction);
   expectStepWithInput(label, workflowPath, setupNodeStep, "node-version", contract.checkWorkflow.nodeVersion);
   expectStepWithInput(label, workflowPath, setupNodeStep, "registry-url", contract.checkWorkflow.registryUrl);
@@ -207,7 +208,7 @@ function checkReleaseWorkflow(label, workflowPath) {
   );
   const publishPermissionsBlock = expectBlock(label, workflowPath, publishJob, "permissions:", 4);
   const checkoutStep = expectStepWithUses(label, workflowPath, publishJob, contract.checkWorkflow.checkoutAction);
-  const setupNodeStep = expectStepWithUses(
+  const setupNodeStep = expectSingleStepWithUses(
     label,
     workflowPath,
     publishJob,
@@ -228,10 +229,18 @@ function checkReleaseWorkflow(label, workflowPath) {
   );
 
   expectWorkflowName(label, workflowPath, workflow, contract.releaseWorkflow.name);
+  expectEventKeys(label, workflowPath, onBlock, ["push:"]);
   expectSinglePublishCommandText(label, workflowPath, workflow);
   expectPushBranchesOnly(label, workflowPath, pushBlock);
   expectBlockingJob(label, workflowPath, releaseJob, "release-please");
-  expectBlockingJob(label, workflowPath, publishJob, "publish", contract.releaseWorkflow.publishCondition);
+  expectBlockingJob(
+    label,
+    workflowPath,
+    publishJob,
+    "publish",
+    contract.releaseWorkflow.publishCondition,
+    contract.releaseWorkflow.publishNeeds,
+  );
   expectJobRunner(label, workflowPath, releaseJob, "release-please");
   expectJobRunner(label, workflowPath, publishJob, "publish");
   expectBlockLine(label, workflowPath, branchesBlock, "- main", 6);
@@ -252,12 +261,15 @@ function checkReleaseWorkflow(label, workflowPath) {
   expectPublishGate(label, workflowPath, publishJob, publishStep);
   expectBlockLine(label, workflowPath, publishPermissionsBlock, "contents: read", 6);
   expectBlockLine(label, workflowPath, publishPermissionsBlock, "packages: write", 6);
+  expectNoStepChildBlock(label, workflowPath, checkoutStep, "with:");
   expectBlockingStep(label, workflowPath, setupNodeStep, contract.checkWorkflow.setupNodeAction);
   expectStepWithInput(label, workflowPath, setupNodeStep, "node-version", contract.checkWorkflow.nodeVersion);
   expectStepWithInput(label, workflowPath, setupNodeStep, "registry-url", contract.checkWorkflow.registryUrl);
   expectStepWithInput(label, workflowPath, setupNodeStep, "scope", `"${contract.checkWorkflow.scope}"`);
   expectEnvAvailable(label, workflowPath, publishJob, installStep, "NODE_AUTH_TOKEN: ${{ github.token }}");
   expectEnvAvailable(label, workflowPath, publishJob, publishStep, "NODE_AUTH_TOKEN: ${{ github.token }}");
+  expectNoEnvKey(label, workflowPath, publishJob, publishStep, "npm_config_dry_run:");
+  expectNoEnvKey(label, workflowPath, publishJob, publishStep, "NPM_CONFIG_DRY_RUN:");
   expectBlockingStep(label, workflowPath, checkStep, contract.checkWorkflow.checkCommand);
   expectBlockingStep(
     label,
@@ -449,7 +461,7 @@ function expectBuildBeforeDistSmoke(label, scripts) {
     return;
   }
 
-  if (checkSmokeIndex !== -1 && smokeCommands.indexOf("npm run build") === 0) {
+  if (checkSmokeIndex !== -1 && smokeCommands.indexOf("npm run build") === 0 && smokeCommands.length > 1) {
     return;
   }
 
@@ -493,6 +505,12 @@ function expectStepWithoutInput(label, path, stepBlock, inputName) {
   }
 }
 
+function expectNoStepChildBlock(label, path, stepBlock, header) {
+  if (getStepChildBlock(stepBlock, header)) {
+    fail(label, `${relativePackagePath(path)} step must not include ${header}`);
+  }
+}
+
 function expectJobLine(label, path, jobBlock, expected, indent) {
   if (!hasLineAtIndent(jobBlock, expected, indent)) {
     fail(label, `${relativePackagePath(path)} job must include ${expected}`);
@@ -516,14 +534,24 @@ function expectSingleListEntry(label, path, block, expected, indent) {
   }
 }
 
-function expectEffectivePermission(label, path, workflow, jobBlock, permission) {
+function expectEffectivePermissions(label, path, workflow, jobBlock, expectedPermissions) {
   const hasJobPermissions = hasKeyAtIndent(jobBlock, "permissions:", 4);
-  const jobPermissions = hasJobPermissions ? getOptionalBlock(jobBlock, "permissions:", 4) : "";
-  const scopeBlock = hasJobPermissions ? jobPermissions : getOptionalBlock(workflow, "permissions:", 0);
+  const permissionBlock = hasJobPermissions
+    ? getOptionalBlock(jobBlock, "permissions:", 4)
+    : getOptionalBlock(workflow, "permissions:", 0);
   const permissionIndent = hasJobPermissions ? 6 : 2;
+  const actualPermissions = blockEntriesAtIndent(permissionBlock, permissionIndent);
 
-  if (!scopeBlock || !hasLineAtIndent(scopeBlock, permission, permissionIndent)) {
-    fail(label, `${relativePackagePath(path)} job permissions must include ${permission}`);
+  for (const permission of expectedPermissions) {
+    if (!actualPermissions.includes(permission)) {
+      fail(label, `${relativePackagePath(path)} job permissions must include ${permission}`);
+    }
+  }
+
+  for (const permission of actualPermissions) {
+    if (!expectedPermissions.includes(permission)) {
+      fail(label, `${relativePackagePath(path)} job permissions must not include ${permission}`);
+    }
   }
 }
 
@@ -562,6 +590,12 @@ function expectEnvAvailable(label, path, jobBlock, stepBlock, envLine) {
   fail(label, `${relativePackagePath(path)} step must have ${envLine} available`);
 }
 
+function expectNoEnvKey(label, path, jobBlock, stepBlock, envName) {
+  if (hasEnvKey(jobBlock, envName, 4) || hasStepEnvKey(stepBlock, envName)) {
+    fail(label, `${relativePackagePath(path)} publish step must not set ${envName}`);
+  }
+}
+
 function expectUnfilteredEvent(label, path, eventBlock, eventName) {
   if (blockHasChildLines(eventBlock)) {
     fail(label, `${relativePackagePath(path)} ${eventName} event must not be filtered`);
@@ -576,10 +610,14 @@ function expectPushBranchesOnly(label, path, pushBlock) {
   }
 }
 
-function expectBlockingJob(label, path, jobBlock, jobName, allowedCondition = "") {
+function expectBlockingJob(label, path, jobBlock, jobName, allowedCondition = "", allowedNeeds = "") {
   const jobCondition = jobTopLevelValue(jobBlock, "if:", 4);
   if (jobCondition && jobCondition !== allowedCondition) {
     fail(label, `${relativePackagePath(path)} ${jobName} job must not be conditional`);
+  }
+  const jobNeeds = jobTopLevelValue(jobBlock, "needs:", 4);
+  if (jobNeeds && jobNeeds !== allowedNeeds) {
+    fail(label, `${relativePackagePath(path)} ${jobName} job must not depend on other jobs`);
   }
   const continueOnError = jobTopLevelValue(jobBlock, "continue-on-error:", 4);
   if (continueOnError && continueOnError !== "false") {
@@ -608,6 +646,22 @@ function expectSinglePublishCommandText(label, path, workflow) {
   const publishCommandCount = countNpmPublishCommands(workflow);
   if (publishCommandCount !== 1) {
     fail(label, `${relativePackagePath(path)} must include exactly one npm publish command`);
+  }
+}
+
+function expectEventKeys(label, path, onBlock, expectedKeys) {
+  const actualKeys = topLevelChildKeys(onBlock, 2);
+
+  for (const key of expectedKeys) {
+    if (!actualKeys.includes(key)) {
+      fail(label, `${relativePackagePath(path)} on block must include ${key}`);
+    }
+  }
+
+  for (const key of actualKeys) {
+    if (!expectedKeys.includes(key)) {
+      fail(label, `${relativePackagePath(path)} on block must not include ${key}`);
+    }
   }
 }
 
@@ -738,6 +792,21 @@ function expectStepWithUses(label, path, jobBlock, usesAction) {
   }
 
   return stepBlock;
+}
+
+function expectSingleStepWithUses(label, path, jobBlock, usesAction) {
+  const stepBlocks = extractStepBlocks(jobBlock);
+  const matchingSteps = stepBlocks.filter((block) => hasTopLevelStepLine(block, `uses: ${usesAction}`));
+
+  if (matchingSteps.length === 0) {
+    fail(label, `${relativePackagePath(path)} must include uses: ${usesAction} in a step`);
+    return "";
+  }
+  if (matchingSteps.length !== 1) {
+    fail(label, `${relativePackagePath(path)} must include exactly one uses: ${usesAction} step`);
+  }
+
+  return matchingSteps[0];
 }
 
 function expectStepOrder(label, path, jobBlock, beforeStep, afterStep, description) {
@@ -889,6 +958,14 @@ function countNpmPublishCommands(text) {
     .length;
 }
 
+function blockEntriesAtIndent(text, indent) {
+  return text
+    .split("\n")
+    .filter((line) => countIndent(line) === indent)
+    .map((line) => normalizedYamlLine(line))
+    .filter((line) => line.includes(":"));
+}
+
 function topLevelChildKeys(block, indent) {
   return block
     .split("\n")
@@ -900,6 +977,16 @@ function topLevelChildKeys(block, indent) {
 function hasEnvLine(text, envLine, indent) {
   const envBlock = getOptionalBlock(text, "env:", indent);
   return envBlock ? hasLineAtIndent(envBlock, envLine, indent + 2) : false;
+}
+
+function hasEnvKey(text, envName, indent) {
+  const envBlock = getOptionalBlock(text, "env:", indent);
+  return envBlock ? hasKeyAtIndent(envBlock, envName, indent + 2) : false;
+}
+
+function hasStepEnvKey(stepBlock, envName) {
+  const envBlock = getStepChildBlock(stepBlock, "env:");
+  return envBlock ? hasKeyAtIndent(envBlock, envName, stepBaseIndent(stepBlock) + 4) : false;
 }
 
 function stepRunCommand(stepBlock) {
