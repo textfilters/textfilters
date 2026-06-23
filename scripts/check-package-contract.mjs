@@ -1201,8 +1201,8 @@ function fail(label, message) {
 
 function splitScriptCommands(script) {
   if (typeof script !== "string") return [];
-  return shellCommentText(script)
-    .split(/[ \t]*(?:&&|\|\||;)[ \t]*/u)
+  return shellContinuationText(shellCommentText(script))
+    .split(/[ \t]*(?:&&|\|\||;|\n+)[ \t]*/u)
     .map((command) => command.trim())
     .filter(Boolean);
 }
@@ -1361,12 +1361,53 @@ function scriptWritesNpmConfigFile(script) {
     return true;
   }
 
-  return shellContinuationText(script)
+  return shellContinuationText(shellCommentText(script))
     .split("\n")
     .some((line) => {
       const tokens = shellTokens(line).map((token) => shellWordValue(token));
-      return tokens.some((token) => isShellRedirectionToken(token)) && tokens.some((token) => isNpmConfigPathToken(token));
+      return shellTokensWriteNpmConfigFile(tokens);
     });
+}
+
+function shellTokensWriteNpmConfigFile(tokens) {
+  for (let index = 0; index < tokens.length; index += 1) {
+    if (isShellOutputRedirectionToken(tokens[index]) && isNpmConfigPathToken(tokens[index + 1] ?? "")) {
+      return true;
+    }
+    if (isTeeCommandToken(tokens[index]) && teeCommandTargetsNpmConfig(tokens, index + 1)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function teeCommandTargetsNpmConfig(tokens, startIndex) {
+  for (let index = startIndex; index < tokens.length; index += 1) {
+    const token = tokens[index];
+    if (isShellBoundaryToken(token)) {
+      break;
+    }
+    if (isShellRedirectionToken(token)) {
+      index += 1;
+      continue;
+    }
+    if (token === "--") {
+      continue;
+    }
+    if (token.startsWith("-")) {
+      continue;
+    }
+    if (isNpmConfigPathToken(token)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function isTeeCommandToken(token) {
+  return /(?:^|\/)tee$/u.test(token.replace(/\\/gu, "/"));
 }
 
 function isNpmConfigPathToken(token) {
@@ -1846,18 +1887,24 @@ function lineHasNpmPublishCommand(line) {
 
 function countNpmPublishCommandsInShellText(text) {
   const npmVariables = new Set();
+  const publishSubcommandVariables = new Set();
   return text
     .split("\n")
-    .reduce((lineCount, line) => lineCount + countNpmPublishCommandsInLine(line, npmVariables), 0);
+    .reduce(
+      (lineCount, line) =>
+        lineCount + countNpmPublishCommandsInLine(line, npmVariables, publishSubcommandVariables),
+      0,
+    );
 }
 
-function countNpmPublishCommandsInLine(line, npmVariables = new Set()) {
+function countNpmPublishCommandsInLine(line, npmVariables = new Set(), publishSubcommandVariables = new Set()) {
   const tokens = shellTokens(line);
   let publishCommandCount = 0;
 
   for (let index = 0; index < tokens.length; index += 1) {
     const word = shellWordValue(tokens[index]);
     recordNpmCommandVariable(word, npmVariables);
+    recordNpmPublishSubcommandVariable(word, publishSubcommandVariables);
     if (!isNpmCommandToken(word, npmVariables)) continue;
 
     for (let commandIndex = index + 1; commandIndex < tokens.length; commandIndex += 1) {
@@ -1869,7 +1916,7 @@ function countNpmPublishCommandsInLine(line, npmVariables = new Set()) {
       if (isShellBoundaryToken(token)) {
         break;
       }
-      if (NPM_PUBLISH_SUBCOMMANDS.has(token)) {
+      if (isNpmPublishSubcommandToken(token, publishSubcommandVariables)) {
         publishCommandCount += 1;
         break;
       }
@@ -1880,15 +1927,32 @@ function countNpmPublishCommandsInLine(line, npmVariables = new Set()) {
 }
 
 function recordNpmCommandVariable(word, npmVariables) {
-  const assignment = /^([A-Za-z_][A-Za-z0-9_]*)=(.+)$/u.exec(word);
+  const assignment = shellVariableAssignment(word);
   if (!assignment) return;
 
-  const [, name, value] = assignment;
+  const { name, value } = assignment;
   if (isNpmCommandToken(value, npmVariables)) {
     npmVariables.add(name);
   } else {
     npmVariables.delete(name);
   }
+}
+
+function recordNpmPublishSubcommandVariable(word, publishSubcommandVariables) {
+  const assignment = shellVariableAssignment(word);
+  if (!assignment) return;
+
+  const { name, value } = assignment;
+  if (isNpmPublishSubcommandToken(value, publishSubcommandVariables)) {
+    publishSubcommandVariables.add(name);
+  } else {
+    publishSubcommandVariables.delete(name);
+  }
+}
+
+function shellVariableAssignment(word) {
+  const assignment = /^([A-Za-z_][A-Za-z0-9_]*)=(.+)$/u.exec(word);
+  return assignment ? { name: assignment[1], value: assignment[2] } : null;
 }
 
 function shellTokens(line) {
@@ -1911,11 +1975,22 @@ function isShellRedirectionToken(token) {
   return /^\d*(?:<|>|<<|>>)$/u.test(token);
 }
 
+function isShellOutputRedirectionToken(token) {
+  return /^\d*(?:>|>>)$/u.test(token);
+}
+
 function isNpmCommandToken(token, npmVariables = new Set()) {
   const normalizedToken = token.replace(/\\/gu, "/");
   return (
     /(?:^|\/)npm$/u.test(normalizedToken) ||
     npmVariables.has(shellVariableReferenceName(token))
+  );
+}
+
+function isNpmPublishSubcommandToken(token, publishSubcommandVariables = new Set()) {
+  return (
+    NPM_PUBLISH_SUBCOMMANDS.has(token) ||
+    publishSubcommandVariables.has(shellVariableReferenceName(token))
   );
 }
 
@@ -2399,20 +2474,13 @@ function decodeDoubleQuotedYamlKey(key) {
 
 function hasLocalWorkflowExecution(workflow) {
   const lines = workflow.split("\n");
-  let runBlockIndent = -1;
 
-  for (const line of lines) {
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
     if (line.trim() === "") continue;
 
     const indent = countIndent(line);
     const normalizedLine = normalizedYamlLine(line);
-    if (runBlockIndent !== -1) {
-      if (indent <= runBlockIndent) {
-        runBlockIndent = -1;
-      } else if (shellLineInvokesLocalCode(line.trim())) {
-        return true;
-      }
-    }
 
     if (
       yamlKey(normalizedLine) === "uses:" &&
@@ -2421,10 +2489,21 @@ function hasLocalWorkflowExecution(workflow) {
       return true;
     }
 
-    if (normalizedLine.startsWith("run: ")) {
-      const runValue = yamlScalarValue(normalizedLine.slice("run: ".length));
+    if (yamlKey(normalizedLine) === "run:") {
+      const rawRunValue = yamlValue(normalizedLine);
+      const runValue = yamlScalarValue(rawRunValue);
       if (/^[|>]/u.test(runValue)) {
-        runBlockIndent = indent;
+        const block = yamlRunBlockCommandText(lines, index, indent, runValue);
+        if (shellTextInvokesLocalCode(block.commandText)) {
+          return true;
+        }
+        index = block.endIndex;
+      } else if (startsMultilineQuotedYamlScalar(rawRunValue)) {
+        const scalar = yamlMultilineQuotedScalarText(lines, index, indent, rawRunValue);
+        if (shellTextInvokesLocalCode(scalar.commandText)) {
+          return true;
+        }
+        index = scalar.endIndex;
       } else if (shellLineInvokesLocalCode(runValue)) {
         return true;
       }
@@ -2463,17 +2542,28 @@ function stepRunCommandTexts(stepBlock) {
     const topLevelLine = stepTopLevelLine(stepBlock, line);
     if (yamlKey(topLevelLine) !== "run:") continue;
 
-    const runValue = yamlScalarValue(yamlValue(topLevelLine));
+    const rawRunValue = yamlValue(topLevelLine);
+    const runValue = yamlScalarValue(rawRunValue);
     if (/^[|>]/u.test(runValue)) {
       const block = yamlRunBlockCommandText(lines, index, countIndent(line), runValue);
       commandTexts.push(block.commandText);
       index = block.endIndex;
+    } else if (startsMultilineQuotedYamlScalar(rawRunValue)) {
+      const scalar = yamlMultilineQuotedScalarText(lines, index, countIndent(line), rawRunValue);
+      commandTexts.push(scalar.commandText);
+      index = scalar.endIndex;
     } else {
       commandTexts.push(runValue);
     }
   }
 
   return commandTexts;
+}
+
+function shellTextInvokesLocalCode(text) {
+  return shellContinuationText(shellCommentText(text))
+    .split("\n")
+    .some((line) => shellLineInvokesLocalCode(line));
 }
 
 function shellTextInvokesBareLocalCode(text) {

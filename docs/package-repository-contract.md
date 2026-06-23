@@ -54,8 +54,9 @@ Each package repository keeps its own source, tests, and package-specific
   runs or append extra commands after the audit.
 - Delegated `lint` and `test` scripts must perform real work; successful no-op
   commands, successful early exits, or shell-control short circuits do not
-  satisfy the contract. Unquoted shell comments are stripped before this check
-  so commented-out work does not satisfy the contract.
+  satisfy the contract. Unquoted shell comments are stripped and newlines are
+  treated as command separators before this check, so commented-out or
+  newline-hidden work does not satisfy the contract.
 - A TypeScript build runs before the package dist smoke, either directly before
   `smoke:dist` in `check` or as the first command delegated by `smoke:dist`;
   delegated smoke scripts do real smoke work beyond rebuilding and must not be
@@ -67,8 +68,9 @@ Each package repository keeps its own source, tests, and package-specific
   alter publication. Package scripts also must not write publish-altering npm
   config with `npm config set`, `npm c set`, or `npm set`; release publication
   stays in the audited Release Please workflow. Package scripts must not write
-  npm config files directly, and local script files invoked by package scripts
-  are scanned for publish commands and publish-altering mutations.
+  npm config files directly, including through shell utilities such as `tee`,
+  and local script files invoked by package scripts are scanned for publish
+  commands and publish-altering mutations.
 - Packages and locked dependencies must not expose an `npm` binary that can
   shadow the npm CLI inside npm-run-script PATH handling.
 - Package manifests and lockfiles must not use local `file:` or `link:`
@@ -147,15 +149,16 @@ is shared:
   Node startup option, HOME, or indirect npm config overrides.
 - `npm publish` commands, including publish aliases, shell-escaped command
   words, Bash ANSI-C quoted command words, IFS-expanded command words,
-  variable-expanded npm command words, decoded YAML scalar run values, multiline
-  quoted YAML run scalars, folded YAML run blocks, preserved shell continuation
-  separators, grouped shell commands, path-qualified npm command words, and any
-  `npm` invocation that reaches a publish command token before a shell boundary,
-  only appear in the audited Release Please workflow. Other workflows must not
-  grant package write permissions, including `write-all`, block-scalar
-  permission values, decoded inline `packages: write` permission mappings, use
-  publish-capable actions, run Release Please actions, or invoke local workflow
-  scripts or local composite actions. Workflow, job, and step working
+  variable-expanded npm command words, variable-expanded publish subcommands,
+  decoded YAML scalar run values, multiline quoted YAML run scalars, folded YAML
+  run blocks, preserved shell continuation separators, grouped shell commands,
+  path-qualified npm command words, and any `npm` invocation that reaches a
+  publish command token before a shell boundary, only appear in the audited
+  Release Please workflow. Other workflows must not grant package write
+  permissions, including `write-all`, block-scalar permission values, decoded
+  inline `packages: write` permission mappings, use publish-capable actions, run
+  Release Please actions, or invoke local workflow scripts or local composite
+  actions. Multiline quoted `run` scalars and workflow, job, and step working
   directories are considered when deciding whether a command invokes checked-in
   local code.
 
