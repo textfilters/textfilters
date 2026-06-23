@@ -176,6 +176,64 @@ expectFail("old lockfile version with packages map", (state) => {
     2,
   )}\n`;
 }, "package-lock.json must use lockfileVersion 2 or newer with packages map");
+expectFail("delegated smoke build without success chaining", (state) => {
+  state.packageJson.scripts["smoke:dist"] = "npm run build; node smoke.mjs";
+}, "check script must run or delegate npm run build before smoke:dist");
+expectFail("npm exec after valued npm option", (state) => {
+  state.packageJson.scripts.lint = "npm --cache .npm-cache exec -c 'node hook.mjs'";
+}, "script lint must not use npm exec");
+expectFail("npm package mutation after valued npm option", (state) => {
+  state.packageJson.scripts.lint =
+    "npm --cache .npm-cache pkg set scripts.prepack='node hook.mjs' && prettier . --check";
+}, "script lint must not mutate package.json");
+expectFail("local script under tools directory", (state) => {
+  state.packageJson.scripts["smoke:dist"] = "npm run build && node tools/smoke.mjs";
+  state.files = {
+    "tools/smoke.mjs": "import { appendFileSync } from 'node:fs';\nappendFileSync('.npmrc', 'dry-run=true\\n');\n",
+  };
+}, "script smoke:dist referenced file");
+expectFail("env split-string local script", (state) => {
+  state.packageJson.scripts["smoke:dist"] = "npm run build && env -S 'node ./hook.mjs'";
+  state.files = {
+    "hook.mjs": "import { appendFileSync } from 'node:fs';\nappendFileSync('.npmrc', 'dry-run=true\\n');\n",
+  };
+}, "script smoke:dist referenced file");
+expectFail("experimental loader module scan", (state) => {
+  state.packageJson.scripts["smoke:dist"] =
+    "npm run build && node --experimental-loader=./hook.mjs smoke.mjs";
+  state.files = {
+    "hook.mjs": "import { appendFileSync } from 'node:fs';\nappendFileSync('.npmrc', 'dry-run=true\\n');\n",
+  };
+}, "script smoke:dist referenced file");
+expectFail("npm version manifest mutation", (state) => {
+  state.packageJson.scripts.lint = "npm version patch --no-git-tag-version && prettier . --check";
+}, "script lint must not mutate package.json");
+expectFail("registry auth config mutation", (state) => {
+  state.packageJson.scripts.lint =
+    "npm config set --location=project //npm.pkg.github.com/:_authToken=bogus && prettier . --check";
+}, "script lint must not write publish-altering npm config");
+expectFail("copy write to npm config", (state) => {
+  state.packageJson.scripts.lint = "cp npmrc.template .npmrc && prettier . --check";
+  state.files = {
+    "npmrc.template": "dry-run=true\n",
+  };
+}, "script lint must not write npm config files");
+expectFail("non-release workflow bare local script interpreter", (state) => {
+  state.extraWorkflow = `name: Manual Publish
+
+on:
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - run: python3 publish.py
+`;
+  state.files = {
+    "publish.py": "print('publish')\n",
+  };
+}, "manual-publish.yml must not invoke local workflow scripts or actions");
 
 console.log("Regression contract checks passed.");
 

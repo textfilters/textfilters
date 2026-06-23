@@ -74,23 +74,27 @@ Each package repository keeps its own source, tests, and package-specific
   GitHub Actions environment files, or set npm config environment variables that
   alter publication. Package scripts also must not write publish-altering npm
   config with `npm config set`, `npm conf set`, `npm c set`, or `npm set`;
-  release publication stays in the audited Release Please workflow. Variable-expanded npm config
-  subcommands, interpreter-evaluated snippets, shell `eval` snippets, command
-  substitutions, and simple npm-forwarding shell functions are resolved before
-  this check. Package scripts must not write npm config files directly,
-  including through shell utilities such as `tee`, and local script files,
-  directory entry points, root script files, and extensionless script entry
-  points invoked by package scripts are scanned for publish commands and
-  publish-altering mutations.
+  `npm version` and registry auth config keys are also blocked. Release
+  publication stays in the audited Release Please workflow. Variable-expanded
+  npm config subcommands, interpreter-evaluated snippets, shell `eval` snippets,
+  command substitutions, and simple npm-forwarding shell functions are resolved
+  before this check. Package scripts must not write npm config files directly,
+  including through shell utilities such as `tee` and `cp`, and local script
+  files, directory entry points, root script files, extensionless script entry
+  points, and relative subdirectory script paths invoked by package scripts are
+  scanned for publish commands and publish-altering mutations.
 - Package scripts are intentionally fail-closed for unsupported dynamic command
   forms. Shell command substitutions, shell function definitions, shell
   pipelines, delegated-work `||` short circuits, `child_process` command
-  execution, `npm exec` and `npx` snippets, `npm pkg` mutations, and direct
-  package manifest writes are contract drift rather than interpreted as safe.
-  Local script files invoked by package scripts are scanned recursively through
-  local `import`, dynamic `import()`, `require()`, and ESM re-export
-  dependencies, and Node preload modules from `NODE_OPTIONS`, `--require`,
-  `--import`, and `--loader` are treated as referenced local code.
+  execution, `npm exec` and `npx` snippets, `npm pkg` and `npm version`
+  mutations, and direct package manifest writes are contract drift rather than
+  interpreted as safe. Delegated `smoke:dist` build commands must be chained
+  with `&&` before smoke work. Local script files invoked by package scripts are
+  scanned recursively through local `import`, dynamic `import()`, `require()`,
+  and ESM re-export dependencies, and Node preload modules from `NODE_OPTIONS`,
+  `--require`, `--import`, `--loader`, and `--experimental-loader` are treated
+  as referenced local code. GNU `env -S` split strings are parsed when resolving
+  local script invocations.
 - Packages and locked dependencies must not expose an `npm` binary that can
   shadow the npm CLI inside npm-run-script PATH handling.
 - Lockfiles must use lockfile version 2 or newer with a `packages` map. Package
@@ -183,9 +187,9 @@ is shared:
   inline `packages: write` permission mappings, use publish-capable actions, run
   decoded or version-drifted Release Please actions, or invoke local workflow
   scripts or local composite actions. Multiline quoted and plain `run` scalars,
-  root and non-root working directories, bare root script file arguments, and
-  extensionless local script entry points are considered when deciding whether a
-  command invokes checked-in local code.
+  root and non-root working directories, bare root script file arguments,
+  file-argument interpreters, and extensionless local script entry points are
+  considered when deciding whether a command invokes checked-in local code.
 - Non-release workflow command surfaces are also fail-closed for unsupported
   dynamic execution: shell command substitutions, shell function definitions,
   `child_process` command execution, `npm exec` snippets, and package manifest
