@@ -693,11 +693,12 @@ function expectCheckScriptOnlyAuditedCommands(label, script) {
 
 function expectBuildBeforeDistSmoke(label, scripts) {
   const checkCommands = splitScriptCommands(scripts?.check);
-  const smokeCommands = splitScriptCommands(scripts?.["smoke:dist"]);
+  const smokeCommandParts = splitScriptCommandParts(scripts?.["smoke:dist"]);
+  const smokeCommands = smokeCommandParts.map((part) => part.command);
   const checkBuildIndex = checkCommands.indexOf("npm run build");
   const checkSmokeIndex = checkCommands.indexOf("npm run smoke:dist");
 
-  expectDistSmokeWork(label, smokeCommands);
+  expectDistSmokeWork(label, smokeCommandParts);
 
   if (checkBuildIndex !== -1 && checkSmokeIndex !== -1 && checkBuildIndex < checkSmokeIndex) {
     return;
@@ -710,8 +711,12 @@ function expectBuildBeforeDistSmoke(label, scripts) {
   fail(label, "check script must run or delegate npm run build before smoke:dist");
 }
 
-function expectDistSmokeWork(label, smokeCommands) {
+function expectDistSmokeWork(label, smokeCommandParts) {
+  const smokeCommands = smokeCommandParts.map((part) => part.command);
   if (smokeCommands.length === 0) return;
+  if (smokeCommandParts.slice(1).some((part) => part.separator === "||")) {
+    fail(label, "smoke:dist script must not short-circuit dist smoke work");
+  }
   if (smokeCommands.some((command) => isSuccessfulExitCommand(command))) {
     fail(label, "smoke:dist script must not exit before dist smoke work");
     return;
@@ -726,9 +731,13 @@ function expectDistSmokeWork(label, smokeCommands) {
 }
 
 function expectDelegatedScriptWork(label, scriptName, script) {
-  const commands = splitScriptCommands(script);
+  const commandParts = splitScriptCommandParts(script);
+  const commands = commandParts.map((part) => part.command);
   if (commands.length === 0) return;
 
+  if (commandParts.slice(1).some((part) => part.separator === "||")) {
+    fail(label, `script ${scriptName} must not short-circuit delegated work`);
+  }
   if (commands.some((command) => isSuccessfulExitCommand(command))) {
     fail(label, `script ${scriptName} must not exit before work`);
     return;
@@ -1464,16 +1473,34 @@ function localFilesInvokedByScript(packageDir, script) {
   if (typeof script !== "string") return [];
 
   const localFiles = new Set();
+  const shellVariables = new Map();
   for (const command of splitScriptCommands(script)) {
     const tokens = shellTokens(command).map((token) => shellWordValue(token));
     for (let index = 0; index < tokens.length; index += 1) {
-      const token = tokens[index];
+      const word = tokens[index];
+      recordShellVariable(word, shellVariables);
+      const token = resolveShellVariables(word, shellVariables);
+      const resolvedTokens = tokens.map((candidate) => resolveShellVariables(candidate, shellVariables));
+      for (const scriptToken of nodeOptionsLocalScriptTokens(token)) {
+        localFiles.add(resolve(packageDir, scriptToken));
+      }
       if (isLocalScriptFileToken(token)) {
         localFiles.add(resolve(packageDir, token));
       }
-      if (["bash", "sh", "node"].includes(token)) {
-        for (const scriptToken of interpreterLocalScriptTokens(token, tokens, index + 1)) {
+      if (isShellOrNodeInterpreterToken(token)) {
+        for (const scriptToken of interpreterLocalScriptTokens(token, resolvedTokens, index + 1)) {
           localFiles.add(resolve(packageDir, scriptToken));
+        }
+      } else if (isEnvCommandToken(token)) {
+        const envInterpreter = envCommandInterpreter(resolvedTokens, index + 1);
+        if (envInterpreter && isShellOrNodeInterpreterToken(envInterpreter.command)) {
+          for (const scriptToken of interpreterLocalScriptTokens(
+            envInterpreter.command,
+            resolvedTokens,
+            envInterpreter.index + 1,
+          )) {
+            localFiles.add(resolve(packageDir, scriptToken));
+          }
         }
       }
     }
@@ -1482,9 +1509,51 @@ function localFilesInvokedByScript(packageDir, script) {
   return [...localFiles].filter((path) => isPathInsidePackageDir(path, packageDir));
 }
 
+function nodeOptionsLocalScriptTokens(word) {
+  const assignment = shellVariableAssignment(word);
+  if (assignment?.name !== "NODE_OPTIONS") return [];
+
+  const tokens = shellTokens(assignment.value).map((token) => shellWordValue(token));
+  return interpreterLocalScriptTokens("node", tokens, 0);
+}
+
+function isShellOrNodeInterpreterToken(token) {
+  return ["bash", "sh", "node"].includes(commandBasename(token));
+}
+
+function isEnvCommandToken(token) {
+  return commandBasename(token) === "env";
+}
+
+function envCommandInterpreter(tokens, startIndex) {
+  for (let index = startIndex; index < tokens.length; index += 1) {
+    const token = tokens[index];
+    if (isShellBoundaryToken(token)) return null;
+    if (isShellRedirectionToken(token)) {
+      index += 1;
+      continue;
+    }
+    if (token === "--") {
+      continue;
+    }
+    if (shellVariableAssignment(token)) {
+      continue;
+    }
+    if (token.startsWith("-")) {
+      if (["-S", "--split-string"].includes(token)) {
+        index += 1;
+      }
+      continue;
+    }
+    return { command: token, index };
+  }
+
+  return null;
+}
+
 function interpreterLocalScriptTokens(command, tokens, startIndex) {
   const scriptTokens = [];
-  const basename = command.replace(/\\/gu, "/").split("/").pop() ?? "";
+  const basename = commandBasename(command);
 
   for (let index = startIndex; index < tokens.length; index += 1) {
     const token = tokens[index];
@@ -1524,7 +1593,7 @@ function interpreterLocalScriptTokens(command, tokens, startIndex) {
 }
 
 function nodePreloadOptionValue(command, token) {
-  if (command !== "node") return "";
+  if (commandBasename(command) !== "node") return "";
 
   for (const option of ["--require", "--import", "--loader"]) {
     if (token.startsWith(`${option}=`)) {
@@ -1536,11 +1605,15 @@ function nodePreloadOptionValue(command, token) {
 }
 
 function nodePreloadOptionConsumesValue(command, token) {
-  return command === "node" && ["-r", "--require", "--import", "--loader"].includes(token);
+  return commandBasename(command) === "node" && ["-r", "--require", "--import", "--loader"].includes(token);
 }
 
 function interpreterOptionConsumesValue(token) {
   return ["-r", "--require", "--import", "--loader", "-e", "--eval", "-p", "--print", "-c"].includes(token);
+}
+
+function commandBasename(command) {
+  return command.replace(/\\/gu, "/").split("/").pop() ?? "";
 }
 
 function isPathInsidePackageDir(path, packageDir) {
@@ -1618,7 +1691,7 @@ function localScriptDirectoryEntrypointText(path, packageDir, visited) {
 function localScriptDependencyPaths(scriptText, baseDir, packageDir) {
   const dependencyPaths = new Set();
   const dependencyPattern =
-    /\b(?:import\s+(?:[^'"()]*?\s+from\s+)?|import\s*\(\s*|require\s*\(\s*)(["'])(\.[^"']+)\1/gu;
+    /\b(?:import\s+(?:[^'"()]*?\s+from\s+)?|import\s*\(\s*|require\s*\(\s*|export\s+(?:\*[^'"()]*?|\{[^}]*\})\s+from\s*)(["'])(\.[^"']+)\1/gu;
 
   for (const match of scriptText.matchAll(dependencyPattern)) {
     const dependencyPath = existingLocalScriptPath(resolve(baseDir, match[2]));
@@ -1670,7 +1743,10 @@ function scriptWritesGitHubActionsEnvironmentFile(script) {
 function scriptWritesNpmConfigFile(script) {
   const npmConfigWriteApiPattern =
     /\b(?:writeFile(?:Sync)?|appendFile(?:Sync)?|createWriteStream|openSync)\s*\([\s\S]{0,240}\.npmrc/u;
-  if (npmConfigWriteApiPattern.test(script)) {
+  if (
+    npmConfigWriteApiPattern.test(script) ||
+    scriptWritesTargetFileThroughJavaScriptVariable(script, isNpmConfigPathToken)
+  ) {
     return true;
   }
 
@@ -1697,12 +1773,13 @@ function scriptUsesChildProcessExecution(script) {
 function scriptUsesNpmExec(script) {
   const shellVariables = new Map();
   const npmVariables = new Set();
+  const npxVariables = new Set();
   return shellContinuationText(shellCommentText(script))
     .split("\n")
-    .some((line) => lineUsesNpmExec(line, shellVariables, npmVariables));
+    .some((line) => lineUsesNpmExec(line, shellVariables, npmVariables, npxVariables));
 }
 
-function lineUsesNpmExec(line, shellVariables, npmVariables) {
+function lineUsesNpmExec(line, shellVariables, npmVariables, npxVariables) {
   const tokens = shellTokens(line);
 
   for (let index = 0; index < tokens.length; index += 1) {
@@ -1710,6 +1787,8 @@ function lineUsesNpmExec(line, shellVariables, npmVariables) {
     recordShellVariable(word, shellVariables);
     const resolvedWord = resolveShellVariables(word, shellVariables);
     recordNpmCommandVariable(resolvedWord, npmVariables);
+    recordNpxCommandVariable(resolvedWord, npxVariables);
+    if (isNpxCommandToken(resolvedWord, npxVariables)) return true;
     if (!isNpmCommandToken(resolvedWord, npmVariables)) continue;
 
     for (let commandIndex = index + 1; commandIndex < tokens.length; commandIndex += 1) {
@@ -1775,7 +1854,10 @@ function lineHasNpmPackageCommand(line, shellVariables, npmVariables) {
 function scriptWritesPackageManifestFile(script) {
   const packageWriteApiPattern =
     /\b(?:writeFile(?:Sync)?|appendFile(?:Sync)?|createWriteStream|openSync)\s*\([\s\S]{0,240}package\.json/u;
-  if (packageWriteApiPattern.test(script)) {
+  if (
+    packageWriteApiPattern.test(script) ||
+    scriptWritesTargetFileThroughJavaScriptVariable(script, isPackageManifestPathToken)
+  ) {
     return true;
   }
 
@@ -1790,6 +1872,30 @@ function scriptWritesPackageManifestFile(script) {
       });
       return shellTokensWritePackageManifestFile(tokens);
     });
+}
+
+function scriptWritesTargetFileThroughJavaScriptVariable(script, isTargetPathToken) {
+  const targetVariables = new Set();
+  const assignmentPattern =
+    /\b(?:const|let|var)\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*=\s*(["'])([^"']+)\2/gu;
+
+  for (const match of script.matchAll(assignmentPattern)) {
+    if (isTargetPathToken(match[3])) {
+      targetVariables.add(match[1]);
+    }
+  }
+
+  if (targetVariables.size === 0) return false;
+
+  const writeCallPattern =
+    /\b(?:writeFile(?:Sync)?|appendFile(?:Sync)?|createWriteStream|openSync)\s*\(\s*([A-Za-z_$][A-Za-z0-9_$]*)\b/gu;
+  for (const match of script.matchAll(writeCallPattern)) {
+    if (targetVariables.has(match[1])) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 function shellTokensWritePackageManifestFile(tokens) {
@@ -1926,7 +2032,14 @@ function expectAuditableNpmCiLockfile(label, lockfilePath) {
   if (!lockfilePath) return;
 
   const lockfile = readJson(lockfilePath);
-  if (!lockfile || typeof lockfile !== "object" || !lockfile.packages || typeof lockfile.packages !== "object") {
+  if (
+    !lockfile ||
+    typeof lockfile !== "object" ||
+    !Number.isInteger(lockfile.lockfileVersion) ||
+    lockfile.lockfileVersion < 2 ||
+    !lockfile.packages ||
+    typeof lockfile.packages !== "object"
+  ) {
     fail(label, `${relativePackagePath(lockfilePath)} must use lockfileVersion 2 or newer with packages map`);
   }
 }
@@ -2572,6 +2685,18 @@ function recordNpmCommandVariable(word, npmVariables) {
   }
 }
 
+function recordNpxCommandVariable(word, npxVariables) {
+  const assignment = shellVariableAssignment(word);
+  if (!assignment) return;
+
+  const { name, value } = assignment;
+  if (isNpxCommandToken(value, npxVariables)) {
+    npxVariables.add(name);
+  } else {
+    npxVariables.delete(name);
+  }
+}
+
 function recordNpmPublishSubcommandVariable(word, publishSubcommandVariables) {
   const assignment = shellVariableAssignment(word);
   if (!assignment) return;
@@ -2957,6 +3082,13 @@ function isNpmCommandToken(token, npmVariables = new Set()) {
   return (
     /(?:^|\/)npm$/u.test(normalizedToken) ||
     npmVariables.has(shellVariableReferenceName(token))
+  );
+}
+
+function isNpxCommandToken(token, npxVariables = new Set()) {
+  return (
+    /(?:^|\/)npx$/u.test(token.replace(/\\/gu, "/")) ||
+    npxVariables.has(shellVariableReferenceName(token))
   );
 }
 
@@ -3554,7 +3686,7 @@ function javascriptEmbeddedHasBlockedNpmConfigCommand(text) {
 
 function npmCommandWritesBlockedConfig(commandTokens) {
   for (let index = 0; index < commandTokens.length; index += 1) {
-    if (commandTokens[index] === "config" || commandTokens[index] === "c") {
+    if (commandTokens[index] === "config" || commandTokens[index] === "conf" || commandTokens[index] === "c") {
       const setIndex = commandTokens.indexOf("set", index + 1);
       if (setIndex !== -1 && commandHasBlockedNpmConfigKey(commandTokens.slice(setIndex + 1))) {
         return true;

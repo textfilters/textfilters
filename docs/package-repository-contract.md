@@ -73,8 +73,8 @@ Each package repository keeps its own source, tests, and package-specific
 - Package scripts must not contain `npm publish` or publish aliases, mutate
   GitHub Actions environment files, or set npm config environment variables that
   alter publication. Package scripts also must not write publish-altering npm
-  config with `npm config set`, `npm c set`, or `npm set`; release publication
-  stays in the audited Release Please workflow. Variable-expanded npm config
+  config with `npm config set`, `npm conf set`, `npm c set`, or `npm set`;
+  release publication stays in the audited Release Please workflow. Variable-expanded npm config
   subcommands, interpreter-evaluated snippets, shell `eval` snippets, command
   substitutions, and simple npm-forwarding shell functions are resolved before
   this check. Package scripts must not write npm config files directly,
@@ -84,16 +84,18 @@ Each package repository keeps its own source, tests, and package-specific
   publish-altering mutations.
 - Package scripts are intentionally fail-closed for unsupported dynamic command
   forms. Shell command substitutions, shell function definitions, shell
-  pipelines, `child_process` command execution, `npm exec` snippets, `npm pkg`
-  mutations, and direct package manifest writes are contract drift rather than
-  interpreted as safe. Local script files invoked by package scripts are scanned
-  recursively through local `import`, dynamic `import()`, and `require()`
-  dependencies, and Node preload modules from `--require`, `--import`, and
-  `--loader` are treated as referenced local code.
+  pipelines, delegated-work `||` short circuits, `child_process` command
+  execution, `npm exec` and `npx` snippets, `npm pkg` mutations, and direct
+  package manifest writes are contract drift rather than interpreted as safe.
+  Local script files invoked by package scripts are scanned recursively through
+  local `import`, dynamic `import()`, `require()`, and ESM re-export
+  dependencies, and Node preload modules from `NODE_OPTIONS`, `--require`,
+  `--import`, and `--loader` are treated as referenced local code.
 - Packages and locked dependencies must not expose an `npm` binary that can
   shadow the npm CLI inside npm-run-script PATH handling.
-- Package manifests and lockfiles must not use local `file:` or `link:`
-  dependency specs.
+- Lockfiles must use lockfile version 2 or newer with a `packages` map. Package
+  manifests and lockfiles must not use local `file:` or `link:` dependency
+  specs.
 - Locked dependency packages must not define install-time lifecycle scripts.
   Lockfile `hasInstallScript` markers are treated as install lifecycle scripts
   when the dependency can install on the audited Linux runner.

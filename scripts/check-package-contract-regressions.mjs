@@ -106,6 +106,76 @@ expectFail("local script dependency mutation", (state) => {
     "hook.mjs": "import { appendFileSync } from 'node:fs';\nappendFileSync('.npmrc', 'dry-run=true\\n');\n",
   };
 }, "script smoke:dist referenced file");
+expectFail("npx exec wrapper", (state) => {
+  state.extraWorkflow = `name: Manual Publish
+
+on:
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - run: npx -c "npm publish --registry=https://npm.pkg.github.com"
+`;
+}, "manual-publish.yml must not use npm exec");
+expectFail("variable npx exec wrapper", (state) => {
+  state.packageJson.scripts.lint = "x=npx; $x -c 'npm publish --registry=https://npm.pkg.github.com'";
+}, "script lint must not use npm exec");
+expectFail("re-exported local script dependency", (state) => {
+  state.packageJson.scripts["smoke:dist"] = "npm run build && node smoke.mjs";
+  state.files = {
+    "smoke.mjs": "export * from './hook.mjs';\n",
+    "hook.mjs": "import { appendFileSync } from 'node:fs';\nappendFileSync('.npmrc', 'dry-run=true\\n');\n",
+  };
+}, "script smoke:dist referenced file");
+expectFail("npm conf set mutation", (state) => {
+  state.packageJson.scripts.lint = "npm conf set dry-run=true && prettier . --check";
+}, "script lint must not write publish-altering npm config");
+expectFail("delegated script short-circuit", (state) => {
+  state.packageJson.scripts.test = "echo ok || vitest run";
+}, "script test must not short-circuit delegated work");
+expectFail("NODE_OPTIONS preload module scan", (state) => {
+  state.packageJson.scripts["smoke:dist"] =
+    "npm run build && NODE_OPTIONS=--require=./hook.cjs node smoke.mjs";
+  state.files = {
+    "hook.cjs": "require('node:fs').appendFileSync('.npmrc', 'dry-run=true\\n');\n",
+  };
+}, "script smoke:dist referenced file");
+expectFail("variable NODE_OPTIONS preload module scan", (state) => {
+  state.packageJson.scripts["smoke:dist"] =
+    "npm run build && opts=--require=./hook.cjs; NODE_OPTIONS=$opts node smoke.mjs";
+  state.files = {
+    "hook.cjs": "require('node:fs').appendFileSync('.npmrc', 'dry-run=true\\n');\n",
+  };
+}, "script smoke:dist referenced file");
+expectFail("indirect JavaScript npmrc write", (state) => {
+  state.packageJson.scripts["smoke:dist"] = "npm run build && node smoke.mjs";
+  state.files = {
+    "smoke.mjs": "import { appendFileSync } from 'node:fs';\nconst p = '.npmrc';\nappendFileSync(p, 'dry-run=true\\n');\n",
+  };
+}, "script smoke:dist referenced file");
+expectFail("path-qualified local interpreter", (state) => {
+  state.packageJson.scripts["smoke:dist"] = "npm run build && /usr/bin/node smoke.mjs";
+  state.files = {
+    "smoke.mjs": "import { appendFileSync } from 'node:fs';\nappendFileSync('.npmrc', 'dry-run=true\\n');\n",
+  };
+}, "script smoke:dist referenced file");
+expectFail("old lockfile version with packages map", (state) => {
+  state.packageLock = `${JSON.stringify(
+    {
+      lockfileVersion: 1,
+      packages: {
+        "": {
+          name: "@textfilters/pkg",
+          version: "1.2.3",
+        },
+      },
+    },
+    null,
+    2,
+  )}\n`;
+}, "package-lock.json must use lockfileVersion 2 or newer with packages map");
 
 console.log("Regression contract checks passed.");
 
