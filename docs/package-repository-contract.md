@@ -67,9 +67,11 @@ Each package repository keeps its own source, tests, and package-specific
   config with `npm config set`, `npm c set`, or `npm set`; release publication
   stays in the audited Release Please workflow. Package scripts must not write
   npm config files directly, and local script files invoked by package scripts
-  are scanned for publish commands.
+  are scanned for publish commands and publish-altering mutations.
 - Packages and locked dependencies must not expose an `npm` binary that can
   shadow the npm CLI inside npm-run-script PATH handling.
+- Package manifests and lockfiles must not use local `file:` or `link:`
+  dependency specs.
 - Locked dependency packages must not define install-time lifecycle scripts.
   Lockfile `hasInstallScript` markers are treated as install lifecycle scripts
   when the dependency can install on the audited Linux runner.
@@ -144,11 +146,14 @@ is shared:
 - `npm publish` commands, including publish aliases, shell-escaped command
   words, Bash ANSI-C quoted command words, IFS-expanded command words, decoded
   YAML scalar run values, folded YAML run blocks, preserved shell continuation
-  separators, grouped shell commands, and any `npm` invocation that reaches a
-  publish command token before a shell boundary, only appear in the audited
-  Release Please workflow. Other workflows must not grant package write
-  permissions, including `write-all`, use publish-capable actions, run Release
-  Please actions, or invoke local workflow scripts or local composite actions.
+  separators, grouped shell commands, path-qualified npm command words, and any
+  `npm` invocation that reaches a publish command token before a shell boundary,
+  only appear in the audited Release Please workflow. Other workflows must not
+  grant package write permissions, including `write-all`, decoded inline
+  `packages: write` permission mappings, use publish-capable actions, run
+  Release Please actions, or invoke local workflow scripts or local composite
+  actions. Workflow, job, and step working directories are considered when
+  deciding whether a command invokes checked-in local code.
 
 ## Release Please Contract
 

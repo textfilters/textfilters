@@ -47,6 +47,12 @@ const BLOCKED_NPM_CONFIG_ENV_KEYS = new Set(
   ].map((key) => normalizeEnvKeyName(key)),
 );
 const BLOCKED_AUDITED_NPM_ENV_KEYS = ["BASH_ENV:", "HOME:", "NODE_OPTIONS:"];
+const DEPENDENCY_GROUPS = [
+  "dependencies",
+  "devDependencies",
+  "optionalDependencies",
+  "peerDependencies",
+];
 
 for (const pkgSpec of contract.packages) {
   const packageDir = join(packagesRoot, pkgSpec.directory);
@@ -136,6 +142,7 @@ function checkPackage(pkgSpec, packageDir) {
   expectNoWorkspaces(label, pkg);
   expectAuditableNpmCiLockfile(label, npmCiLockfile);
   expectNoNpmBinaryShadowing(label, pkg, npmCiLockfile);
+  expectNoLocalDependencySpecs(label, pkg, npmCiLockfile);
   expectNoDependencyInstallLifecycleScripts(label, npmCiLockfile);
   expectSafeNpmConfig(label, npmrcPath);
 
@@ -1225,6 +1232,11 @@ function expectNoPublishInScripts(label, packageDir, scripts) {
       if (scriptText && hasNpmPublishCommand(scriptText)) {
         fail(label, `script ${scriptName} referenced file ${relativePackagePath(scriptPath)} must not include npm publish`);
       }
+      expectNoPublishEnvMutationInScriptText(
+        label,
+        `script ${scriptName} referenced file ${relativePackagePath(scriptPath)}`,
+        scriptText,
+      );
     }
   }
 }
@@ -1270,18 +1282,23 @@ function readExistingLocalScriptFile(path) {
 function expectNoPublishEnvMutationInScripts(label, scripts) {
   for (const [scriptName, script] of Object.entries(scripts ?? {})) {
     if (typeof script !== "string") continue;
-    if (scriptWritesGitHubActionsEnvironmentFile(script)) {
-      fail(label, `script ${scriptName} must not write GitHub Actions environment files`);
-    }
-    if (scriptWritesNpmConfigFile(script)) {
-      fail(label, `script ${scriptName} must not write npm config files`);
-    }
-    if (textHasBlockedNpmConfigEnvKey(script)) {
-      fail(label, `script ${scriptName} must not set publish-altering npm config env`);
-    }
-    if (scriptHasBlockedNpmConfigCommand(script)) {
-      fail(label, `script ${scriptName} must not write publish-altering npm config`);
-    }
+    expectNoPublishEnvMutationInScriptText(label, `script ${scriptName}`, script);
+  }
+}
+
+function expectNoPublishEnvMutationInScriptText(label, subject, script) {
+  if (!script) return;
+  if (scriptWritesGitHubActionsEnvironmentFile(script)) {
+    fail(label, `${subject} must not write GitHub Actions environment files`);
+  }
+  if (scriptWritesNpmConfigFile(script)) {
+    fail(label, `${subject} must not write npm config files`);
+  }
+  if (textHasBlockedNpmConfigEnvKey(script)) {
+    fail(label, `${subject} must not set publish-altering npm config env`);
+  }
+  if (scriptHasBlockedNpmConfigCommand(script)) {
+    fail(label, `${subject} must not write publish-altering npm config`);
   }
 }
 
@@ -1300,6 +1317,12 @@ function scriptWritesGitHubActionsEnvironmentFile(script) {
 }
 
 function scriptWritesNpmConfigFile(script) {
+  const npmConfigWriteApiPattern =
+    /\b(?:writeFile(?:Sync)?|appendFile(?:Sync)?|createWriteStream|openSync)\s*\([\s\S]{0,240}\.npmrc/u;
+  if (npmConfigWriteApiPattern.test(script)) {
+    return true;
+  }
+
   return shellContinuationText(script)
     .split("\n")
     .some((line) => {
@@ -1370,12 +1393,7 @@ function expectNoNpmBinaryShadowing(label, pkg, lockfilePath) {
     fail(label, "package bin must not include npm");
   }
 
-  for (const dependencyGroup of [
-    "dependencies",
-    "devDependencies",
-    "optionalDependencies",
-    "peerDependencies",
-  ]) {
+  for (const dependencyGroup of DEPENDENCY_GROUPS) {
     if (pkg[dependencyGroup]?.npm !== undefined) {
       fail(label, `${dependencyGroup} must not include npm`);
     }
@@ -1389,6 +1407,45 @@ function expectNoNpmBinaryShadowing(label, pkg, lockfilePath) {
       fail(label, `${relativePackagePath(lockfilePath)} must not include npm binary from ${entryPath || "."}`);
     }
   }
+}
+
+function expectNoLocalDependencySpecs(label, pkg, lockfilePath) {
+  for (const dependencyGroup of DEPENDENCY_GROUPS) {
+    for (const [dependency, spec] of Object.entries(pkg[dependencyGroup] ?? {})) {
+      if (isLocalDependencySpec(spec)) {
+        fail(label, `${dependencyGroup} ${dependency} must not use local file/link spec`);
+      }
+    }
+  }
+
+  if (!lockfilePath) return;
+
+  const lockfile = readJson(lockfilePath);
+  for (const [entryPath, entry] of Object.entries(lockfile.packages ?? {})) {
+    if (!entryPath || !entry || typeof entry !== "object") continue;
+
+    if (
+      entry.link === true ||
+      isLocalDependencySpec(entry.version) ||
+      isLocalDependencySpec(entry.resolved)
+    ) {
+      fail(label, `${relativePackagePath(lockfilePath)} dependency ${entryPath} must not use local file/link spec`);
+    }
+    for (const dependencyGroup of DEPENDENCY_GROUPS) {
+      for (const [dependency, spec] of Object.entries(entry[dependencyGroup] ?? {})) {
+        if (isLocalDependencySpec(spec)) {
+          fail(
+            label,
+            `${relativePackagePath(lockfilePath)} dependency ${entryPath} ${dependencyGroup} ${dependency} must not use local file/link spec`,
+          );
+        }
+      }
+    }
+  }
+}
+
+function isLocalDependencySpec(spec) {
+  return typeof spec === "string" && /^(?:file|link):/iu.test(spec.trim());
 }
 
 function expectNoDependencyInstallLifecycleScripts(label, lockfilePath) {
@@ -1696,7 +1753,7 @@ function countNpmPublishCommandsInLine(line) {
   let publishCommandCount = 0;
 
   for (let index = 0; index < tokens.length; index += 1) {
-    if (shellWordValue(tokens[index]) !== "npm") continue;
+    if (!isNpmCommandToken(shellWordValue(tokens[index]))) continue;
 
     for (let commandIndex = index + 1; commandIndex < tokens.length; commandIndex += 1) {
       const token = shellWordValue(tokens[commandIndex]);
@@ -1735,6 +1792,10 @@ function isShellBoundaryToken(token) {
 
 function isShellRedirectionToken(token) {
   return /^\d*(?:<|>|<<|>>)$/u.test(token);
+}
+
+function isNpmCommandToken(token) {
+  return /(?:^|\/)npm$/u.test(token.replace(/\\/gu, "/"));
 }
 
 function blockEntriesAtIndent(text, indent) {
@@ -1795,26 +1856,38 @@ function stepTopLevelValue(stepBlock, key) {
 }
 
 function workflowDefaultsWorkingDirectory(workflow) {
-  const defaultsBlock = getOptionalBlock(workflow, "defaults:", 0);
-  return (
-    defaultsWorkingDirectory(defaultsBlock, 2) ||
-    inlineMappingHasKey(topLevelValue(workflow, "defaults:", 0), "working-directory:")
-  );
+  return Boolean(workflowDefaultsWorkingDirectoryValue(workflow));
 }
 
 function jobDefaultsWorkingDirectory(jobBlock) {
+  return Boolean(jobDefaultsWorkingDirectoryValue(jobBlock));
+}
+
+function workflowDefaultsWorkingDirectoryValue(workflow) {
+  const defaultsBlock = getOptionalBlock(workflow, "defaults:", 0);
+  return (
+    defaultsWorkingDirectoryValue(defaultsBlock, 2) ||
+    inlineMappingValue(topLevelValue(workflow, "defaults:", 0), "working-directory")
+  );
+}
+
+function jobDefaultsWorkingDirectoryValue(jobBlock) {
   const defaultsBlock = getOptionalBlock(jobBlock, "defaults:", 4);
   return (
-    defaultsWorkingDirectory(defaultsBlock, 6) ||
-    inlineMappingHasKey(topLevelValue(jobBlock, "defaults:", 4), "working-directory:")
+    defaultsWorkingDirectoryValue(defaultsBlock, 6) ||
+    inlineMappingValue(topLevelValue(jobBlock, "defaults:", 4), "working-directory")
   );
 }
 
 function defaultsWorkingDirectory(defaultsBlock, runIndent) {
+  return Boolean(defaultsWorkingDirectoryValue(defaultsBlock, runIndent));
+}
+
+function defaultsWorkingDirectoryValue(defaultsBlock, runIndent) {
   const runBlock = getOptionalBlock(defaultsBlock, "run:", runIndent);
   return (
-    hasKeyAtIndent(runBlock, "working-directory:", runIndent + 2) ||
-    inlineMappingHasKey(topLevelValue(defaultsBlock, "run:", runIndent), "working-directory:")
+    topLevelValue(runBlock, "working-directory:", runIndent + 2) ||
+    inlineMappingValue(topLevelValue(defaultsBlock, "run:", runIndent), "working-directory")
   );
 }
 
@@ -1881,21 +1954,32 @@ function inlineMappingHasEnvKey(value, key) {
 }
 
 function inlineMappingKeys(value) {
+  return inlineMappingEntries(value).map((entry) => entry.key);
+}
+
+function inlineMappingValue(value, key) {
+  return inlineMappingEntries(value).find((entry) => entry.key === key)?.value ?? "";
+}
+
+function inlineMappingEntries(value) {
   if (!value || !value.startsWith("{")) return [];
 
-  const keys = [];
-  const keyPattern =
-    /(?:^|[{,]\s*)(?:"((?:\\.|[^"])*)"|'((?:''|[^'])*)'|((?:[^,{}:]|:(?!\s))+))\s*:/gu;
-  for (const match of value.matchAll(keyPattern)) {
-    if (match[1] !== undefined) {
-      keys.push(unquoteYamlKey(`"${match[1]}"`));
-    } else if (match[2] !== undefined) {
-      keys.push(unquoteYamlKey(`'${match[2]}'`));
-    } else {
-      keys.push(match[3].trim());
-    }
+  const entries = [];
+  const entryPattern =
+    /(?:^|[{,]\s*)(?:"((?:\\.|[^"])*)"|'((?:''|[^'])*)'|((?:[^,{}:]|:(?!\s))+))\s*:\s*(?:"((?:\\.|[^"])*)"|'((?:''|[^'])*)'|([^,{}]*?))\s*(?=,|\})/gu;
+  for (const match of value.matchAll(entryPattern)) {
+    entries.push({
+      key: inlineMappingScalarValue(match[1], match[2], match[3]),
+      value: inlineMappingScalarValue(match[4], match[5], match[6]),
+    });
   }
-  return keys;
+  return entries;
+}
+
+function inlineMappingScalarValue(doubleQuoted, singleQuoted, plain) {
+  if (doubleQuoted !== undefined) return unquoteYamlKey(`"${doubleQuoted}"`);
+  if (singleQuoted !== undefined) return unquoteYamlKey(`'${singleQuoted}'`);
+  return yamlScalarValue((plain ?? "").trim());
 }
 
 function textHasBlockedNpmConfigEnvKey(text) {
@@ -1925,7 +2009,7 @@ function workflowHasPackageWritePermission(workflow) {
 }
 
 function inlineMappingHasPackageWrite(value) {
-  return /(?:[{,]\s*)["']?packages["']?\s*:\s*["']?write["']?\s*(?:[,}])/u.test(value);
+  return inlineMappingEntries(value).some((entry) => entry.key === "packages" && entry.value === "write");
 }
 
 function workflowUsesPublishAction(workflow) {
@@ -1949,7 +2033,7 @@ function lineHasBlockedNpmConfigCommand(line) {
   const tokens = shellTokens(line);
 
   for (let index = 0; index < tokens.length; index += 1) {
-    if (shellWordValue(tokens[index]) !== "npm") continue;
+    if (!isNpmCommandToken(shellWordValue(tokens[index]))) continue;
 
     const commandTokens = [];
     for (let commandIndex = index + 1; commandIndex < tokens.length; commandIndex += 1) {
@@ -1989,11 +2073,16 @@ function npmCommandWritesBlockedConfig(commandTokens) {
 function commandHasBlockedNpmConfigKey(tokens) {
   for (let index = 0; index < tokens.length; index += 1) {
     const token = tokens[index];
+    if (token === "--") {
+      continue;
+    }
     if (token.startsWith("-")) {
       if (!token.includes("=")) index += 1;
       continue;
     }
-    return isBlockedNpmConfigKey(token.split("=")[0]);
+    if (isBlockedNpmConfigKey(token.split("=")[0])) {
+      return true;
+    }
   }
 
   return false;
@@ -2183,7 +2272,73 @@ function hasLocalWorkflowExecution(workflow) {
     }
   }
 
+  return workflowInvokesLocalCodeFromWorkingDirectory(workflow);
+}
+
+function workflowInvokesLocalCodeFromWorkingDirectory(workflow) {
+  const workflowWorkingDirectory = workflowDefaultsWorkingDirectoryValue(workflow);
+  const jobsBlock = getOptionalBlock(workflow, "jobs:", 0);
+
+  for (const jobBlock of extractNestedBlocks(jobsBlock, 2)) {
+    const jobWorkingDirectory = jobDefaultsWorkingDirectoryValue(jobBlock) || workflowWorkingDirectory;
+    for (const stepBlock of extractStepBlocks(jobBlock)) {
+      const stepWorkingDirectory =
+        yamlScalarValue(stepTopLevelValue(stepBlock, "working-directory:")) || jobWorkingDirectory;
+      if (!isNonRootWorkingDirectory(stepWorkingDirectory)) continue;
+
+      if (stepRunCommandTexts(stepBlock).some((commandText) => shellTextInvokesBareLocalCode(commandText))) {
+        return true;
+      }
+    }
+  }
+
   return false;
+}
+
+function stepRunCommandTexts(stepBlock) {
+  const lines = stepBlock.split("\n");
+  const commandTexts = [];
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    const topLevelLine = stepTopLevelLine(stepBlock, line);
+    if (yamlKey(topLevelLine) !== "run:") continue;
+
+    const runValue = yamlScalarValue(yamlValue(topLevelLine));
+    if (/^[|>]/u.test(runValue)) {
+      const block = yamlRunBlockCommandText(lines, index, countIndent(line), runValue);
+      commandTexts.push(block.commandText);
+      index = block.endIndex;
+    } else {
+      commandTexts.push(runValue);
+    }
+  }
+
+  return commandTexts;
+}
+
+function shellTextInvokesBareLocalCode(text) {
+  return shellContinuationText(text)
+    .split("\n")
+    .some((line) => shellLineInvokesBareLocalCode(line));
+}
+
+function shellLineInvokesBareLocalCode(line) {
+  const tokens = shellTokens(line).map((token) => shellWordValue(token));
+  return tokens.some((token, index) => {
+    if (isShellBoundaryToken(token) || isShellRedirectionToken(token)) return false;
+    if (isBareLocalScriptToken(token)) return true;
+    return ["bash", "sh", "node"].includes(token) && isBareLocalScriptToken(tokens[index + 1] ?? "");
+  });
+}
+
+function isBareLocalScriptToken(token) {
+  return /^[A-Za-z0-9_.-]+\.(?:cjs|js|mjs|sh|ts|tsx)$/u.test(token);
+}
+
+function isNonRootWorkingDirectory(value) {
+  const workingDirectory = yamlScalarValue(value).replace(/\/+$/u, "");
+  return workingDirectory !== "" && workingDirectory !== "." && workingDirectory !== "./";
 }
 
 function shellLineInvokesLocalCode(line) {
