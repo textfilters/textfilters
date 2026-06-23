@@ -75,10 +75,11 @@ is shared:
   and are blocking.
 - The `Release Please` workflow has the exact top-level workflow name and runs
   only on unfiltered pushes to the exact `main` branch entry.
-- Release Please uses `googleapis/release-please-action@v5` with
-  `release-please-config.json` and `.release-please-manifest.json` configured
-  in the action step `with` block, without action-level release bypass inputs,
-  and the action step uses exact `id: release`.
+- Release Please uses exactly one `googleapis/release-please-action@v5` step
+  with `release-please-config.json` and `.release-please-manifest.json`
+  configured in the action step `with` block. Its action inputs are limited to
+  the expected token, config file, and manifest file, and the action step uses
+  exact `id: release`.
 - The Release Please and publish jobs define runners. The Release Please job
   has no job dependencies, and the Release Please job and action step are
   unconditional and blocking. Release Please job permissions are exactly
@@ -88,22 +89,24 @@ is shared:
 - Release publication only runs when Release Please reports a created release,
   with job-level `needs` wiring and only the expected release-created job gate
   or publish-step gate.
-- Publication runs exact `npm run check` before exact `npm publish` to GitHub
-  Packages in the publish job, with a single publish command. The prepublish
-  check and publish steps are blocking.
+- Publication runs exact `npm ci`, then exact `npm run check`, then exact
+  `npm publish` to GitHub Packages in the publish job, with a single publish
+  command. The install, prepublish check, and publish steps are blocking.
 - The publish job permissions are exactly `contents: read` and
   `packages: write`, and the publish step or publish job has the package
   registry token available without a conflicting step-level token override or
   dry-run npm configuration at workflow, job, or step scope.
 - Required npm install, check, and publish commands run at the package
   repository root with the default shell.
-- `npm publish` commands only appear in the audited Release Please workflow.
+- `npm publish` commands, including npm invocations with options before the
+  `publish` subcommand, only appear in the audited Release Please workflow.
 
 ## Release Please Contract
 
 Each package has a package-local `release-please-config.json` with:
 
 - `include-component-in-tag: false`
+- only the root `.` package entry
 - package `include-component-in-tag` absent or false
 - package `release-type: "node"`
 - package name matching the repository package name

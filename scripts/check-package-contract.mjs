@@ -157,6 +157,7 @@ function checkWorkflow(label, workflowPath) {
   expectStepWithInput(label, workflowPath, setupNodeStep, "registry-url", contract.checkWorkflow.registryUrl);
   expectStepWithInput(label, workflowPath, setupNodeStep, "scope", `"${contract.checkWorkflow.scope}"`);
   expectEnvAvailable(label, workflowPath, checkJob, installStep, "NODE_AUTH_TOKEN: ${{ github.token }}");
+  expectBlockingStep(label, workflowPath, installStep, contract.checkWorkflow.installCommand);
   expectBlockingStep(label, workflowPath, checkStep, contract.checkWorkflow.checkCommand);
   expectPackageRootStep(label, workflowPath, workflow, checkJob, installStep, contract.checkWorkflow.installCommand);
   expectPackageRootStep(label, workflowPath, workflow, checkJob, checkStep, contract.checkWorkflow.checkCommand);
@@ -195,7 +196,7 @@ function checkReleaseWorkflow(label, workflowPath) {
   const branchesBlock = expectBlock(label, workflowPath, pushBlock, "branches:", 4);
   const releaseJob = expectJobBlock(label, workflowPath, workflow, "release-please");
   const releaseOutputsBlock = expectBlock(label, workflowPath, releaseJob, "outputs:", 4);
-  const releaseActionStep = expectStepWithUses(
+  const releaseActionStep = expectSingleStepWithUses(
     label,
     workflowPath,
     releaseJob,
@@ -256,6 +257,11 @@ function checkReleaseWorkflow(label, workflowPath) {
   expectStepWithInput(label, workflowPath, releaseActionStep, "token", contract.releaseWorkflow.token);
   expectStepWithInput(label, workflowPath, releaseActionStep, "config-file", contract.releaseWorkflow.configFile);
   expectStepWithInput(label, workflowPath, releaseActionStep, "manifest-file", contract.releaseWorkflow.manifestFile);
+  expectStepInputsOnly(label, workflowPath, releaseActionStep, [
+    "token:",
+    "config-file:",
+    "manifest-file:",
+  ]);
   expectStepWithoutInput(label, workflowPath, releaseActionStep, "skip-github-release");
   expectStepWithoutInput(label, workflowPath, releaseActionStep, "skip-github-pull-request");
   expectStepWithoutInput(label, workflowPath, releaseActionStep, "release-type");
@@ -271,6 +277,7 @@ function checkReleaseWorkflow(label, workflowPath) {
   expectEnvAvailable(label, workflowPath, publishJob, publishStep, "NODE_AUTH_TOKEN: ${{ github.token }}");
   expectNoEnvKey(label, workflowPath, workflow, publishJob, publishStep, "npm_config_dry_run:");
   expectNoEnvKey(label, workflowPath, workflow, publishJob, publishStep, "NPM_CONFIG_DRY_RUN:");
+  expectBlockingStep(label, workflowPath, installStep, contract.checkWorkflow.installCommand);
   expectBlockingStep(label, workflowPath, checkStep, contract.checkWorkflow.checkCommand);
   expectBlockingStep(
     label,
@@ -324,6 +331,7 @@ function checkReleaseConfig(label, releaseConfigPath, packageName) {
   }
 
   const config = readJson(releaseConfigPath);
+  expectOnlyPackageConfig(label, config);
   if (config["skip-github-release"] === true) {
     fail(label, "release-please skip-github-release must not be true");
   }
@@ -430,6 +438,13 @@ function expectAbsentPrivate(label, actual) {
   }
 }
 
+function expectOnlyPackageConfig(label, config) {
+  const packageKeys = Object.keys(config.packages ?? {});
+  if (packageKeys.length !== 1 || packageKeys[0] !== ".") {
+    fail(label, 'release-please packages must include only "."');
+  }
+}
+
 function expectScriptCommand(label, scriptName, script, command) {
   const commands = splitScriptCommands(script);
   if (!commands.includes(command)) {
@@ -506,8 +521,20 @@ function expectStepWithoutInput(label, path, stepBlock, inputName) {
   }
 }
 
+function expectStepInputsOnly(label, path, stepBlock, allowedInputKeys) {
+  const withBlock = getStepChildBlock(stepBlock, "with:");
+  const inputIndent = stepBaseIndent(stepBlock) + 4;
+  const inputKeys = blockEntriesAtIndent(withBlock, inputIndent).map((entry) => yamlKey(entry));
+
+  for (const inputKey of inputKeys) {
+    if (!allowedInputKeys.includes(inputKey)) {
+      fail(label, `${relativePackagePath(path)} step with block must not include ${inputKey.slice(0, -1)}`);
+    }
+  }
+}
+
 function expectNoStepChildBlock(label, path, stepBlock, header) {
-  if (getStepChildBlock(stepBlock, header)) {
+  if (getStepChildBlock(stepBlock, header) || hasTopLevelStepKey(stepBlock, header)) {
     fail(label, `${relativePackagePath(path)} step must not include ${header}`);
   }
 }
@@ -633,8 +660,8 @@ function expectBlockingJob(label, path, jobBlock, jobName, allowedCondition = ""
   if (jobCondition && jobCondition !== allowedCondition) {
     fail(label, `${relativePackagePath(path)} ${jobName} job must not be conditional`);
   }
-  const jobNeeds = jobTopLevelValue(jobBlock, "needs:", 4);
-  if (jobNeeds && jobNeeds !== allowedNeeds) {
+  const jobNeeds = jobTopLevelEntry(jobBlock, "needs:", 4);
+  if (jobNeeds.present && (jobNeeds.value === "" || jobNeeds.value !== allowedNeeds)) {
     fail(label, `${relativePackagePath(path)} ${jobName} job must not depend on other jobs`);
   }
   const continueOnError = jobTopLevelValue(jobBlock, "continue-on-error:", 4);
@@ -961,16 +988,20 @@ function hasTopLevelStepLine(stepBlock, expected) {
 function hasTopLevelStepKey(stepBlock, key) {
   return stepBlock
     .split("\n")
-    .some((line) => stepTopLevelLine(stepBlock, line).startsWith(key));
+    .some((line) => yamlKey(stepTopLevelLine(stepBlock, line)) === key);
 }
 
 function jobTopLevelValue(jobBlock, key, indent) {
-  const line = jobBlock
+  return jobTopLevelEntry(jobBlock, key, indent).value;
+}
+
+function jobTopLevelEntry(jobBlock, key, indent) {
+  const entry = jobBlock
     .split("\n")
     .map((entry) => (countIndent(entry) === indent ? normalizedYamlLine(entry) : ""))
-    .find((entry) => entry.startsWith(`${key} `));
+    .find((entry) => yamlKey(entry) === key);
 
-  return line ? line.slice(key.length).trim() : "";
+  return entry ? { present: true, value: yamlValue(entry) } : { present: false, value: "" };
 }
 
 function blockHasChildLines(block) {
@@ -993,7 +1024,7 @@ function hasNpmPublishCommand(text) {
 function countNpmPublishCommands(text) {
   return text
     .split("\n")
-    .filter((line) => /(^|\s)npm\s+publish(\s|$)/u.test(line))
+    .filter((line) => /(^|\s)npm(?:\s+(?:--[^\s]+|-[A-Za-z][^\s]*))*\s+publish(\s|$)/u.test(line))
     .length;
 }
 
@@ -1036,12 +1067,12 @@ function stepRunCommand(stepBlock) {
 }
 
 function stepTopLevelValue(stepBlock, key) {
-  const line = stepBlock
+  const entry = stepBlock
     .split("\n")
     .map((entry) => stepTopLevelLine(stepBlock, entry))
-    .find((entry) => entry.startsWith(`${key} `));
+    .find((entry) => yamlKey(entry) === key);
 
-  return line ? line.slice(key.length).trim() : "";
+  return entry ? yamlValue(entry) : "";
 }
 
 function workflowDefaultsWorkingDirectory(workflow) {
@@ -1077,7 +1108,7 @@ function defaultsShell(defaultsBlock, runIndent) {
 function hasKeyAtIndent(text, key, indent) {
   return text
     .split("\n")
-    .some((line) => countIndent(line) === indent && normalizedYamlLine(line).startsWith(key));
+    .some((line) => countIndent(line) === indent && yamlKey(normalizedYamlLine(line)) === key);
 }
 
 function getStepChildBlock(stepBlock, header) {
@@ -1107,8 +1138,13 @@ function normalizedYamlLine(line) {
 }
 
 function yamlKey(line) {
-  const match = /^([^:[\]{}#]+):(?:\s|$)/u.exec(line);
+  const match = /^([^:[\]{}#]+?)\s*:(?:\s|$)/u.exec(line);
   return match ? `${match[1].trim()}:` : "";
+}
+
+function yamlValue(line) {
+  const key = yamlKey(line);
+  return key ? line.slice(line.indexOf(":") + 1).trim() : "";
 }
 
 function countIndent(line) {
