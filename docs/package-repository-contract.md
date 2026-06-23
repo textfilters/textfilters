@@ -39,21 +39,27 @@ Each package repository keeps its own source, tests, and package-specific
 - Script names include `lint`, `test`, `build`, `smoke:dist`, `pack:dry-run`,
   and `check`, and required script bodies are non-empty.
 - `prepack` runs `npm run build`, and `pack:dry-run` runs
-  `npm pack --dry-run`; other publish lifecycle scripts are not used.
+  `npm pack --dry-run`; install, prepare, and publish lifecycle scripts that
+  could mutate CI or publish state are not used.
 - `check` runs exact formatting, test, package dist smoke, and package dry-run
-  commands while preserving package-specific smoke details; it must not
-  short-circuit before any required command runs.
+  commands while preserving package-specific smoke details. Its command list is
+  limited to the audited sequence with an optional direct build immediately
+  before `smoke:dist`; it must not short-circuit before any required command
+  runs or append extra commands after the audit.
 - A TypeScript build runs before the package dist smoke, either directly before
   `smoke:dist` in `check` or as the first command delegated by `smoke:dist`;
   delegated smoke scripts do real smoke work beyond rebuilding and must not use
   an explicit successful early exit.
 - Shared dev dependencies are Prettier, TypeScript, and Vitest at the versions
   recorded in `package-contract.json`.
-- Package scripts must not contain `npm publish`; release publication stays in
-  the audited Release Please workflow.
+- Package scripts must not contain `npm publish` or publish aliases, mutate
+  GitHub Actions environment files, or set npm config environment variables that
+  alter publication; release publication stays in the audited Release Please
+  workflow.
 - Packages must not define npm workspaces.
 - Package-level npm configuration must not set `dry-run`, `script-shell`,
-  workspace options, or a non-contract registry.
+  workspace options, `tag`, `userconfig`, `ignore-scripts`, or a non-contract
+  registry.
 
 Runtime dependency compatibility is tracked separately from this repository
 workflow contract. This guard focuses on manifest shape, scripts, CI, release,
@@ -64,6 +70,8 @@ registry, and package-management drift.
 Package repositories keep copied workflows today, but their important contract
 is shared:
 
+- Workflow files do not use YAML anchors or aliases for control blocks,
+  environment, defaults, jobs, or steps; copied workflows stay explicit.
 - The `Check` workflow has the exact top-level workflow name and runs on pull
   requests and pushes only to the exact `main` branch entry. The pull request
   event is a top-level workflow event, and the selected check job defines a
@@ -110,10 +118,10 @@ is shared:
   config scope.
 - Required npm install, check, and publish commands run at the package
   repository root with the default shell.
-- `npm publish` commands, including any `npm` invocation that reaches a
-  `publish` token before a shell boundary and shell continuations, only appear
-  in the audited Release Please workflow. Other workflows must not run Release
-  Please actions.
+- `npm publish` commands, including publish aliases, shell-escaped command
+  words, and any `npm` invocation that reaches a publish command token before a
+  shell boundary, only appear in the audited Release Please workflow. Other
+  workflows must not run Release Please actions.
 
 ## Release Please Contract
 
