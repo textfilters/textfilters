@@ -33,14 +33,16 @@ Each package repository keeps its own source, tests, and package-specific
   versions use semver.
 - Published files include `dist`, `README.md`, and `LICENSE`; file-backed
   entries must exist in the repository. Package file entries must not exclude
-  required output, and `dist` must not contain its own `.npmignore`.
+  required output, and `dist` must not contain its own `.npmignore` or
+  `.gitignore`.
 - Repositories keep a committed npm lockfile because shared workflows use
   `npm ci`.
 - Script names include `lint`, `test`, `build`, `smoke:dist`, `pack:dry-run`,
   and `check`, and required script bodies are non-empty.
 - `prepack` runs `npm run build`, and `pack:dry-run` runs
   `npm pack --dry-run`; install, prepare, and publish lifecycle scripts that
-  could mutate CI or publish state are not used.
+  could mutate CI or publish state are not used. Pre/post run-script hooks
+  around audited package scripts are not used.
 - `check` runs exact formatting, test, package dist smoke, and package dry-run
   commands while preserving package-specific smoke details. Its command list is
   limited to the audited sequence with an optional direct build immediately
@@ -58,8 +60,8 @@ Each package repository keeps its own source, tests, and package-specific
   workflow.
 - Packages must not define npm workspaces.
 - Package-level npm configuration must not set `dry-run`, `script-shell`,
-  workspace options, `tag`, `userconfig`, `ignore-scripts`, or a non-contract
-  registry.
+  workspace options, `tag`, `userconfig`, `globalconfig`, `ignore-scripts`, or
+  a non-contract registry.
 
 Runtime dependency compatibility is tracked separately from this repository
 workflow contract. This guard focuses on manifest shape, scripts, CI, release,
@@ -75,8 +77,9 @@ is shared:
 - The `Check` workflow has the exact top-level workflow name and runs on pull
   requests and pushes only to the exact `main` branch entry. The pull request
   event is a top-level workflow event, and the selected check job defines a
-  runner, has no job dependencies, and is unconditional and blocking. Required
-  events are not filtered by paths or event types. No extra events or jobs are
+  runner, has no job dependencies, defines no matrix strategy, and is
+  unconditional and blocking. Required events are not filtered by paths or event
+  types, including inline flow-mapping filters. No extra events or jobs are
   configured.
 - The check job grants read-only repository contents access and package read
   access only, either through workflow-level or block-form job-level
@@ -97,9 +100,10 @@ is shared:
   exact `id: release`. The Release Please job contains only this audited action
   step.
 - The Release Please and publish jobs define runners. The Release Please job
-  has no job dependencies, and the Release Please job and action step are
-  unconditional and blocking. Release Please job permissions are exactly
-  `contents: write`, `issues: write`, and `pull-requests: write`.
+  has no job dependencies, neither release job defines a matrix strategy, and
+  the Release Please job and action step are unconditional and blocking. Release
+  Please job permissions are exactly `contents: write`, `issues: write`, and
+  `pull-requests: write`.
 - The Release Please job exposes `release_created` from the action step output
   through job-level `outputs`.
 - Release publication only runs when Release Please reports a created release,
@@ -115,9 +119,9 @@ is shared:
   `packages: write`, and the publish step or publish job has the package
   registry token available without a conflicting step-level token override or
   publish-altering npm configuration at workflow, job, step, or package npm
-  config scope.
+  config scope, including scoped registry environment overrides.
 - Required npm install, check, and publish commands run at the package
-  repository root with the default shell.
+  repository root with the default shell and without PATH overrides.
 - `npm publish` commands, including publish aliases, shell-escaped command
   words, and any `npm` invocation that reaches a publish command token before a
   shell boundary, only appear in the audited Release Please workflow. Other

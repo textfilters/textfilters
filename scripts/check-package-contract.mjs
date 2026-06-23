@@ -11,9 +11,10 @@ const failures = [];
 const SEMVER_PATTERN =
   /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
 const BUILD_SCRIPT_COMMAND = "npm run build";
-const NPM_PUBLISH_SUBCOMMANDS = new Set(["publish", "pub", "publ", "publi", "publis"]);
+const NPM_PUBLISH_SUBCOMMANDS = new Set(["publish", "pu", "pub", "publ", "publi", "publis"]);
 const BLOCKED_NPM_CONFIG_KEYS = [
   "dry-run",
+  "globalconfig",
   "ignore-scripts",
   "script-shell",
   "tag",
@@ -22,7 +23,10 @@ const BLOCKED_NPM_CONFIG_KEYS = [
   "workspaces",
 ];
 const BLOCKED_NPM_CONFIG_ENV_KEYS = new Set(
-  BLOCKED_NPM_CONFIG_KEYS.map((key) => normalizeEnvKeyName(`npm_config_${key}:`)),
+  [
+    ...BLOCKED_NPM_CONFIG_KEYS.map((key) => `npm_config_${key}:`),
+    `npm_config_${contract.checkWorkflow.scope}:registry:`,
+  ].map((key) => normalizeEnvKeyName(key)),
 );
 
 for (const pkgSpec of contract.packages) {
@@ -497,6 +501,9 @@ function expectNoPackageFileExclusions(label, packageDir, files) {
   if (existsSync(join(packageDir, "dist", ".npmignore"))) {
     fail(label, "dist must not include .npmignore");
   }
+  if (existsSync(join(packageDir, "dist", ".gitignore"))) {
+    fail(label, "dist must not include .gitignore");
+  }
 }
 
 function expectOnlyPackageConfig(label, config) {
@@ -756,7 +763,7 @@ function expectNoYamlAnchorsOrAliases(label, path, workflow) {
 }
 
 function expectUnfilteredEvent(label, path, eventBlock, eventName) {
-  if (blockHasChildLines(eventBlock)) {
+  if (blockHasChildLines(eventBlock) || yamlValue(normalizedYamlLine(eventBlock.split("\n")[0] ?? "")) !== "") {
     fail(label, `${relativePackagePath(path)} ${eventName} event must not be filtered`);
   }
 }
@@ -781,6 +788,9 @@ function expectBlockingJob(label, path, jobBlock, jobName, allowedCondition = ""
   const continueOnError = jobTopLevelValue(jobBlock, "continue-on-error:", 4);
   if (continueOnError && continueOnError !== "false") {
     fail(label, `${relativePackagePath(path)} ${jobName} job must not continue on error`);
+  }
+  if (jobTopLevelEntry(jobBlock, "strategy:", 4).present) {
+    fail(label, `${relativePackagePath(path)} ${jobName} job must not define strategy`);
   }
 }
 
@@ -861,6 +871,9 @@ function expectPackageRootStep(label, path, workflow, jobBlock, stepBlock, runCo
   }
   if (workflowDefaultsShell(workflow) || jobDefaultsShell(jobBlock) || stepTopLevelValue(stepBlock, "shell:")) {
     fail(label, `${relativePackagePath(path)} ${runCommand} step must not override shell`);
+  }
+  if (hasEnvKey(workflow, "PATH:", 0) || hasEnvKey(jobBlock, "PATH:", 4) || hasStepEnvKey(stepBlock, "PATH:")) {
+    fail(label, `${relativePackagePath(path)} ${runCommand} step must not override PATH`);
   }
 
   const workingDirectory = stepTopLevelValue(stepBlock, "working-directory:");
@@ -1094,6 +1107,16 @@ function expectNoPublishLifecycleScripts(label, scripts) {
   for (const scriptName of blockedLifecycleScripts) {
     if (typeof scripts?.[scriptName] === "string") {
       fail(label, `script ${scriptName} must not be defined`);
+    }
+  }
+
+  for (const scriptName of contract.manifest.requiredScriptNames) {
+    for (const prefix of ["pre", "post"]) {
+      const hookName = `${prefix}${scriptName}`;
+      if (hookName === "prepack") continue;
+      if (typeof scripts?.[hookName] === "string") {
+        fail(label, `script ${hookName} must not be defined`);
+      }
     }
   }
 }
@@ -1447,7 +1470,7 @@ function inlineMappingHasEnvKey(value, key) {
 }
 
 function textHasBlockedNpmConfigEnvKey(text) {
-  const keyPattern = /\b[A-Za-z_][A-Za-z0-9_-]*\b/gu;
+  const keyPattern = /[A-Za-z_][A-Za-z0-9_@:-]*/gu;
   for (const match of text.matchAll(keyPattern)) {
     if (BLOCKED_NPM_CONFIG_ENV_KEYS.has(normalizeEnvKeyName(`${match[0]}:`))) {
       return true;
@@ -1511,13 +1534,24 @@ function isYamlChildBlockHeader(line, indent) {
 }
 
 function yamlKey(line) {
+  const quotedMatch = /^(['"])((?:\\.|(?!\1).)+)\1\s*:(?:\s|$)/u.exec(line);
+  if (quotedMatch) {
+    return `${unquoteYamlKey(`${quotedMatch[1]}${quotedMatch[2]}${quotedMatch[1]}`)}:`;
+  }
+
   const match = /^([^:[\]{}#]+?)\s*:(?:\s|$)/u.exec(line);
   return match ? `${unquoteYamlKey(match[1].trim())}:` : "";
 }
 
 function yamlValue(line) {
-  const key = yamlKey(line);
-  return key ? line.slice(line.indexOf(":") + 1).trim() : "";
+  if (!yamlKey(line)) return "";
+
+  const quotedMatch = /^(['"])(?:\\.|(?!\1).)+\1\s*:/u.exec(line);
+  if (quotedMatch) {
+    return line.slice(quotedMatch[0].length).trim();
+  }
+
+  return line.slice(line.indexOf(":") + 1).trim();
 }
 
 function unquoteYamlKey(key) {
