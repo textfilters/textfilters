@@ -50,8 +50,9 @@ Each package repository keeps its own source, tests, and package-specific
 - `check` runs exact formatting, test, package dist smoke, and package dry-run
   commands while preserving package-specific smoke details. Its command list is
   limited to the audited sequence with an optional direct build immediately
-  before `smoke:dist`; it must not short-circuit before any required command
-  runs or append extra commands after the audit.
+  before `smoke:dist`; audited commands must be joined with `&&`, must not
+  short-circuit before any required command runs, and must not append extra
+  commands after the audit.
 - Delegated `lint` and `test` scripts must perform real work; successful no-op
   commands, successful early exits including bare `exit`, or shell-control short
   circuits do not satisfy the contract. Unquoted shell comments are stripped and
@@ -68,10 +69,13 @@ Each package repository keeps its own source, tests, and package-specific
   alter publication. Package scripts also must not write publish-altering npm
   config with `npm config set`, `npm c set`, or `npm set`; release publication
   stays in the audited Release Please workflow. Variable-expanded npm config
-  subcommands are resolved before this check. Package scripts must not write npm
-  config files directly, including through shell utilities such as `tee`, and
-  local script files or directory entry points invoked by package scripts are
-  scanned for publish commands and publish-altering mutations.
+  subcommands, interpreter-evaluated snippets, shell `eval` snippets, command
+  substitutions, and simple npm-forwarding shell functions are resolved before
+  this check. Package scripts must not write npm config files directly,
+  including through shell utilities such as `tee`, and local script files,
+  directory entry points, root script files, and extensionless script entry
+  points invoked by package scripts are scanned for publish commands and
+  publish-altering mutations.
 - Packages and locked dependencies must not expose an `npm` binary that can
   shadow the npm CLI inside npm-run-script PATH handling.
 - Package manifests and lockfiles must not use local `file:` or `link:`
@@ -97,7 +101,7 @@ is shared:
 
 - Workflow files do not use YAML anchors or aliases for control blocks,
   environment, defaults, jobs, steps, or non-release workflow commands; copied
-  workflows stay explicit.
+  workflows stay explicit, including anchors or aliases placed before YAML keys.
   Escaped YAML keys are treated the same as their decoded keys.
 - The `Check` workflow has the exact top-level workflow name and runs on pull
   requests and pushes only to the exact `main` branch entry. The pull request
@@ -155,15 +159,17 @@ is shared:
   shell snippets, decoded YAML scalar run values, multiline quoted YAML run
   scalars, folded YAML run blocks, preserved shell continuation separators,
   grouped shell commands, path-qualified npm command words, and any `npm`
-  invocation that reaches a publish command token before a shell boundary, only
-  appear in the audited Release Please workflow. Other workflows must not grant
-  package write permissions, including `write-all`, block-scalar permission
-  values, decoded inline `packages: write` permission mappings, use
-  publish-capable actions, run decoded or version-drifted Release Please actions,
-  or invoke local workflow scripts or local composite actions. Multiline quoted
-  `run` scalars, root and non-root working directories, and bare root script
-  file arguments are considered when deciding whether a command invokes
-  checked-in local code.
+  invocation that reaches a publish command token before a shell boundary,
+  `$()` command substitutions, shell `eval` snippets, npm-forwarding shell
+  functions, and multiline plain `run` scalars only appear in the audited
+  Release Please workflow. Other workflows must not grant package write
+  permissions, including `write-all`, block-scalar permission values, decoded
+  inline `packages: write` permission mappings, use publish-capable actions, run
+  decoded or version-drifted Release Please actions, or invoke local workflow
+  scripts or local composite actions. Multiline quoted and plain `run` scalars,
+  root and non-root working directories, bare root script file arguments, and
+  extensionless local script entry points are considered when deciding whether a
+  command invokes checked-in local code.
 
 ## Release Please Contract
 

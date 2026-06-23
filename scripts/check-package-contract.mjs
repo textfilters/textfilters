@@ -1,5 +1,5 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { dirname, extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
@@ -648,7 +648,8 @@ function expectScriptCommandOrder(label, scriptName, script, expectedCommands) {
 }
 
 function expectCheckScriptOnlyAuditedCommands(label, script) {
-  const commands = splitScriptCommands(script);
+  const commandParts = splitScriptCommandParts(script);
+  const commands = commandParts.map((part) => part.command);
   const expectedDelegated = contract.manifest.checkScriptMustInclude;
   const smokeIndex = expectedDelegated.indexOf("npm run smoke:dist");
   const expectedDirect =
@@ -662,6 +663,11 @@ function expectCheckScriptOnlyAuditedCommands(label, script) {
 
   if (!arraysEqual(commands, expectedDelegated) && !arraysEqual(commands, expectedDirect)) {
     fail(label, "script check must contain only audited commands");
+    return;
+  }
+
+  if (commandParts.slice(1).some((part) => part.separator !== "&&")) {
+    fail(label, "script check must join audited commands with &&");
   }
 }
 
@@ -892,12 +898,45 @@ function expectNoNpmConfigEnvOverrides(label, path, workflow, jobBlock, stepBloc
 
 function expectNoYamlAnchorsOrAliases(label, path, workflow) {
   for (const line of workflow.split("\n")) {
-    const value = yamlValue(normalizedYamlLine(line));
-    if (/(^|\s)[&*](?![&*])[^ \t,[\]{}]+/u.test(value)) {
+    if (yamlLineHasAnchorOrAlias(normalizedYamlLine(line))) {
       fail(label, `${relativePackagePath(path)} must not use YAML anchors or aliases`);
       return;
     }
   }
+}
+
+function yamlLineHasAnchorOrAlias(line) {
+  let quote = "";
+  let escaped = false;
+
+  for (let index = 0; index < line.length; index += 1) {
+    const char = line[index];
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (char === "\\" && quote === '"') {
+      escaped = true;
+      continue;
+    }
+    if ((char === "'" || char === '"') && quote === "") {
+      quote = char;
+      continue;
+    }
+    if (char === quote) {
+      quote = "";
+      continue;
+    }
+    if (quote !== "") continue;
+    if ((char === "&" || char === "*") && line[index + 1] !== char && (index === 0 || /\s/u.test(line[index - 1]))) {
+      const name = /^[^ \t,[\]{}]+/u.exec(line.slice(index + 1))?.[0] ?? "";
+      if (name) {
+        return true;
+      }
+    }
+  }
+
+  return false;
 }
 
 function expectUnfilteredEvent(label, path, eventBlock, eventName) {
@@ -1204,11 +1243,71 @@ function fail(label, message) {
 }
 
 function splitScriptCommands(script) {
+  return splitScriptCommandParts(script).map((part) => part.command);
+}
+
+function splitScriptCommandParts(script) {
   if (typeof script !== "string") return [];
-  return shellContinuationText(shellCommentText(script))
-    .split(/[ \t]*(?:&&|\|\||;|\n+)[ \t]*/u)
-    .map((command) => command.trim())
-    .filter(Boolean);
+
+  const text = shellContinuationText(shellCommentText(script));
+  const parts = [];
+  let command = "";
+  let quote = "";
+  let escaped = false;
+  let separator = "";
+
+  const pushCommand = (nextSeparator) => {
+    const trimmed = command.trim();
+    if (trimmed) {
+      parts.push({ command: trimmed, separator });
+    }
+    command = "";
+    separator = nextSeparator;
+  };
+
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+    if (escaped) {
+      command += char;
+      escaped = false;
+      continue;
+    }
+    if (char === "\\" && quote !== "'") {
+      command += char;
+      escaped = true;
+      continue;
+    }
+    if ((char === "'" || char === '"') && quote === "") {
+      quote = char;
+      command += char;
+      continue;
+    }
+    if (char === quote) {
+      quote = "";
+      command += char;
+      continue;
+    }
+    if (quote === "" && (char === "&" || char === "|") && text[index + 1] === char) {
+      pushCommand(`${char}${char}`);
+      index += 1;
+      continue;
+    }
+    if (quote === "" && char === ";") {
+      pushCommand(";");
+      continue;
+    }
+    if (quote === "" && char === "\n") {
+      while (text[index + 1] === "\n") {
+        index += 1;
+      }
+      pushCommand("\n");
+      continue;
+    }
+    command += char;
+  }
+
+  pushCommand("");
+  return parts;
 }
 
 function shellCommentText(text) {
@@ -1301,13 +1400,45 @@ function localFilesInvokedByScript(packageDir, script) {
       if (isLocalScriptFileToken(token)) {
         localFiles.add(resolve(packageDir, token));
       }
-      if (["bash", "sh", "node"].includes(token) && isLocalScriptFileToken(tokens[index + 1] ?? "")) {
-        localFiles.add(resolve(packageDir, tokens[index + 1]));
+      if (["bash", "sh", "node"].includes(token)) {
+        for (const scriptToken of interpreterLocalScriptTokens(tokens, index + 1)) {
+          localFiles.add(resolve(packageDir, scriptToken));
+        }
       }
     }
   }
 
   return [...localFiles].filter((path) => isPathInsidePackageDir(path, packageDir));
+}
+
+function interpreterLocalScriptTokens(tokens, startIndex) {
+  const scriptTokens = [];
+  for (let index = startIndex; index < tokens.length; index += 1) {
+    const token = tokens[index];
+    if (isShellBoundaryToken(token)) break;
+    if (isShellRedirectionToken(token)) {
+      index += 1;
+      continue;
+    }
+    if (token === "--") {
+      continue;
+    }
+    if (token.startsWith("-")) {
+      if (interpreterOptionConsumesValue(token)) {
+        index += 1;
+      }
+      continue;
+    }
+    if (isLocalScriptFileToken(token) || isBareInterpreterScriptToken(token)) {
+      scriptTokens.push(token);
+    }
+  }
+
+  return scriptTokens;
+}
+
+function interpreterOptionConsumesValue(token) {
+  return ["-r", "--require", "--import", "--loader", "-e", "--eval", "-p", "--print", "-c"].includes(token);
 }
 
 function isPathInsidePackageDir(path, packageDir) {
@@ -1319,16 +1450,31 @@ function isLocalScriptFileToken(token) {
 }
 
 function readExistingLocalScriptFile(path) {
-  if (!existsSync(path)) return "";
+  const scriptPath = existingLocalScriptPath(path);
+  if (!scriptPath) return "";
 
   try {
-    if (statSync(path).isDirectory()) {
-      return localScriptDirectoryEntrypointText(path);
+    if (statSync(scriptPath).isDirectory()) {
+      return localScriptDirectoryEntrypointText(scriptPath);
     }
-    return readFileSync(path, "utf8");
+    return readFileSync(scriptPath, "utf8");
   } catch {
     return "";
   }
+}
+
+function existingLocalScriptPath(path) {
+  if (existsSync(path)) return path;
+  if (extname(path)) return "";
+
+  for (const extension of [".js", ".mjs", ".cjs", ".ts", ".tsx", ".sh"]) {
+    const candidate = `${path}${extension}`;
+    if (existsSync(candidate)) {
+      return candidate;
+    }
+  }
+
+  return "";
 }
 
 function localScriptDirectoryEntrypointText(path) {
@@ -1803,6 +1949,10 @@ function shellScanTexts(text) {
         const scalar = yamlMultilineQuotedScalarText(lines, index, countIndent(line), yamlValue(normalizedLine));
         commandTexts.push(scalar.commandText);
         index = scalar.endIndex;
+      } else if (hasMultilinePlainYamlScalar(lines, index, countIndent(line))) {
+        const scalar = yamlMultilinePlainScalarText(lines, index, countIndent(line), runValue);
+        commandTexts.push(scalar.commandText);
+        index = scalar.endIndex;
       } else {
         commandTexts.push(runValue);
       }
@@ -1871,6 +2021,59 @@ function yamlMultilineQuotedScalarText(lines, startIndex, runIndent, firstValue)
   };
 }
 
+function hasMultilinePlainYamlScalar(lines, startIndex, runIndent) {
+  for (let index = startIndex + 1; index < lines.length; index += 1) {
+    const line = lines[index];
+    if (line.trim() === "") continue;
+    return countIndent(line) > runIndent;
+  }
+
+  return false;
+}
+
+function yamlMultilinePlainScalarText(lines, startIndex, runIndent, firstValue) {
+  const blockLines = [firstValue];
+  let endIndex = startIndex;
+
+  for (let index = startIndex + 1; index < lines.length; index += 1) {
+    const line = lines[index];
+    if (line.trim() !== "" && countIndent(line) <= runIndent) {
+      break;
+    }
+    blockLines.push(line.trim());
+    endIndex = index;
+  }
+
+  return {
+    commandText: foldYamlPlainScalarLines(blockLines),
+    endIndex,
+  };
+}
+
+function foldYamlPlainScalarLines(lines) {
+  const foldedLines = [];
+  let currentLine = "";
+
+  for (const line of lines) {
+    if (line === "") {
+      if (currentLine) {
+        foldedLines.push(currentLine);
+        currentLine = "";
+      }
+      foldedLines.push("");
+      continue;
+    }
+
+    currentLine = currentLine ? `${currentLine} ${line}` : line;
+  }
+
+  if (currentLine) {
+    foldedLines.push(currentLine);
+  }
+
+  return yamlScalarValue(foldedLines.join("\n"));
+}
+
 function yamlRunBlockCommandText(lines, startIndex, runIndent, runValue) {
   const rawBlockLines = [];
   let endIndex = startIndex;
@@ -1932,12 +2135,19 @@ function countNpmPublishCommandsInShellText(text) {
   const shellVariables = new Map();
   const npmVariables = new Set();
   const publishSubcommandVariables = new Set();
+  const npmFunctionNames = new Set();
   return text
     .split("\n")
     .reduce(
       (lineCount, line) =>
         lineCount +
-        countNpmPublishCommandsInLine(line, shellVariables, npmVariables, publishSubcommandVariables),
+        countNpmPublishCommandsInLine(
+          line,
+          shellVariables,
+          npmVariables,
+          publishSubcommandVariables,
+          npmFunctionNames,
+        ),
       0,
     );
 }
@@ -1947,12 +2157,14 @@ function countNpmPublishCommandsInLine(
   shellVariables = new Map(),
   npmVariables = new Set(),
   publishSubcommandVariables = new Set(),
+  npmFunctionNames = new Set(),
 ) {
   const tokens = shellTokens(line);
-  let publishCommandCount = shellCommandSubstitutionTexts(line).reduce(
-    (count, commandText) => count + countNpmPublishCommandsInShellText(commandText),
-    0,
-  ) + countJavaScriptEmbeddedPublishCommands(line);
+  let publishCommandCount =
+    shellCommandSubstitutionTexts(line).reduce(
+      (count, commandText) => count + countNpmPublishCommandsInShellText(commandText),
+      0,
+    ) + countJavaScriptEmbeddedPublishCommands(line);
 
   for (let index = 0; index < tokens.length; index += 1) {
     const word = shellWordValue(tokens[index]);
@@ -1960,8 +2172,20 @@ function countNpmPublishCommandsInLine(
     const resolvedWord = resolveShellVariables(word, shellVariables);
     recordNpmCommandVariable(resolvedWord, npmVariables);
     recordNpmPublishSubcommandVariable(resolvedWord, publishSubcommandVariables);
+    const functionDefinition = recordNpmFunctionWrapper(
+      tokens,
+      index,
+      shellVariables,
+      npmVariables,
+      npmFunctionNames,
+    );
+    if (functionDefinition) {
+      index = functionDefinition.endIndex;
+      continue;
+    }
+    publishCommandCount += countEvalWrappedPublishCommands(tokens, index, shellVariables);
     publishCommandCount += countInterpreterWrappedPublishCommands(tokens, index, shellVariables);
-    if (!isNpmCommandToken(resolvedWord, npmVariables)) continue;
+    if (!isNpmCommandToken(resolvedWord, npmVariables) && !npmFunctionNames.has(resolvedWord)) continue;
 
     for (let commandIndex = index + 1; commandIndex < tokens.length; commandIndex += 1) {
       const token = resolveShellVariables(shellWordValue(tokens[commandIndex]), shellVariables);
@@ -1980,6 +2204,85 @@ function countNpmPublishCommandsInLine(
   }
 
   return publishCommandCount;
+}
+
+function recordNpmFunctionWrapper(tokens, index, shellVariables, npmVariables, npmFunctionNames) {
+  const definition = shellFunctionDefinition(tokens, index);
+  if (!definition) return null;
+
+  if (shellFunctionBodyDelegatesToNpm(definition.bodyTokens, shellVariables, npmVariables)) {
+    npmFunctionNames.add(definition.name);
+  } else {
+    npmFunctionNames.delete(definition.name);
+  }
+
+  return { endIndex: definition.endIndex };
+}
+
+function shellFunctionDefinition(tokens, index) {
+  const name = shellWordValue(tokens[index]);
+  if (
+    isShellFunctionName(name) &&
+    tokens[index + 1] === "(" &&
+    tokens[index + 2] === ")" &&
+    tokens[index + 3] === "{"
+  ) {
+    return readShellFunctionDefinition(tokens, name, index + 4);
+  }
+  if (
+    name === "function" &&
+    isShellFunctionName(shellWordValue(tokens[index + 1] ?? "")) &&
+    tokens[index + 2] === "{"
+  ) {
+    return readShellFunctionDefinition(tokens, shellWordValue(tokens[index + 1]), index + 3);
+  }
+
+  return null;
+}
+
+function readShellFunctionDefinition(tokens, name, bodyStartIndex) {
+  let depth = 1;
+  for (let index = bodyStartIndex; index < tokens.length; index += 1) {
+    if (tokens[index] === "{") {
+      depth += 1;
+    } else if (tokens[index] === "}") {
+      depth -= 1;
+      if (depth === 0) {
+        return { name, bodyTokens: tokens.slice(bodyStartIndex, index), endIndex: index };
+      }
+    }
+  }
+
+  return null;
+}
+
+function isShellFunctionName(name) {
+  return /^[A-Za-z_][A-Za-z0-9_]*$/u.test(name);
+}
+
+function shellFunctionBodyDelegatesToNpm(bodyTokens, shellVariables, npmVariables) {
+  for (let index = 0; index < bodyTokens.length; index += 1) {
+    const token = resolveShellVariables(shellWordValue(bodyTokens[index]), shellVariables);
+    if (!isNpmCommandToken(token, npmVariables)) continue;
+
+    for (let commandIndex = index + 1; commandIndex < bodyTokens.length; commandIndex += 1) {
+      const argument = resolveShellVariables(shellWordValue(bodyTokens[commandIndex]), shellVariables);
+      if (isShellBoundaryToken(argument)) break;
+      if (isShellRedirectionToken(argument)) {
+        commandIndex += 1;
+        continue;
+      }
+      if (isShellArgumentForwardingToken(argument)) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+function isShellArgumentForwardingToken(token) {
+  return token === "$@" || token === "${@}" || token === "$*" || token === "${*}";
 }
 
 function recordNpmCommandVariable(word, npmVariables) {
@@ -2133,6 +2436,14 @@ function shellCommandSubstitutionTexts(line) {
       quote = "";
       continue;
     }
+    if (char === "$" && line[index + 1] === "(" && quote !== "'") {
+      const command = readDollarCommandSubstitution(line, index + 2);
+      if (command.closed) {
+        texts.push(command.value);
+        index = command.endIndex;
+      }
+      continue;
+    }
     if (char !== "`" || quote === "'") {
       continue;
     }
@@ -2145,6 +2456,52 @@ function shellCommandSubstitutionTexts(line) {
   }
 
   return texts;
+}
+
+function readDollarCommandSubstitution(line, startIndex) {
+  let value = "";
+  let quote = "";
+  let escaped = false;
+  let depth = 1;
+
+  for (let index = startIndex; index < line.length; index += 1) {
+    const char = line[index];
+    if (escaped) {
+      value += char;
+      escaped = false;
+      continue;
+    }
+    if (char === "\\" && quote !== "'") {
+      value += char;
+      escaped = true;
+      continue;
+    }
+    if ((char === "'" || char === '"') && quote === "") {
+      quote = char;
+      value += char;
+      continue;
+    }
+    if (char === quote) {
+      quote = "";
+      value += char;
+      continue;
+    }
+    if (quote === "" && char === "$" && line[index + 1] === "(") {
+      depth += 1;
+      value += "$(";
+      index += 1;
+      continue;
+    }
+    if (quote === "" && char === ")") {
+      depth -= 1;
+      if (depth === 0) {
+        return { value, endIndex: index, closed: true };
+      }
+    }
+    value += char;
+  }
+
+  return { value, endIndex: line.length - 1, closed: false };
 }
 
 function readBacktickCommandSubstitution(line, startIndex) {
@@ -2169,6 +2526,29 @@ function readBacktickCommandSubstitution(line, startIndex) {
   }
 
   return { value, endIndex: line.length - 1, closed: false };
+}
+
+function countEvalWrappedPublishCommands(tokens, index, shellVariables) {
+  const command = resolveShellVariables(shellWordValue(tokens[index]), shellVariables);
+  if (command !== "eval") return 0;
+
+  const scriptText = shellEvalArgument(tokens, index + 1, shellVariables);
+  return scriptText ? countNpmPublishCommandsInShellText(scriptText) : 0;
+}
+
+function shellEvalArgument(tokens, startIndex, shellVariables) {
+  const parts = [];
+  for (let index = startIndex; index < tokens.length; index += 1) {
+    const token = resolveShellVariables(shellWordValue(tokens[index]), shellVariables);
+    if (isShellBoundaryToken(token)) break;
+    if (isShellRedirectionToken(token)) {
+      index += 1;
+      continue;
+    }
+    parts.push(token);
+  }
+
+  return parts.join(" ").trim();
 }
 
 function countInterpreterWrappedPublishCommands(tokens, index, shellVariables) {
@@ -2510,15 +2890,138 @@ function inlineRunMappingValue(value, key) {
 function inlineNestedMappingValue(value, key) {
   if (!value || !value.trim().startsWith("{")) return "";
 
-  const keyPattern = new RegExp(`(?:^|[{,]\\s*)(?:"${key}"|'${key}'|${key})\\s*:\\s*`, "u");
-  const match = keyPattern.exec(value);
-  if (!match) return "";
+  const entry = inlineMappingEntry(value, key);
+  if (!entry) return "";
 
-  const startIndex = match.index + match[0].length;
-  if (value[startIndex] !== "{") return "";
+  const nestedValue = entry.value.trim();
+  if (!nestedValue.startsWith("{")) return "";
 
-  const mapping = readBalancedInlineMapping(value, startIndex);
+  const mapping = readBalancedInlineMapping(nestedValue, 0);
   return mapping.closed ? mapping.value : "";
+}
+
+function inlineMappingEntry(value, expectedKey) {
+  const text = value.trim();
+  if (!text.startsWith("{")) return null;
+
+  for (let index = 1; index < text.length; index += 1) {
+    index = skipInlineMappingSpace(text, index);
+    if (text[index] === ",") {
+      continue;
+    }
+    if (text[index] === "}") {
+      break;
+    }
+
+    const key = readInlineMappingKey(text, index);
+    if (!key) return null;
+    index = skipInlineMappingSpace(text, key.endIndex);
+    if (text[index] !== ":") return null;
+    index = skipInlineMappingSpace(text, index + 1);
+
+    const entryValue = readInlineMappingValue(text, index);
+    if (key.value === expectedKey) {
+      return { key: key.value, value: entryValue.value };
+    }
+    index = entryValue.endIndex;
+  }
+
+  return null;
+}
+
+function skipInlineMappingSpace(text, index) {
+  while (/[ \t\n\r]/u.test(text[index] ?? "")) {
+    index += 1;
+  }
+  return index;
+}
+
+function readInlineMappingKey(text, startIndex) {
+  const quote = text[startIndex];
+  if (quote === '"' || quote === "'") {
+    const scalar = readInlineQuotedScalar(text, startIndex, quote);
+    return scalar.closed ? scalar : null;
+  }
+
+  const colonIndex = text.indexOf(":", startIndex);
+  if (colonIndex === -1) return null;
+
+  return {
+    value: yamlScalarValue(text.slice(startIndex, colonIndex).trim()),
+    endIndex: colonIndex,
+    closed: true,
+  };
+}
+
+function readInlineQuotedScalar(text, startIndex, quote) {
+  let rawValue = "";
+  let escaped = false;
+
+  for (let index = startIndex + 1; index < text.length; index += 1) {
+    const char = text[index];
+    if (escaped) {
+      rawValue += `\\${char}`;
+      escaped = false;
+      continue;
+    }
+    if (char === "\\" && quote === '"') {
+      escaped = true;
+      continue;
+    }
+    if (char === quote) {
+      return {
+        value: unquoteYamlKey(`${quote}${rawValue}${quote}`),
+        endIndex: index + 1,
+        closed: true,
+      };
+    }
+    rawValue += char;
+  }
+
+  return { value: rawValue, endIndex: text.length, closed: false };
+}
+
+function readInlineMappingValue(text, startIndex) {
+  let quote = "";
+  let escaped = false;
+  let depth = 0;
+
+  for (let index = startIndex; index < text.length; index += 1) {
+    const char = text[index];
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (char === "\\" && quote !== "'") {
+      escaped = true;
+      continue;
+    }
+    if ((char === "'" || char === '"') && quote === "") {
+      quote = char;
+      continue;
+    }
+    if (char === quote) {
+      quote = "";
+      continue;
+    }
+    if (quote !== "") continue;
+    if (char === "{" || char === "[") {
+      depth += 1;
+      continue;
+    }
+    if (char === "}" || char === "]") {
+      if (depth === 0) {
+        return { value: text.slice(startIndex, index).trim(), endIndex: index };
+      }
+      depth -= 1;
+      continue;
+    }
+    if (char === "," && depth === 0) {
+      return { value: text.slice(startIndex, index).trim(), endIndex: index };
+    }
+  }
+
+  return { value: text.slice(startIndex).trim(), endIndex: text.length };
 }
 
 function readBalancedInlineMapping(value, startIndex) {
@@ -2652,20 +3155,43 @@ function actionName(action) {
 function scriptHasBlockedNpmConfigCommand(script) {
   const shellVariables = new Map();
   const npmVariables = new Set();
+  const npmFunctionNames = new Set();
   return shellContinuationText(script)
     .split("\n")
-    .some((line) => lineHasBlockedNpmConfigCommand(line, shellVariables, npmVariables));
+    .some((line) => lineHasBlockedNpmConfigCommand(line, shellVariables, npmVariables, npmFunctionNames));
 }
 
-function lineHasBlockedNpmConfigCommand(line, shellVariables = new Map(), npmVariables = new Set()) {
+function lineHasBlockedNpmConfigCommand(
+  line,
+  shellVariables = new Map(),
+  npmVariables = new Set(),
+  npmFunctionNames = new Set(),
+) {
   const tokens = shellTokens(line);
+  if (
+    shellCommandSubstitutionTexts(line).some((commandText) => scriptHasBlockedNpmConfigCommand(commandText)) ||
+    javascriptEmbeddedHasBlockedNpmConfigCommand(line)
+  ) {
+    return true;
+  }
 
   for (let index = 0; index < tokens.length; index += 1) {
     const word = shellWordValue(tokens[index]);
     recordShellVariable(word, shellVariables);
     const resolvedWord = resolveShellVariables(word, shellVariables);
     recordNpmCommandVariable(resolvedWord, npmVariables);
-    if (!isNpmCommandToken(resolvedWord, npmVariables)) continue;
+    const functionDefinition = recordNpmFunctionWrapper(tokens, index, shellVariables, npmVariables, npmFunctionNames);
+    if (functionDefinition) {
+      index = functionDefinition.endIndex;
+      continue;
+    }
+    if (
+      evalWrappedHasBlockedNpmConfigCommand(tokens, index, shellVariables) ||
+      interpreterWrappedHasBlockedNpmConfigCommand(tokens, index, shellVariables)
+    ) {
+      return true;
+    }
+    if (!isNpmCommandToken(resolvedWord, npmVariables) && !npmFunctionNames.has(resolvedWord)) continue;
 
     const commandTokens = [];
     for (let commandIndex = index + 1; commandIndex < tokens.length; commandIndex += 1) {
@@ -2684,6 +3210,52 @@ function lineHasBlockedNpmConfigCommand(line, shellVariables = new Map(), npmVar
   }
 
   return false;
+}
+
+function evalWrappedHasBlockedNpmConfigCommand(tokens, index, shellVariables) {
+  const command = resolveShellVariables(shellWordValue(tokens[index]), shellVariables);
+  if (command !== "eval") return false;
+
+  const scriptText = shellEvalArgument(tokens, index + 1, shellVariables);
+  return scriptText ? scriptHasBlockedNpmConfigCommand(scriptText) : false;
+}
+
+function interpreterWrappedHasBlockedNpmConfigCommand(tokens, index, shellVariables) {
+  const command = resolveShellVariables(shellWordValue(tokens[index]), shellVariables);
+  if (!isShellInterpreterCommand(command)) return false;
+
+  for (let optionIndex = index + 1; optionIndex < tokens.length; optionIndex += 1) {
+    const option = resolveShellVariables(shellWordValue(tokens[optionIndex]), shellVariables);
+    if (isShellBoundaryToken(option)) break;
+    if (isShellRedirectionToken(option)) {
+      optionIndex += 1;
+      continue;
+    }
+    if (!isInterpreterEvalOption(command, option)) continue;
+
+    const scriptText = interpreterEvalArgument(tokens, optionIndex + 1, shellVariables);
+    if (!scriptText) continue;
+    return interpreterEvalHasBlockedNpmConfigCommand(command, scriptText);
+  }
+
+  return false;
+}
+
+function interpreterEvalHasBlockedNpmConfigCommand(command, scriptText) {
+  const basename = command.replace(/\\/gu, "/").split("/").pop() ?? "";
+  if (basename === "node") {
+    return javascriptStringTexts(scriptText).some((stringText) => scriptHasBlockedNpmConfigCommand(stringText));
+  }
+
+  return scriptHasBlockedNpmConfigCommand(scriptText);
+}
+
+function javascriptEmbeddedHasBlockedNpmConfigCommand(text) {
+  if (!/\b(?:exec|execSync|execFile|execFileSync|spawn|spawnSync)\b/u.test(text)) {
+    return false;
+  }
+
+  return javascriptStringTexts(text).some((stringText) => scriptHasBlockedNpmConfigCommand(stringText));
 }
 
 function npmCommandWritesBlockedConfig(commandTokens) {
@@ -2916,6 +3488,12 @@ function hasLocalWorkflowExecution(workflow) {
           return true;
         }
         index = scalar.endIndex;
+      } else if (hasMultilinePlainYamlScalar(lines, index, indent)) {
+        const scalar = yamlMultilinePlainScalarText(lines, index, indent, runValue);
+        if (shellTextInvokesLocalCode(scalar.commandText)) {
+          return true;
+        }
+        index = scalar.endIndex;
       } else if (shellLineInvokesLocalCode(runValue)) {
         return true;
       }
@@ -2964,6 +3542,10 @@ function stepRunCommandTexts(stepBlock) {
       const scalar = yamlMultilineQuotedScalarText(lines, index, countIndent(line), rawRunValue);
       commandTexts.push(scalar.commandText);
       index = scalar.endIndex;
+    } else if (hasMultilinePlainYamlScalar(lines, index, countIndent(line))) {
+      const scalar = yamlMultilinePlainScalarText(lines, index, countIndent(line), runValue);
+      commandTexts.push(scalar.commandText);
+      index = scalar.endIndex;
     } else {
       commandTexts.push(runValue);
     }
@@ -2989,12 +3571,16 @@ function shellLineInvokesBareLocalCode(line) {
   return tokens.some((token, index) => {
     if (isShellBoundaryToken(token) || isShellRedirectionToken(token)) return false;
     if (isBareLocalScriptToken(token)) return true;
-    return ["bash", "sh", "node"].includes(token) && isBareLocalScriptToken(tokens[index + 1] ?? "");
+    return ["bash", "sh", "node"].includes(token) && isBareInterpreterScriptToken(tokens[index + 1] ?? "");
   });
 }
 
 function isBareLocalScriptToken(token) {
   return /^[A-Za-z0-9_.-]+\.(?:cjs|js|mjs|sh|ts|tsx)$/u.test(token);
+}
+
+function isBareInterpreterScriptToken(token) {
+  return /^[A-Za-z0-9_.-]+(?:\.(?:cjs|js|mjs|sh|ts|tsx))?$/u.test(token) && !token.startsWith("-");
 }
 
 function isNonRootWorkingDirectory(value) {
@@ -3013,7 +3599,7 @@ function shellLineInvokesLocalCode(line) {
     if (isLocalPathToken(token)) return true;
     return (
       ["bash", "sh", "node"].includes(token) &&
-      (isLocalPathToken(tokens[index + 1] ?? "") || isBareLocalScriptToken(tokens[index + 1] ?? ""))
+      (isLocalPathToken(tokens[index + 1] ?? "") || isBareInterpreterScriptToken(tokens[index + 1] ?? ""))
     );
   });
 }
