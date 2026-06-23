@@ -39,7 +39,8 @@ Each package repository keeps its own source, tests, and package-specific
   files at any depth.
 - Repositories keep the npm lockfile that `npm ci` will honor. If both
   `npm-shrinkwrap.json` and `package-lock.json` exist, the shrinkwrap file is
-  audited because npm gives it precedence.
+  audited because npm gives it precedence. The audited lockfile must use the
+  package map format from lockfile version 2 or newer.
 - Script names include `lint`, `test`, `build`, `smoke:dist`, `pack:dry-run`,
   and `check`, and required script bodies are non-empty.
 - `prepack` runs `npm run build`, and `pack:dry-run` runs
@@ -51,6 +52,8 @@ Each package repository keeps its own source, tests, and package-specific
   limited to the audited sequence with an optional direct build immediately
   before `smoke:dist`; it must not short-circuit before any required command
   runs or append extra commands after the audit.
+- Delegated `lint` and `test` scripts must perform real work; successful no-op
+  commands or successful early exits do not satisfy the contract.
 - A TypeScript build runs before the package dist smoke, either directly before
   `smoke:dist` in `check` or as the first command delegated by `smoke:dist`;
   delegated smoke scripts do real smoke work beyond rebuilding and must not be
@@ -65,6 +68,8 @@ Each package repository keeps its own source, tests, and package-specific
 - Packages and locked dependencies must not expose an `npm` binary that can
   shadow the npm CLI inside npm-run-script PATH handling.
 - Locked dependency packages must not define install-time lifecycle scripts.
+  Lockfile `hasInstallScript` markers are treated as install lifecycle scripts
+  when the dependency can install on the audited Linux runner.
 - Packages must not define npm workspaces.
 - Package-level npm configuration must not set `access`, `dry-run`,
   `script-shell`, workspace options, `tag`, `userconfig`, `globalconfig`,
@@ -133,11 +138,12 @@ is shared:
   repository root with the default shell and without PATH, Bash startup file,
   Node startup option, HOME, or indirect npm config overrides.
 - `npm publish` commands, including publish aliases, shell-escaped command
-  words, folded YAML run blocks, grouped shell commands, and any `npm`
-  invocation that reaches a publish command token before a shell boundary, only
-  appear in the audited Release Please workflow. Other workflows must not grant
-  package write permissions, use publish-capable actions, run Release Please
-  actions, or invoke local workflow scripts or local composite actions.
+  words, Bash ANSI-C quoted command words, decoded YAML scalar run values,
+  folded YAML run blocks, grouped shell commands, and any `npm` invocation that
+  reaches a publish command token before a shell boundary, only appear in the
+  audited Release Please workflow. Other workflows must not grant package write
+  permissions, including `write-all`, use publish-capable actions, run Release
+  Please actions, or invoke local workflow scripts or local composite actions.
 
 ## Release Please Contract
 

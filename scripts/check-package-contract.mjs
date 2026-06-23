@@ -12,8 +12,11 @@ const SEMVER_PATTERN =
   /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
 const BUILD_SCRIPT_COMMAND = "npm run build";
 const TRUSTED_GITHUB_RUNNER = "ubuntu-latest";
+const AUDITED_RUNNER_OS = "linux";
+const AUDITED_RUNNER_CPU = "x64";
+const AUDITED_RUNNER_LIBC = "glibc";
 const NPM_PUBLISH_SUBCOMMANDS = new Set(["publish", "pu", "pub", "publ", "publi", "publis"]);
-const NOOP_DIST_SMOKE_COMMANDS = new Set(["true", ":"]);
+const NOOP_SCRIPT_COMMANDS = new Set(["true", ":"]);
 const DEPENDENCY_INSTALL_LIFECYCLE_SCRIPTS = [
   "preinstall",
   "install",
@@ -114,6 +117,8 @@ function checkPackage(pkgSpec, packageDir) {
       fail(label, `script ${scriptName} must not be empty`);
     }
   }
+  expectDelegatedScriptWork(label, "lint", pkg.scripts?.lint);
+  expectDelegatedScriptWork(label, "test", pkg.scripts?.test);
 
   for (const [scriptName, expected] of Object.entries(contract.manifest.requiredScripts)) {
     expectEqual(label, `script ${scriptName}`, pkg.scripts?.[scriptName], expected);
@@ -129,6 +134,7 @@ function checkPackage(pkgSpec, packageDir) {
   expectNoPublishEnvMutationInScripts(label, pkg.scripts);
   expectNoPublishLifecycleScripts(label, pkg.scripts);
   expectNoWorkspaces(label, pkg);
+  expectAuditableNpmCiLockfile(label, npmCiLockfile);
   expectNoNpmBinaryShadowing(label, pkg, npmCiLockfile);
   expectNoDependencyInstallLifecycleScripts(label, npmCiLockfile);
   expectSafeNpmConfig(label, npmrcPath);
@@ -675,12 +681,25 @@ function expectDistSmokeWork(label, smokeCommands) {
     fail(label, "smoke:dist script must not exit before dist smoke work");
     return;
   }
-  if (smokeCommands.some((command) => NOOP_DIST_SMOKE_COMMANDS.has(command))) {
+  if (smokeCommands.some((command) => NOOP_SCRIPT_COMMANDS.has(command))) {
     fail(label, "smoke:dist script must not be a no-op");
     return;
   }
   if (smokeCommands.every((command) => command === "npm run build")) {
     fail(label, "smoke:dist script must do more than build");
+  }
+}
+
+function expectDelegatedScriptWork(label, scriptName, script) {
+  const commands = splitScriptCommands(script);
+  if (commands.length === 0) return;
+
+  if (commands.includes("exit 0")) {
+    fail(label, `script ${scriptName} must not exit before work`);
+    return;
+  }
+  if (commands.some((command) => NOOP_SCRIPT_COMMANDS.has(command))) {
+    fail(label, `script ${scriptName} must not be a no-op`);
   }
 }
 
@@ -1174,7 +1193,7 @@ function fail(label, message) {
 function splitScriptCommands(script) {
   if (typeof script !== "string") return [];
   return script
-    .split(/\s+&&\s+/u)
+    .split(/[ \t]*&&[ \t]*/u)
     .map((command) => command.trim())
     .filter(Boolean);
 }
@@ -1206,7 +1225,7 @@ function expectNoPublishInScripts(label, scripts) {
 function expectNoPublishEnvMutationInScripts(label, scripts) {
   for (const [scriptName, script] of Object.entries(scripts ?? {})) {
     if (typeof script !== "string") continue;
-    if (/\bGITHUB_(ENV|PATH)\b/u.test(script)) {
+    if (scriptWritesGitHubActionsEnvironmentFile(script)) {
       fail(label, `script ${scriptName} must not write GitHub Actions environment files`);
     }
     if (textHasBlockedNpmConfigEnvKey(script)) {
@@ -1216,6 +1235,20 @@ function expectNoPublishEnvMutationInScripts(label, scripts) {
       fail(label, `script ${scriptName} must not write publish-altering npm config`);
     }
   }
+}
+
+function scriptWritesGitHubActionsEnvironmentFile(script) {
+  if (/\bGITHUB_(ENV|PATH)\b/u.test(script)) {
+    return true;
+  }
+
+  return shellContinuationText(script)
+    .split("\n")
+    .some((line) =>
+      shellTokens(line)
+        .map((token) => shellWordValue(token))
+        .some((word) => /\bGITHUB_(ENV|PATH)\b/u.test(word)),
+    );
 }
 
 function expectNoPublishLifecycleScripts(label, scripts) {
@@ -1256,6 +1289,15 @@ function expectNoWorkspaces(label, pkg) {
   }
 }
 
+function expectAuditableNpmCiLockfile(label, lockfilePath) {
+  if (!lockfilePath) return;
+
+  const lockfile = readJson(lockfilePath);
+  if (!lockfile || typeof lockfile !== "object" || !lockfile.packages || typeof lockfile.packages !== "object") {
+    fail(label, `${relativePackagePath(lockfilePath)} must use lockfileVersion 2 or newer with packages map`);
+  }
+}
+
 function expectNoNpmBinaryShadowing(label, pkg, lockfilePath) {
   if (packageDeclaresNpmBin(pkg)) {
     fail(label, "package bin must not include npm");
@@ -1289,12 +1331,37 @@ function expectNoDependencyInstallLifecycleScripts(label, lockfilePath) {
   for (const [entryPath, entry] of Object.entries(lockfile.packages ?? {})) {
     if (!entryPath || !entry || typeof entry !== "object") continue;
 
+    if (entry.hasInstallScript === true && lockfilePackageCanInstallOnAuditedRunner(entry)) {
+      fail(label, `${relativePackagePath(lockfilePath)} dependency ${entryPath} must not have install lifecycle scripts`);
+    }
     for (const scriptName of DEPENDENCY_INSTALL_LIFECYCLE_SCRIPTS) {
       if (typeof entry.scripts?.[scriptName] === "string") {
         fail(label, `${relativePackagePath(lockfilePath)} dependency ${entryPath} must not define ${scriptName}`);
       }
     }
   }
+}
+
+function lockfilePackageCanInstallOnAuditedRunner(entry) {
+  return (
+    packagePlatformAllows(entry.os, AUDITED_RUNNER_OS) &&
+    packagePlatformAllows(entry.cpu, AUDITED_RUNNER_CPU) &&
+    packagePlatformAllows(entry.libc, AUDITED_RUNNER_LIBC)
+  );
+}
+
+function packagePlatformAllows(values, currentValue) {
+  if (!Array.isArray(values) || values.length === 0) {
+    return true;
+  }
+
+  const normalizedValues = values.filter((value) => typeof value === "string").map((value) => value.toLowerCase());
+  if (normalizedValues.includes(`!${currentValue}`)) {
+    return false;
+  }
+
+  const positiveValues = normalizedValues.filter((value) => !value.startsWith("!"));
+  return positiveValues.length === 0 || positiveValues.includes(currentValue);
 }
 
 function packageDeclaresNpmBin(pkg, packagePath = "") {
@@ -1483,7 +1550,7 @@ function shellScanTexts(text) {
     const normalizedLine = normalizedYamlLine(line);
 
     if (yamlKey(normalizedLine) === "run:") {
-      const runValue = yamlValue(normalizedLine);
+      const runValue = yamlScalarValue(yamlValue(normalizedLine));
       if (/^[|>]/u.test(runValue)) {
         const block = yamlRunBlockCommandText(lines, index, countIndent(line), runValue);
         commandTexts.push(block.commandText);
@@ -1766,9 +1833,11 @@ function workflowHasPackageWritePermission(workflow) {
     .split("\n")
     .some((line) => {
       const normalizedLine = normalizedYamlLine(line);
-      const value = yamlValue(normalizedLine);
+      const key = yamlKey(normalizedLine);
+      const value = yamlScalarValue(yamlValue(normalizedLine));
       return (
-        (yamlKey(normalizedLine) === "packages:" && value.replace(/^['"]|['"]$/gu, "") === "write") ||
+        (key === "permissions:" && value === "write-all") ||
+        (key === "packages:" && value === "write") ||
         inlineMappingHasPackageWrite(value)
       );
     });
@@ -1784,7 +1853,7 @@ function workflowUsesPublishAction(workflow) {
     .some((line) => {
       const normalizedLine = normalizedYamlLine(line);
       if (yamlKey(normalizedLine) !== "uses:") return false;
-      const action = yamlValue(normalizedLine).replace(/^['"]|['"]$/gu, "");
+      const action = yamlScalarValue(yamlValue(normalizedLine));
       return !isLocalPathToken(action) && action.toLowerCase().includes("publish");
     });
 }
@@ -1942,6 +2011,17 @@ function yamlValue(line) {
   return match ? line.slice(match[0].length).trim() : "";
 }
 
+function yamlScalarValue(value) {
+  const trimmed = value.trim();
+  if (trimmed.startsWith('"') && trimmed.endsWith('"')) {
+    return decodeDoubleQuotedYamlKey(trimmed.slice(1, -1));
+  }
+  if (trimmed.startsWith("'") && trimmed.endsWith("'")) {
+    return trimmed.slice(1, -1).replace(/''/gu, "'");
+  }
+  return trimmed;
+}
+
 function unquoteYamlKey(key) {
   if (key.startsWith('"') && key.endsWith('"')) {
     return decodeDoubleQuotedYamlKey(key.slice(1, -1));
@@ -2007,7 +2087,7 @@ function hasLocalWorkflowExecution(workflow) {
 
     if (
       yamlKey(normalizedLine) === "uses:" &&
-      isLocalPathToken(yamlValue(normalizedLine).replace(/^['"]|['"]$/gu, ""))
+      isLocalPathToken(yamlScalarValue(yamlValue(normalizedLine)))
     ) {
       return true;
     }
@@ -2059,6 +2139,12 @@ function shellWordValue(token) {
 
   for (let index = 0; index < token.length; index += 1) {
     const char = token[index];
+    if (char === "$" && token[index + 1] === "'" && quote === "") {
+      const ansiString = readBashAnsiCString(token, index + 2);
+      value += ansiString.value;
+      index = ansiString.endIndex;
+      continue;
+    }
     if ((char === "'" || char === '"') && quote === "") {
       quote = char;
       continue;
@@ -2076,6 +2162,78 @@ function shellWordValue(token) {
   }
 
   return value;
+}
+
+function readBashAnsiCString(token, startIndex) {
+  let value = "";
+  let index = startIndex;
+
+  for (; index < token.length; index += 1) {
+    const char = token[index];
+    if (char === "'") {
+      break;
+    }
+    if (char === "\\") {
+      const escape = decodeBashAnsiEscape(token, index + 1);
+      value += escape.value;
+      index = escape.endIndex;
+      continue;
+    }
+    value += char;
+  }
+
+  return { value, endIndex: index };
+}
+
+function decodeBashAnsiEscape(token, index) {
+  const char = token[index] ?? "";
+  const namedEscapes = {
+    a: "\x07",
+    b: "\b",
+    e: "\x1b",
+    E: "\x1b",
+    f: "\f",
+    n: "\n",
+    r: "\r",
+    t: "\t",
+    v: "\v",
+    "\\": "\\",
+    "'": "'",
+    "\"": "\"",
+    "?": "?",
+  };
+
+  if (Object.hasOwn(namedEscapes, char)) {
+    return { value: namedEscapes[char], endIndex: index };
+  }
+
+  if (char === "x") {
+    return decodeFixedBashAnsiHexEscape(token, index + 1, 2, index);
+  }
+  if (char === "u") {
+    return decodeFixedBashAnsiHexEscape(token, index + 1, 4, index);
+  }
+  if (char === "U") {
+    return decodeFixedBashAnsiHexEscape(token, index + 1, 8, index);
+  }
+  if (/[0-7]/u.test(char)) {
+    const match = /^[0-7]{1,3}/u.exec(token.slice(index));
+    const octal = match?.[0] ?? char;
+    return { value: String.fromCodePoint(Number.parseInt(octal, 8)), endIndex: index + octal.length - 1 };
+  }
+
+  return { value: char, endIndex: index };
+}
+
+function decodeFixedBashAnsiHexEscape(token, startIndex, maxLength, fallbackIndex) {
+  const pattern = new RegExp(`^[0-9a-fA-F]{1,${maxLength}}`, "u");
+  const match = pattern.exec(token.slice(startIndex));
+  if (!match) {
+    return { value: token[fallbackIndex] ?? "", endIndex: fallbackIndex };
+  }
+
+  const hex = match[0];
+  return { value: String.fromCodePoint(Number.parseInt(hex, 16)), endIndex: startIndex + hex.length - 1 };
 }
 
 function isNpmConfigEnvKey(key) {
