@@ -32,13 +32,14 @@ Each package repository keeps its own source, tests, and package-specific
 - Packages are publishable manifests: `private` is not true, and package
   versions use semver.
 - Published files include `dist`, `README.md`, and `LICENSE`; file-backed
-  entries must exist in the repository.
+  entries must exist in the repository. Package file entries must not exclude
+  required output, and `dist` must not contain its own `.npmignore`.
 - Repositories keep a committed npm lockfile because shared workflows use
   `npm ci`.
 - Script names include `lint`, `test`, `build`, `smoke:dist`, `pack:dry-run`,
   and `check`, and required script bodies are non-empty.
 - `prepack` runs `npm run build`, and `pack:dry-run` runs
-  `npm pack --dry-run`.
+  `npm pack --dry-run`; other publish lifecycle scripts are not used.
 - `check` runs exact formatting, test, package dist smoke, and package dry-run
   commands while preserving package-specific smoke details; it must not
   short-circuit before any required command runs.
@@ -49,7 +50,9 @@ Each package repository keeps its own source, tests, and package-specific
   recorded in `package-contract.json`.
 - Package scripts must not contain `npm publish`; release publication stays in
   the audited Release Please workflow.
-- Package-level npm configuration must not set `dry-run` or `script-shell`.
+- Packages must not define npm workspaces.
+- Package-level npm configuration must not set `dry-run`, `script-shell`,
+  workspace options, or a non-contract registry.
 
 Runtime dependency compatibility is tracked separately from this repository
 workflow contract. This guard focuses on manifest shape, scripts, CI, release,
@@ -96,8 +99,8 @@ is shared:
 - The publish job permissions are exactly `contents: read` and
   `packages: write`, and the publish step or publish job has the package
   registry token available without a conflicting step-level token override or
-  dry-run npm configuration at workflow, job, step, or package npm config
-  scope.
+  publish-altering npm configuration at workflow, job, step, or package npm
+  config scope.
 - Required npm install, check, and publish commands run at the package
   repository root with the default shell.
 - `npm publish` commands, including npm invocations with options before the
