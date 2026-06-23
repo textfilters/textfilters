@@ -33,6 +33,7 @@ function checkPackage(pkgSpec, packageDir) {
   const releaseManifestPath = join(packageDir, contract.releaseWorkflow.manifestFile);
   const checkWorkflowPath = join(packageDir, contract.checkWorkflow.path);
   const releaseWorkflowPath = join(packageDir, contract.releaseWorkflow.path);
+  const npmrcPath = join(packageDir, ".npmrc");
 
   if (!existsSync(packageJsonPath)) {
     fail(label, "missing package.json");
@@ -86,8 +87,9 @@ function checkPackage(pkgSpec, packageDir) {
     expectScriptCommand(label, "check", pkg.scripts?.check, command);
   }
   expectScriptCommandOrder(label, "check", pkg.scripts?.check, contract.manifest.checkScriptMustInclude);
-  expectNoScriptCommandBefore(label, "check", pkg.scripts?.check, contract.manifest.checkScriptMustInclude[0], "exit 0");
+  expectNoExitBeforeScriptCommands(label, "check", pkg.scripts?.check, contract.manifest.checkScriptMustInclude);
   expectNoPublishInScripts(label, pkg.scripts);
+  expectSafeNpmConfig(label, npmrcPath);
 
   if (contract.manifest.buildMustRunBeforeDistSmoke) {
     expectBuildBeforeDistSmoke(label, pkg.scripts);
@@ -157,6 +159,7 @@ function checkWorkflow(label, workflowPath) {
   expectStepWithInput(label, workflowPath, setupNodeStep, "registry-url", contract.checkWorkflow.registryUrl);
   expectStepWithInput(label, workflowPath, setupNodeStep, "scope", `"${contract.checkWorkflow.scope}"`);
   expectEnvAvailable(label, workflowPath, checkJob, installStep, "NODE_AUTH_TOKEN: ${{ github.token }}");
+  expectNoNpmScriptShellOverride(label, workflowPath, workflow, checkJob, checkStep);
   expectBlockingStep(label, workflowPath, installStep, contract.checkWorkflow.installCommand);
   expectBlockingStep(label, workflowPath, checkStep, contract.checkWorkflow.checkCommand);
   expectPackageRootStep(label, workflowPath, workflow, checkJob, installStep, contract.checkWorkflow.installCommand);
@@ -276,7 +279,10 @@ function checkReleaseWorkflow(label, workflowPath) {
   expectEnvAvailable(label, workflowPath, publishJob, installStep, "NODE_AUTH_TOKEN: ${{ github.token }}");
   expectEnvAvailable(label, workflowPath, publishJob, publishStep, "NODE_AUTH_TOKEN: ${{ github.token }}");
   expectNoEnvKey(label, workflowPath, workflow, publishJob, publishStep, "npm_config_dry_run:");
+  expectNoEnvKey(label, workflowPath, workflow, publishJob, publishStep, "npm_config_dry-run:");
   expectNoEnvKey(label, workflowPath, workflow, publishJob, publishStep, "NPM_CONFIG_DRY_RUN:");
+  expectNoEnvKey(label, workflowPath, workflow, publishJob, publishStep, "NPM_CONFIG_DRY-RUN:");
+  expectNoNpmScriptShellOverride(label, workflowPath, workflow, publishJob, checkStep);
   expectBlockingStep(label, workflowPath, installStep, contract.checkWorkflow.installCommand);
   expectBlockingStep(label, workflowPath, checkStep, contract.checkWorkflow.checkCommand);
   expectBlockingStep(
@@ -398,6 +404,12 @@ function checkPublishCommandScope(label, packageDir, releaseWorkflowPath) {
         `${relativePackagePath(workflowPath)} must not include npm publish`,
       );
     }
+    if (workflow.includes(contract.releaseWorkflow.releaseAction)) {
+      fail(
+        label,
+        `${relativePackagePath(workflowPath)} must not include ${contract.releaseWorkflow.releaseAction}`,
+      );
+    }
   }
 }
 
@@ -478,6 +490,9 @@ function expectBuildBeforeDistSmoke(label, scripts) {
   }
 
   if (checkSmokeIndex !== -1 && smokeCommands.indexOf("npm run build") === 0 && smokeCommands.length > 1) {
+    if (smokeCommands.slice(1).includes("exit 0")) {
+      fail(label, "smoke:dist script must not exit before dist smoke work");
+    }
     return;
   }
 
@@ -620,6 +635,11 @@ function expectEnvAvailable(label, path, jobBlock, stepBlock, envLine) {
   const stepEnvIndent = stepBaseIndent(stepBlock) + 4;
   const envName = envLine.slice(0, envLine.indexOf(":") + 1);
 
+  if (stepInlineEnvHasKey(stepBlock, envName)) {
+    fail(label, `${relativePackagePath(path)} step must not override ${envName} incorrectly`);
+    return;
+  }
+
   if (stepEnvBlock && hasKeyAtIndent(stepEnvBlock, envName, stepEnvIndent)) {
     if (hasLineAtIndent(stepEnvBlock, envLine, stepEnvIndent)) {
       return;
@@ -638,6 +658,14 @@ function expectEnvAvailable(label, path, jobBlock, stepBlock, envLine) {
 function expectNoEnvKey(label, path, workflow, jobBlock, stepBlock, envName) {
   if (hasEnvKey(workflow, envName, 0) || hasEnvKey(jobBlock, envName, 4) || hasStepEnvKey(stepBlock, envName)) {
     fail(label, `${relativePackagePath(path)} publish step must not set ${envName}`);
+  }
+}
+
+function expectNoNpmScriptShellOverride(label, path, workflow, jobBlock, stepBlock) {
+  for (const envName of ["npm_config_script_shell:", "npm_config_script-shell:", "NPM_CONFIG_SCRIPT_SHELL:", "NPM_CONFIG_SCRIPT-SHELL:"]) {
+    if (hasEnvKey(workflow, envName, 0) || hasEnvKey(jobBlock, envName, 4) || hasStepEnvKey(stepBlock, envName)) {
+      fail(label, `${relativePackagePath(path)} npm run check step must not set ${envName}`);
+    }
   }
 }
 
@@ -893,11 +921,29 @@ function expectNoScriptCommandBefore(label, scriptName, script, anchorCommand, b
   }
 }
 
+function expectNoExitBeforeScriptCommands(label, scriptName, script, anchorCommands) {
+  for (const anchorCommand of anchorCommands) {
+    expectNoScriptCommandBefore(label, scriptName, script, anchorCommand, "exit 0");
+  }
+}
+
 function expectNoPublishInScripts(label, scripts) {
   for (const [scriptName, script] of Object.entries(scripts ?? {})) {
     if (typeof script === "string" && hasNpmPublishCommand(script)) {
       fail(label, `script ${scriptName} must not include npm publish`);
     }
+  }
+}
+
+function expectSafeNpmConfig(label, npmrcPath) {
+  if (!existsSync(npmrcPath)) return;
+
+  const npmrc = readFileSync(npmrcPath, "utf8");
+  if (hasNpmConfigKey(npmrc, "dry-run")) {
+    fail(label, ".npmrc must not set dry-run");
+  }
+  if (hasNpmConfigKey(npmrc, "script-shell")) {
+    fail(label, ".npmrc must not set script-shell");
   }
 }
 
@@ -1022,10 +1068,14 @@ function hasNpmPublishCommand(text) {
 }
 
 function countNpmPublishCommands(text) {
-  return text
+  return shellContinuationText(text)
     .split("\n")
     .filter((line) => /(^|\s)npm(?:\s+(?:--[^\s]+|-[A-Za-z][^\s]*))*\s+publish(\s|$)/u.test(line))
     .length;
+}
+
+function shellContinuationText(text) {
+  return text.replace(/\\\s*\n\s*/gu, " ");
 }
 
 function blockEntriesAtIndent(text, indent) {
@@ -1052,12 +1102,22 @@ function hasEnvLine(text, envLine, indent) {
 
 function hasEnvKey(text, envName, indent) {
   const envBlock = getOptionalBlock(text, "env:", indent);
-  return envBlock ? hasKeyAtIndent(envBlock, envName, indent + 2) : false;
+  return (
+    (envBlock ? hasKeyAtIndent(envBlock, envName, indent + 2) : false) ||
+    inlineMappingHasKey(topLevelValue(text, "env:", indent), envName)
+  );
 }
 
 function hasStepEnvKey(stepBlock, envName) {
   const envBlock = getStepChildBlock(stepBlock, "env:");
-  return envBlock ? hasKeyAtIndent(envBlock, envName, stepBaseIndent(stepBlock) + 4) : false;
+  return (
+    (envBlock ? hasKeyAtIndent(envBlock, envName, stepBaseIndent(stepBlock) + 4) : false) ||
+    stepInlineEnvHasKey(stepBlock, envName)
+  );
+}
+
+function stepInlineEnvHasKey(stepBlock, envName) {
+  return inlineMappingHasKey(stepTopLevelValue(stepBlock, "env:"), envName);
 }
 
 function stepRunCommand(stepBlock) {
@@ -1092,23 +1152,50 @@ function defaultsWorkingDirectory(defaultsBlock, runIndent) {
 
 function workflowDefaultsShell(workflow) {
   const defaultsBlock = getOptionalBlock(workflow, "defaults:", 0);
-  return defaultsShell(defaultsBlock, 2);
+  return defaultsShell(defaultsBlock, 2) || inlineMappingHasKey(topLevelValue(workflow, "defaults:", 0), "shell:");
 }
 
 function jobDefaultsShell(jobBlock) {
   const defaultsBlock = getOptionalBlock(jobBlock, "defaults:", 4);
-  return defaultsShell(defaultsBlock, 6);
+  return defaultsShell(defaultsBlock, 6) || inlineMappingHasKey(topLevelValue(jobBlock, "defaults:", 4), "shell:");
 }
 
 function defaultsShell(defaultsBlock, runIndent) {
   const runBlock = getOptionalBlock(defaultsBlock, "run:", runIndent);
-  return hasKeyAtIndent(runBlock, "shell:", runIndent + 2);
+  return (
+    hasKeyAtIndent(runBlock, "shell:", runIndent + 2) ||
+    inlineMappingHasKey(topLevelValue(defaultsBlock, "run:", runIndent), "shell:")
+  );
 }
 
 function hasKeyAtIndent(text, key, indent) {
   return text
     .split("\n")
     .some((line) => countIndent(line) === indent && yamlKey(normalizedYamlLine(line)) === key);
+}
+
+function topLevelValue(text, key, indent) {
+  const entry = text
+    .split("\n")
+    .map((line) => (countIndent(line) === indent ? normalizedYamlLine(line) : ""))
+    .find((line) => yamlKey(line) === key);
+
+  return entry ? yamlValue(entry) : "";
+}
+
+function inlineMappingHasKey(value, key) {
+  if (!value || !value.startsWith("{")) return false;
+
+  const keyName = key.slice(0, -1).replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+  return new RegExp(`(?:^|[{,]\\s*)${keyName}\\s*:`, "u").test(value);
+}
+
+function hasNpmConfigKey(text, key) {
+  const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+  return text
+    .split("\n")
+    .map((line) => line.trim())
+    .some((line) => new RegExp(`^${escapedKey}\\s*=`, "u").test(line));
 }
 
 function getStepChildBlock(stepBlock, header) {

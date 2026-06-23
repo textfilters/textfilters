@@ -41,7 +41,7 @@ Each package repository keeps its own source, tests, and package-specific
   `npm pack --dry-run`.
 - `check` runs exact formatting, test, package dist smoke, and package dry-run
   commands while preserving package-specific smoke details; it must not
-  short-circuit before those checks run.
+  short-circuit before any required command runs.
 - A TypeScript build runs before the package dist smoke, either directly before
   `smoke:dist` in `check` or as the first command delegated by `smoke:dist`;
   delegated smoke scripts do more than rebuild.
@@ -49,6 +49,7 @@ Each package repository keeps its own source, tests, and package-specific
   recorded in `package-contract.json`.
 - Package scripts must not contain `npm publish`; release publication stays in
   the audited Release Please workflow.
+- Package-level npm configuration must not set `dry-run` or `script-shell`.
 
 Runtime dependency compatibility is tracked separately from this repository
 workflow contract. This guard focuses on manifest shape, scripts, CI, release,
@@ -71,8 +72,8 @@ is shared:
 - It checks out the repository exactly once without checkout inputs, sets up
   Node 24 once with the `@textfilters` GitHub Packages registry in a blocking
   setup step, runs exact `npm ci`, then runs exact `npm run check` in the same
-  job. The install and check steps use the default shell, are unconditional,
-  and are blocking.
+  job. The install and check steps use the default shell and npm script shell,
+  are unconditional, and are blocking.
 - The `Release Please` workflow has the exact top-level workflow name and runs
   only on unfiltered pushes to the exact `main` branch entry.
 - Release Please uses exactly one `googleapis/release-please-action@v5` step
@@ -95,11 +96,13 @@ is shared:
 - The publish job permissions are exactly `contents: read` and
   `packages: write`, and the publish step or publish job has the package
   registry token available without a conflicting step-level token override or
-  dry-run npm configuration at workflow, job, or step scope.
+  dry-run npm configuration at workflow, job, step, or package npm config
+  scope.
 - Required npm install, check, and publish commands run at the package
   repository root with the default shell.
 - `npm publish` commands, including npm invocations with options before the
-  `publish` subcommand, only appear in the audited Release Please workflow.
+  `publish` subcommand or shell continuations, only appear in the audited
+  Release Please workflow. Other workflows must not run Release Please actions.
 
 ## Release Please Contract
 
