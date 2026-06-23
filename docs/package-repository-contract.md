@@ -29,6 +29,8 @@ Each package repository keeps its own source, tests, and package-specific
 - Node baseline `engines.node: ">=24"` and package manager `npm@11.16.0`.
 - GitHub Packages publish registry:
   `https://npm.pkg.github.com`.
+- `publishConfig` is limited to the contract registry entry; no additional
+  publish metadata fields are configured.
 - Packages are publishable manifests: `private` is not true, and package
   versions use semver.
 - Published files include `dist`, `README.md`, and `LICENSE`; file-backed
@@ -88,8 +90,8 @@ is shared:
   Node 24 once with the `@textfilters` GitHub Packages registry in a blocking
   setup step, runs exact `npm ci`, then runs exact `npm run check` in the same
   job. The check job contains only these audited steps. The install and check
-  steps use the default shell and npm script shell, are unconditional, and are
-  blocking.
+  steps use the default shell and npm script shell, do not set indirect npm
+  config environment variables, are unconditional, and are blocking.
 - The `Release Please` workflow has the exact top-level workflow name and runs
   only on unfiltered pushes to the exact `main` branch entry. Its jobs are
   limited to the audited Release Please and publish jobs.
@@ -121,7 +123,8 @@ is shared:
   publish-altering npm configuration at workflow, job, step, or package npm
   config scope, including scoped registry environment overrides.
 - Required npm install, check, and publish commands run at the package
-  repository root with the default shell and without PATH overrides.
+  repository root with the default shell and without PATH, Bash startup file,
+  Node startup option, or indirect npm config overrides.
 - `npm publish` commands, including publish aliases, shell-escaped command
   words, and any `npm` invocation that reaches a publish command token before a
   shell boundary, only appear in the audited Release Please workflow. Other
@@ -131,13 +134,16 @@ is shared:
 
 Each package has a package-local `release-please-config.json` with:
 
+- optional `$schema` metadata
 - `include-component-in-tag: false`
 - only the root `.` package entry
 - package `include-component-in-tag` absent or false
 - package `release-type: "node"`
 - package name matching the repository package name
-- no root-level or package-level `skip-github-release: true`
-- no root-level or package-level `skip-github-pull-request: true`
+- no extra root-level options such as draft, prerelease, changelog, or skip
+  controls
+- no extra package-level options such as extra file updates, changelog, or skip
+  controls
 - a `.release-please-manifest.json` `.` entry matching the package version
 
 Release Please remains the release path. Packages must not be published

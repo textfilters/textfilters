@@ -28,6 +28,7 @@ const BLOCKED_NPM_CONFIG_ENV_KEYS = new Set(
     `npm_config_${contract.checkWorkflow.scope}:registry:`,
   ].map((key) => normalizeEnvKeyName(key)),
 );
+const BLOCKED_AUDITED_NPM_ENV_KEYS = ["BASH_ENV:", "NODE_OPTIONS:"];
 
 for (const pkgSpec of contract.packages) {
   const packageDir = join(packagesRoot, pkgSpec.directory);
@@ -73,6 +74,7 @@ function checkPackage(pkgSpec, packageDir) {
     pkg.publishConfig?.registry,
     contract.manifest.publishConfig.registry,
   );
+  expectOnlyJsonObjectKeys(label, "publishConfig", pkg.publishConfig, ["registry"]);
 
   for (const file of contract.manifest.requiredFiles) {
     if (!Array.isArray(pkg.files) || !pkg.files.includes(file)) {
@@ -190,7 +192,22 @@ function checkWorkflow(label, workflowPath) {
   expectStepWithInput(label, workflowPath, setupNodeStep, "registry-url", contract.checkWorkflow.registryUrl);
   expectStepWithInput(label, workflowPath, setupNodeStep, "scope", `"${contract.checkWorkflow.scope}"`);
   expectEnvAvailable(label, workflowPath, checkJob, installStep, "NODE_AUTH_TOKEN: ${{ github.token }}");
-  expectNoNpmScriptShellOverride(label, workflowPath, workflow, checkJob, checkStep);
+  expectNoNpmConfigEnvOverrides(
+    label,
+    workflowPath,
+    workflow,
+    checkJob,
+    installStep,
+    contract.checkWorkflow.installCommand,
+  );
+  expectNoNpmConfigEnvOverrides(
+    label,
+    workflowPath,
+    workflow,
+    checkJob,
+    checkStep,
+    contract.checkWorkflow.checkCommand,
+  );
   expectBlockingStep(label, workflowPath, installStep, contract.checkWorkflow.installCommand);
   expectBlockingStep(label, workflowPath, checkStep, contract.checkWorkflow.checkCommand);
   expectPackageRootStep(label, workflowPath, workflow, checkJob, installStep, contract.checkWorkflow.installCommand);
@@ -323,7 +340,22 @@ function checkReleaseWorkflow(label, workflowPath) {
   for (const envName of BLOCKED_NPM_CONFIG_ENV_KEYS) {
     expectNoEnvKey(label, workflowPath, workflow, publishJob, publishStep, `${envName}:`);
   }
-  expectNoNpmScriptShellOverride(label, workflowPath, workflow, publishJob, checkStep);
+  expectNoNpmConfigEnvOverrides(
+    label,
+    workflowPath,
+    workflow,
+    publishJob,
+    installStep,
+    contract.checkWorkflow.installCommand,
+  );
+  expectNoNpmConfigEnvOverrides(
+    label,
+    workflowPath,
+    workflow,
+    publishJob,
+    checkStep,
+    contract.checkWorkflow.checkCommand,
+  );
   expectBlockingStep(label, workflowPath, installStep, contract.checkWorkflow.installCommand);
   expectBlockingStep(label, workflowPath, checkStep, contract.checkWorkflow.checkCommand);
   expectBlockingStep(
@@ -378,6 +410,7 @@ function checkReleaseConfig(label, releaseConfigPath, packageName) {
   }
 
   const config = readJson(releaseConfigPath);
+  expectReleasePleaseConfigKeys(label, config);
   expectOnlyPackageConfig(label, config);
   if (config["skip-github-release"] === true) {
     fail(label, "release-please skip-github-release must not be true");
@@ -510,6 +543,32 @@ function expectOnlyPackageConfig(label, config) {
   const packageKeys = Object.keys(config.packages ?? {});
   if (packageKeys.length !== 1 || packageKeys[0] !== ".") {
     fail(label, 'release-please packages must include only "."');
+  }
+}
+
+function expectReleasePleaseConfigKeys(label, config) {
+  expectOnlyJsonObjectKeys(label, "release-please config", config, [
+    "$schema",
+    "include-component-in-tag",
+    "packages",
+  ]);
+
+  for (const packageConfig of Object.values(config.packages ?? {})) {
+    expectOnlyJsonObjectKeys(label, "release-please package config", packageConfig, [
+      "include-component-in-tag",
+      "package-name",
+      "release-type",
+    ]);
+  }
+}
+
+function expectOnlyJsonObjectKeys(label, name, value, allowedKeys) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return;
+
+  for (const key of Object.keys(value)) {
+    if (!allowedKeys.includes(key)) {
+      fail(label, `${name} must not include ${key}`);
+    }
   }
 }
 
@@ -745,10 +804,15 @@ function expectNoEnvKey(label, path, workflow, jobBlock, stepBlock, envName) {
   }
 }
 
-function expectNoNpmScriptShellOverride(label, path, workflow, jobBlock, stepBlock) {
-  const envName = "npm_config_script_shell:";
-  if (hasEnvKey(workflow, envName, 0) || hasEnvKey(jobBlock, envName, 4) || hasStepEnvKey(stepBlock, envName)) {
-    fail(label, `${relativePackagePath(path)} npm run check step must not set ${envName}`);
+function expectNoNpmConfigEnvOverrides(label, path, workflow, jobBlock, stepBlock, runCommand) {
+  for (const envName of BLOCKED_NPM_CONFIG_ENV_KEYS) {
+    if (
+      hasEnvKey(workflow, `${envName}:`, 0) ||
+      hasEnvKey(jobBlock, `${envName}:`, 4) ||
+      hasStepEnvKey(stepBlock, `${envName}:`)
+    ) {
+      fail(label, `${relativePackagePath(path)} ${runCommand} step must not set ${envName}:`);
+    }
   }
 }
 
@@ -874,6 +938,15 @@ function expectPackageRootStep(label, path, workflow, jobBlock, stepBlock, runCo
   }
   if (hasEnvKey(workflow, "PATH:", 0) || hasEnvKey(jobBlock, "PATH:", 4) || hasStepEnvKey(stepBlock, "PATH:")) {
     fail(label, `${relativePackagePath(path)} ${runCommand} step must not override PATH`);
+  }
+  for (const envName of BLOCKED_AUDITED_NPM_ENV_KEYS) {
+    if (
+      hasEnvKey(workflow, envName, 0) ||
+      hasEnvKey(jobBlock, envName, 4) ||
+      hasStepEnvKey(stepBlock, envName)
+    ) {
+      fail(label, `${relativePackagePath(path)} ${runCommand} step must not set ${envName}`);
+    }
   }
 
   const workingDirectory = stepTopLevelValue(stepBlock, "working-directory:");
