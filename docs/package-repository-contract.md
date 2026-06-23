@@ -53,7 +53,8 @@ Each package repository keeps its own source, tests, and package-specific
   before `smoke:dist`; it must not short-circuit before any required command
   runs or append extra commands after the audit.
 - Delegated `lint` and `test` scripts must perform real work; successful no-op
-  commands or successful early exits do not satisfy the contract.
+  commands, successful early exits, or shell-control short circuits do not
+  satisfy the contract.
 - A TypeScript build runs before the package dist smoke, either directly before
   `smoke:dist` in `check` or as the first command delegated by `smoke:dist`;
   delegated smoke scripts do real smoke work beyond rebuilding and must not be
@@ -64,7 +65,9 @@ Each package repository keeps its own source, tests, and package-specific
   GitHub Actions environment files, or set npm config environment variables that
   alter publication. Package scripts also must not write publish-altering npm
   config with `npm config set`, `npm c set`, or `npm set`; release publication
-  stays in the audited Release Please workflow.
+  stays in the audited Release Please workflow. Package scripts must not write
+  npm config files directly, and local script files invoked by package scripts
+  are scanned for publish commands.
 - Packages and locked dependencies must not expose an `npm` binary that can
   shadow the npm CLI inside npm-run-script PATH handling.
 - Locked dependency packages must not define install-time lifecycle scripts.
@@ -86,7 +89,8 @@ Package repositories keep copied workflows today, but their important contract
 is shared:
 
 - Workflow files do not use YAML anchors or aliases for control blocks,
-  environment, defaults, jobs, or steps; copied workflows stay explicit.
+  environment, defaults, jobs, steps, or non-release workflow commands; copied
+  workflows stay explicit.
   Escaped YAML keys are treated the same as their decoded keys.
 - The `Check` workflow has the exact top-level workflow name and runs on pull
   requests and pushes only to the exact `main` branch entry. The pull request
@@ -138,10 +142,11 @@ is shared:
   repository root with the default shell and without PATH, Bash startup file,
   Node startup option, HOME, or indirect npm config overrides.
 - `npm publish` commands, including publish aliases, shell-escaped command
-  words, Bash ANSI-C quoted command words, decoded YAML scalar run values,
-  folded YAML run blocks, grouped shell commands, and any `npm` invocation that
-  reaches a publish command token before a shell boundary, only appear in the
-  audited Release Please workflow. Other workflows must not grant package write
+  words, Bash ANSI-C quoted command words, IFS-expanded command words, decoded
+  YAML scalar run values, folded YAML run blocks, preserved shell continuation
+  separators, grouped shell commands, and any `npm` invocation that reaches a
+  publish command token before a shell boundary, only appear in the audited
+  Release Please workflow. Other workflows must not grant package write
   permissions, including `write-all`, use publish-capable actions, run Release
   Please actions, or invoke local workflow scripts or local composite actions.
 

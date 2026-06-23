@@ -130,7 +130,7 @@ function checkPackage(pkgSpec, packageDir) {
   expectScriptCommandOrder(label, "check", pkg.scripts?.check, contract.manifest.checkScriptMustInclude);
   expectCheckScriptOnlyAuditedCommands(label, pkg.scripts?.check);
   expectNoExitBeforeScriptCommands(label, "check", pkg.scripts?.check, contract.manifest.checkScriptMustInclude);
-  expectNoPublishInScripts(label, pkg.scripts);
+  expectNoPublishInScripts(label, packageDir, pkg.scripts);
   expectNoPublishEnvMutationInScripts(label, pkg.scripts);
   expectNoPublishLifecycleScripts(label, pkg.scripts);
   expectNoWorkspaces(label, pkg);
@@ -495,6 +495,7 @@ function checkPublishCommandScope(label, packageDir, releaseWorkflowPath) {
     if (workflowPath === releaseWorkflowPath) continue;
 
     const workflow = stripYamlComments(readFileSync(workflowPath, "utf8"));
+    expectNoYamlAnchorsOrAliases(label, workflowPath, workflow);
     if (hasNpmPublishCommand(workflow)) {
       fail(
         label,
@@ -1193,7 +1194,7 @@ function fail(label, message) {
 function splitScriptCommands(script) {
   if (typeof script !== "string") return [];
   return script
-    .split(/[ \t]*&&[ \t]*/u)
+    .split(/[ \t]*(?:&&|\|\||;)[ \t]*/u)
     .map((command) => command.trim())
     .filter(Boolean);
 }
@@ -1214,11 +1215,55 @@ function expectNoExitBeforeScriptCommands(label, scriptName, script, anchorComma
   }
 }
 
-function expectNoPublishInScripts(label, scripts) {
+function expectNoPublishInScripts(label, packageDir, scripts) {
   for (const [scriptName, script] of Object.entries(scripts ?? {})) {
     if (typeof script === "string" && hasNpmPublishCommand(script)) {
       fail(label, `script ${scriptName} must not include npm publish`);
     }
+    for (const scriptPath of localFilesInvokedByScript(packageDir, script)) {
+      const scriptText = readExistingLocalScriptFile(scriptPath);
+      if (scriptText && hasNpmPublishCommand(scriptText)) {
+        fail(label, `script ${scriptName} referenced file ${relativePackagePath(scriptPath)} must not include npm publish`);
+      }
+    }
+  }
+}
+
+function localFilesInvokedByScript(packageDir, script) {
+  if (typeof script !== "string") return [];
+
+  const localFiles = new Set();
+  for (const command of splitScriptCommands(script)) {
+    const tokens = shellTokens(command).map((token) => shellWordValue(token));
+    for (let index = 0; index < tokens.length; index += 1) {
+      const token = tokens[index];
+      if (isLocalScriptFileToken(token)) {
+        localFiles.add(resolve(packageDir, token));
+      }
+      if (["bash", "sh", "node"].includes(token) && isLocalScriptFileToken(tokens[index + 1] ?? "")) {
+        localFiles.add(resolve(packageDir, tokens[index + 1]));
+      }
+    }
+  }
+
+  return [...localFiles].filter((path) => isPathInsidePackageDir(path, packageDir));
+}
+
+function isPathInsidePackageDir(path, packageDir) {
+  return path === packageDir || path.startsWith(`${packageDir}/`);
+}
+
+function isLocalScriptFileToken(token) {
+  return token.startsWith("./") || token.startsWith("../") || token.startsWith("scripts/");
+}
+
+function readExistingLocalScriptFile(path) {
+  if (!existsSync(path)) return "";
+
+  try {
+    return readFileSync(path, "utf8");
+  } catch {
+    return "";
   }
 }
 
@@ -1227,6 +1272,9 @@ function expectNoPublishEnvMutationInScripts(label, scripts) {
     if (typeof script !== "string") continue;
     if (scriptWritesGitHubActionsEnvironmentFile(script)) {
       fail(label, `script ${scriptName} must not write GitHub Actions environment files`);
+    }
+    if (scriptWritesNpmConfigFile(script)) {
+      fail(label, `script ${scriptName} must not write npm config files`);
     }
     if (textHasBlockedNpmConfigEnvKey(script)) {
       fail(label, `script ${scriptName} must not set publish-altering npm config env`);
@@ -1248,7 +1296,26 @@ function scriptWritesGitHubActionsEnvironmentFile(script) {
       shellTokens(line)
         .map((token) => shellWordValue(token))
         .some((word) => /\bGITHUB_(ENV|PATH)\b/u.test(word)),
-    );
+  );
+}
+
+function scriptWritesNpmConfigFile(script) {
+  return shellContinuationText(script)
+    .split("\n")
+    .some((line) => {
+      const tokens = shellTokens(line).map((token) => shellWordValue(token));
+      return tokens.some((token) => isShellRedirectionToken(token)) && tokens.some((token) => isNpmConfigPathToken(token));
+    });
+}
+
+function isNpmConfigPathToken(token) {
+  return (
+    token === ".npmrc" ||
+    token.endsWith("/.npmrc") ||
+    token === "~/.npmrc" ||
+    token === "$HOME/.npmrc" ||
+    token === "${HOME}/.npmrc"
+  );
 }
 
 function expectNoPublishLifecycleScripts(label, scripts) {
@@ -1538,7 +1605,7 @@ function countNpmPublishCommands(text) {
 }
 
 function shellContinuationText(text) {
-  return text.replace(/\\[ \t]*\n[ \t]*/gu, "");
+  return text.replace(/\\[ \t]*\n/gu, "");
 }
 
 function shellScanTexts(text) {
@@ -1568,7 +1635,7 @@ function shellScanTexts(text) {
 }
 
 function yamlRunBlockCommandText(lines, startIndex, runIndent, runValue) {
-  const blockLines = [];
+  const rawBlockLines = [];
   let endIndex = startIndex;
 
   for (let index = startIndex + 1; index < lines.length; index += 1) {
@@ -1576,14 +1643,24 @@ function yamlRunBlockCommandText(lines, startIndex, runIndent, runValue) {
     if (line.trim() !== "" && countIndent(line) <= runIndent) {
       break;
     }
-    blockLines.push(line.trim());
+    rawBlockLines.push(line);
     endIndex = index;
   }
+
+  const contentIndent = yamlBlockScalarContentIndent(rawBlockLines);
+  const blockLines = rawBlockLines.map((line) =>
+    line.trim() === "" ? "" : line.slice(Math.min(countIndent(line), contentIndent)),
+  );
 
   return {
     commandText: runValue.startsWith(">") ? foldYamlBlockScalarLines(blockLines) : blockLines.join("\n"),
     endIndex,
   };
+}
+
+function yamlBlockScalarContentIndent(lines) {
+  const indents = lines.filter((line) => line.trim() !== "").map((line) => countIndent(line));
+  return indents.length === 0 ? 0 : Math.min(...indents);
 }
 
 function foldYamlBlockScalarLines(lines) {
@@ -1641,11 +1718,15 @@ function countNpmPublishCommandsInLine(line) {
 }
 
 function shellTokens(line) {
-  return line
+  return shellExpansionText(line)
     .replace(/(\d*(?:>>|<<|[<>])|[;&|(){}])/gu, " $1 ")
     .trim()
     .split(/\s+/u)
     .filter(Boolean);
+}
+
+function shellExpansionText(line) {
+  return line.replace(/\$(?:\{IFS\}|IFS)\b/gu, " ");
 }
 
 function isShellBoundaryToken(token) {
@@ -2012,7 +2093,7 @@ function yamlValue(line) {
 }
 
 function yamlScalarValue(value) {
-  const trimmed = value.trim();
+  const trimmed = value.trim().replace(/^&[^ \t,[\]{}]+(?:[ \t]+|$)/u, "").trim();
   if (trimmed.startsWith('"') && trimmed.endsWith('"')) {
     return decodeDoubleQuotedYamlKey(trimmed.slice(1, -1));
   }
@@ -2093,7 +2174,7 @@ function hasLocalWorkflowExecution(workflow) {
     }
 
     if (normalizedLine.startsWith("run: ")) {
-      const runValue = normalizedLine.slice("run: ".length).trim();
+      const runValue = yamlScalarValue(normalizedLine.slice("run: ".length));
       if (/^[|>]/u.test(runValue)) {
         runBlockIndent = indent;
       } else if (shellLineInvokesLocalCode(runValue)) {
