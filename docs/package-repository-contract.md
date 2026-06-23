@@ -9,6 +9,12 @@ command is:
 node scripts/check-package-contract.mjs
 ```
 
+The focused regression fixture runner for reviewed bypass classes is:
+
+```sh
+node scripts/check-package-contract-regressions.mjs
+```
+
 Run the command from this documentation repository with sibling package
 repositories checked out next to it:
 
@@ -76,6 +82,14 @@ Each package repository keeps its own source, tests, and package-specific
   directory entry points, root script files, and extensionless script entry
   points invoked by package scripts are scanned for publish commands and
   publish-altering mutations.
+- Package scripts are intentionally fail-closed for unsupported dynamic command
+  forms. Shell command substitutions, shell function definitions, shell
+  pipelines, `child_process` command execution, `npm exec` snippets, `npm pkg`
+  mutations, and direct package manifest writes are contract drift rather than
+  interpreted as safe. Local script files invoked by package scripts are scanned
+  recursively through local `import`, dynamic `import()`, and `require()`
+  dependencies, and Node preload modules from `--require`, `--import`, and
+  `--loader` are treated as referenced local code.
 - Packages and locked dependencies must not expose an `npm` binary that can
   shadow the npm CLI inside npm-run-script PATH handling.
 - Package manifests and lockfiles must not use local `file:` or `link:`
@@ -170,6 +184,12 @@ is shared:
   root and non-root working directories, bare root script file arguments, and
   extensionless local script entry points are considered when deciding whether a
   command invokes checked-in local code.
+- Non-release workflow command surfaces are also fail-closed for unsupported
+  dynamic execution: shell command substitutions, shell function definitions,
+  `child_process` command execution, `npm exec` snippets, and package manifest
+  mutations are rejected. Workflow `uses` values are decoded from quoted,
+  plain, folded, and block-scalar YAML before release, publish, and local-action
+  guards are evaluated.
 
 ## Release Please Contract
 
