@@ -46,6 +46,19 @@ export function javascriptConcatenatedStringTexts(text) {
   return strings;
 }
 
+export function javascriptJoinedStringTexts(text) {
+  const values = [];
+  const joinPattern = /\[\s*([\s\S]{0,240}?)\]\s*\.join\s*\(\s*([`"'])([\s\S]*?)\2\s*\)/gu;
+  for (const match of text.matchAll(joinPattern)) {
+    const parts = javascriptStringTexts(match[1]);
+    if (parts.length > 0) {
+      values.push(parts.join(match[3]));
+    }
+  }
+
+  return values;
+}
+
 export function javascriptStaticTemplateTexts(text) {
   const strings = [];
   for (let index = 0; index < text.length; index += 1) {
@@ -266,6 +279,15 @@ export function isPackagePublishCommandToken(token, packagePublishCommandVariabl
 }
 
 export function isPotentialPackagePublishCommandToken(rawToken, resolvedWord, shellVariables) {
+  if (resolvedWord.includes(UNKNOWN_GITHUB_ACTIONS_EXPRESSION)) return true;
+
+  const variableName = shellVariableReferenceName(shellWordValue(rawToken));
+  if (!variableName) return false;
+
+  return !shellVariables.has(variableName) || resolvedWord === "";
+}
+
+export function isPotentialNpmPublishSubcommandToken(rawToken, resolvedWord, shellVariables) {
   if (resolvedWord.includes(UNKNOWN_GITHUB_ACTIONS_EXPRESSION)) return true;
 
   const variableName = shellVariableReferenceName(shellWordValue(rawToken));

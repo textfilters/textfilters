@@ -1,4 +1,4 @@
-import { countJavaScriptEmbeddedPublishCommands, countJavaScriptStringPublishCommands, isNpmCommandToken, isNpmPublishSubcommandToken, isNpxCommandToken, isPackagePublishCommandToken, isPotentialPackagePublishCommandToken, isShellBoundaryToken, isShellRedirectionToken } from "./javascript-string-scanner.mjs";
+import { countJavaScriptEmbeddedPublishCommands, countJavaScriptStringPublishCommands, isNpmCommandToken, isNpmPublishSubcommandToken, isNpxCommandToken, isPackagePublishCommandToken, isPotentialNpmPublishSubcommandToken, isPotentialPackagePublishCommandToken, isShellBoundaryToken, isShellRedirectionToken } from "./javascript-string-scanner.mjs";
 import { envSplitStringCommandText, isEnvCommandToken } from "./local-script-execution.mjs";
 import { interpreterFileOptionConsumesValue, isFileArgumentInterpreterToken, shellWordValue } from "./local-workflow-scanner.mjs";
 import { shellCommentText } from "./shell-script-syntax.mjs";
@@ -98,7 +98,10 @@ export function countNpmPublishCommandsInLine(
       if (isShellBoundaryToken(token)) {
         break;
       }
-      if (isNpmPublishSubcommandToken(token, publishSubcommandVariables)) {
+      if (
+        isNpmPublishSubcommandToken(token, publishSubcommandVariables) ||
+        isPotentialNpmPublishSubcommandToken(tokens[commandIndex], token, shellVariables)
+      ) {
         publishCommandCount += 1;
         break;
       }

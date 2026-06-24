@@ -1,4 +1,4 @@
-import { isNpmCommandToken, isNpxCommandToken, isShellBoundaryToken, isShellOutputRedirectionToken, isShellRedirectionToken, javascriptConcatenatedStringTexts, javascriptStaticTemplateTexts, javascriptStringTexts, readJavaScriptStaticStringAt } from "./javascript-string-scanner.mjs";
+import { isNpmCommandToken, isNpxCommandToken, isShellBoundaryToken, isShellOutputRedirectionToken, isShellRedirectionToken, javascriptConcatenatedStringTexts, javascriptJoinedStringTexts, javascriptStaticTemplateTexts, javascriptStringTexts, readJavaScriptStaticStringAt } from "./javascript-string-scanner.mjs";
 import { commandBasename, expectNoUnsupportedLocalScriptText, isPathInsidePackageDir, listPackageScriptFiles, localScriptDependencyPaths } from "./local-script-execution.mjs";
 import { relativePackagePath, shellWordValue } from "./local-workflow-scanner.mjs";
 import { checkWorkflow } from "./package-checks.mjs";
@@ -113,7 +113,6 @@ export function readExecutedToolingScriptText(scriptPath, packageDir, visited = 
 export function shouldScanExecutedToolingDependency(dependencyPath, packageDir) {
   const relativePath = dependencyPath.slice(packageDir.length + 1);
   return (
-    !relativePath.startsWith("dist/") &&
     relativePath !== "package.json" &&
     relativePath !== "package-lock.json"
   );
@@ -137,6 +136,15 @@ export function expectNoPublishEnvMutationInScriptText(label, subject, script) {
 
 export function scriptWritesGitHubActionsEnvironmentFile(script) {
   if (/\bGITHUB_(ENV|PATH)\b/u.test(script)) {
+    return true;
+  }
+  if (
+    [
+      ...javascriptConcatenatedStringTexts(script),
+      ...javascriptJoinedStringTexts(script),
+      ...javascriptStaticTemplateTexts(script),
+    ].some((value) => value === "GITHUB_ENV" || value === "GITHUB_PATH")
+  ) {
     return true;
   }
 
@@ -311,6 +319,7 @@ export function scriptWritesPackageManifestFile(script) {
     packageWriteApiPattern.test(script) ||
     scriptWritesTargetFileThroughJavaScriptLiteral(script, isPackageManifestPathToken) ||
     scriptWritesTargetFileThroughJavaScriptVariable(script, isPackageManifestPathToken) ||
+    scriptComputesTargetPathNearWriteOperation(script, isPackageManifestPathToken) ||
     scriptMentionsTargetPathWithWriteOperation(script, isPackageManifestPathToken)
   ) {
     return true;
@@ -373,19 +382,6 @@ export function scriptComputesTargetPathNearWriteOperation(script, isTargetPathT
 
 export function scriptUsesJavaScriptWriteApi(script) {
   return /\b(?:writeFile(?:Sync)?|appendFile(?:Sync)?|createWriteStream|openSync)\s*\(/u.test(script);
-}
-
-export function javascriptJoinedStringTexts(script) {
-  const values = [];
-  const joinPattern = /\[\s*([\s\S]{0,240}?)\]\s*\.join\s*\(\s*([`"'])([\s\S]*?)\2\s*\)/gu;
-  for (const match of script.matchAll(joinPattern)) {
-    const parts = javascriptStringTexts(match[1]);
-    if (parts.length > 0) {
-      values.push(parts.join(match[3]));
-    }
-  }
-
-  return values;
 }
 
 export function scriptMentionsTargetPathWithWriteOperation(script, isTargetPathToken) {

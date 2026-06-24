@@ -366,11 +366,15 @@ export function expectBlock(label, path, text, header, indent) {
   if (!text) return "";
 
   const lines = text.split("\n");
-  const start = lines.findIndex((line) => isYamlBlockHeader(line, header, indent));
+  const blockIndexes = lines.flatMap((line, index) => (isYamlBlockHeader(line, header, indent) ? [index] : []));
+  const start = blockIndexes[0] ?? -1;
 
   if (start === -1) {
     fail(label, `${relativePackagePath(path)} must include ${header}`);
     return "";
+  }
+  if (blockIndexes.length > 1) {
+    fail(label, `${relativePackagePath(path)} must not repeat ${header}`);
   }
 
   let end = lines.length;
@@ -508,6 +512,12 @@ export function expectExactSteps(label, path, jobBlock, jobName, expectedSteps) 
   if (!jobBlock || expectedSteps.some((stepBlock) => !stepBlock)) return;
 
   const stepBlocks = extractStepBlocks(jobBlock);
+  for (const stepBlock of stepBlocks) {
+    if (hasTopLevelStepKey(stepBlock, "uses:") && hasTopLevelStepKey(stepBlock, "run:")) {
+      fail(label, `${relativePackagePath(path)} step must not mix uses and run`);
+    }
+  }
+
   const stepsMatch =
     stepBlocks.length === expectedSteps.length &&
     expectedSteps.every((stepBlock, index) => stepBlocks[index] === stepBlock);
@@ -522,5 +532,8 @@ export function arraysEqual(actual, expected) {
 }
 
 export function fail(label, message) {
-  failures.push(`${label}: ${message}`);
+  const failure = `${label}: ${message}`;
+  if (!failures.includes(failure)) {
+    failures.push(failure);
+  }
 }

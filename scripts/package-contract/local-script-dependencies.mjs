@@ -1,4 +1,4 @@
-import { decodeJavaScriptString, javascriptConcatenatedStringTexts, javascriptStringTexts, readJavaScriptStaticStringAt, staticJavaScriptTemplateValue } from "./javascript-string-scanner.mjs";
+import { decodeJavaScriptString, javascriptConcatenatedStringTexts, javascriptJoinedStringTexts, javascriptStaticTemplateTexts, javascriptStringTexts, readJavaScriptStaticStringAt, staticJavaScriptTemplateValue } from "./javascript-string-scanner.mjs";
 import { countIndent } from "./local-workflow-scanner.mjs";
 import { EXECUTED_CONFIG_LOCAL_PATH_KEYS } from "./state.mjs";
 import { normalizedYamlLine, yamlKey, yamlScalarValue, yamlValue } from "./workflow-action-config.mjs";
@@ -190,6 +190,8 @@ export function localConfigDependencySpecifiers(text) {
   return [
     ...javascriptStringTexts(text).filter((specifier) => isLocalConfigDependencySpecifier(specifier)),
     ...javascriptConcatenatedStringTexts(text).filter((specifier) => isLocalConfigDependencySpecifier(specifier)),
+    ...javascriptJoinedStringTexts(text).filter((specifier) => isLocalConfigDependencySpecifier(specifier)),
+    ...javascriptStaticTemplateTexts(text).filter((specifier) => isLocalConfigDependencySpecifier(specifier)),
     ...yamlConfigDependencySpecifiers(text),
   ];
 }

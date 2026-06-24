@@ -446,4 +446,59 @@ export function runCases(expectPass, expectFail) {
         - run: printf 'npm publish --registry=https://npm.pkg.github.com\\n' > /tmp/publish.sh; bash /tmp/publish.sh
   `;
   }, "manual-publish.yml must not write generated workflow scripts");
+  expectFail("duplicate workflow jobs block", (state) => {
+    state.checkWorkflow += `
+
+jobs:
+  shadow:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo shadow
+`;
+  }, "check.yml must not repeat jobs:");
+  expectFail("unknown expression npm subcommand", (state) => {
+    state.extraWorkflow = `name: Manual Publish
+
+  on:
+    workflow_dispatch:
+
+  jobs:
+    publish:
+      runs-on: ubuntu-latest
+      steps:
+        - run: npm \${{ vars.NPM_SUBCOMMAND }} --registry=https://npm.pkg.github.com
+  `;
+  }, "manual-publish.yml must not include npm publish");
+  expectFail("computed vitest setup file path", (state) => {
+    state.files = {
+      "vitest.config.mjs": "const setupFile = ['src', 'setup.ts'].join('/');\nexport default { test: { setupFiles: [setupFile] } };\n",
+      "src/setup.ts": "import { appendFileSync } from 'node:fs';\nappendFileSync('.npmrc', 'dry-run=true\\n');\n",
+    };
+  }, "vitest.config.mjs must not write npm config files");
+  expectFail("joined package manifest mutation path", (state) => {
+    state.files = {
+      "prettier.config.mjs": "import { writeFileSync } from 'node:fs';\nconst target = ['package', 'json'].join('.');\nwriteFileSync(target, '{}\\n');\nexport default {};\n",
+    };
+  }, "prettier.config.mjs must not mutate package.json");
+  expectFail("explicit dist tooling dependency mutation", (state) => {
+    state.files = {
+      "vitest.config.mjs": "export default { test: { setupFiles: ['dist/setup.mjs'] } };\n",
+      "dist/setup.mjs": "import { appendFileSync } from 'node:fs';\nappendFileSync('.npmrc', 'dry-run=true\\n');\n",
+    };
+  }, "vitest.config.mjs must not write npm config files");
+  expectFail("workflow step mixes uses and run", (state) => {
+    state.checkWorkflow = state.checkWorkflow.replace(
+      "      - uses: actions/setup-node@v6",
+      "      - uses: actions/setup-node@v6\n        run: echo setup",
+    );
+  }, "check.yml step must not mix uses and run");
+  expectFail("computed GitHub environment file mutation", (state) => {
+    state.files = {
+      "prettier.config.mjs": "import { appendFileSync } from 'node:fs';\nappendFileSync(process.env['GITHUB_' + 'ENV'], 'NODE_OPTIONS=--require ./hook.cjs\\n');\nexport default {};\n",
+    };
+  }, "prettier.config.mjs must not write GitHub Actions environment files");
+  expectFail("smoke eval non-dist import", (state) => {
+    state.packageJson.scripts["smoke:dist"] =
+      "node --input-type=module --eval \"await import('./dist/index.js'); await import('data:text/javascript,console.log(1)')\"";
+  }, "script smoke:dist must match an audited dist smoke template");
 }

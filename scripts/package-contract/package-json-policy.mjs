@@ -1,5 +1,4 @@
-import { isShellBoundaryToken, isShellRedirectionToken } from "./javascript-string-scanner.mjs";
-import { localScriptDependencySpecifiers } from "./local-script-dependencies.mjs";
+import { isShellBoundaryToken, isShellRedirectionToken, readJavaScriptStaticStringAt } from "./javascript-string-scanner.mjs";
 import { relativePackagePath, shellWordValue } from "./local-workflow-scanner.mjs";
 import { shellTokens } from "./shell-publish-counter.mjs";
 import { splitScriptCommandParts, splitScriptCommands } from "./shell-script-syntax.mjs";
@@ -320,10 +319,22 @@ export function auditedSimpleScriptTokens(script) {
 }
 
 export function nodeEvalUsesOnlyBuiltDistEntrypoint(scriptText) {
-  if (!scriptText.includes("import('./dist/index.js')") && !scriptText.includes('import("./dist/index.js")')) {
-    return false;
+  const importSpecifiers = javascriptImportSpecifiers(scriptText);
+  return arraysEqual(importSpecifiers, ["./dist/index.js"]);
+}
+
+export function javascriptImportSpecifiers(scriptText) {
+  const specifiers = [];
+  const importPattern = /\bimport\s*(?:\/\*[\s\S]*?\*\/\s*)*\(\s*(?:\/\*[\s\S]*?\*\/\s*)*/gu;
+
+  for (const match of scriptText.matchAll(importPattern)) {
+    const specifier = readJavaScriptStaticStringAt(scriptText, match.index + match[0].length);
+    if (specifier.closed) {
+      specifiers.push(specifier.value);
+    }
   }
-  return localScriptDependencySpecifiers(scriptText).every((specifier) => specifier === "./dist/index.js");
+
+  return specifiers;
 }
 
 export function isSuccessfulExitCommand(command) {
