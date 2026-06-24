@@ -15,6 +15,7 @@ const TRUSTED_GITHUB_RUNNER = "ubuntu-latest";
 const AUDITED_RUNNER_OS = "linux";
 const AUDITED_RUNNER_CPU = "x64";
 const AUDITED_RUNNER_LIBC = "glibc";
+const UNKNOWN_GITHUB_ACTIONS_EXPRESSION = "__UNKNOWN_GITHUB_ACTIONS_EXPRESSION__";
 const NPM_PUBLISH_SUBCOMMANDS = new Set(["publish", "pu", "pub", "publ", "publi", "publis"]);
 const CHILD_PROCESS_EXECUTION_METHODS = new Set([
   "exec",
@@ -70,6 +71,7 @@ const BLOCKED_NPM_CONFIG_ENV_KEYS = new Set(
   ].map((key) => normalizeEnvKeyName(key)),
 );
 const BLOCKED_AUDITED_NPM_ENV_KEYS = ["BASH_ENV:", "HOME:", "NODE_OPTIONS:"];
+const BLOCKED_WORKFLOW_STARTUP_ENV_KEYS = ["BASH_ENV", "NODE_OPTIONS"];
 const DEPENDENCY_GROUPS = [
   "dependencies",
   "devDependencies",
@@ -111,7 +113,17 @@ const CHECK_SCRIPT_WITH_BUILD = "npm run lint && npm test && npm run build && np
 const CHECK_SCRIPT_WITH_SMOKE_BUILD = "npm run lint && npm test && npm run smoke:dist && npm run pack:dry-run";
 const PROFANITY_DIST_SMOKE_SCRIPT =
   "npm run build && tsc --ignoreConfig --noEmit --target ES2024 --module NodeNext --moduleResolution NodeNext --strict --skipLibCheck tests/dist-public-api-smoke.ts && node tests/dist-public-api-smoke.mjs";
-const EXECUTED_TOOLING_SCRIPT_EXTENSIONS = new Set([".cjs", ".cts", ".js", ".mjs", ".mts", ".sh", ".ts", ".tsx"]);
+const EXECUTED_TOOLING_SCRIPT_EXTENSIONS = new Set([
+  ".cjs",
+  ".cts",
+  ".js",
+  ".jsx",
+  ".mjs",
+  ".mts",
+  ".sh",
+  ".ts",
+  ".tsx",
+]);
 const EXECUTED_TOOLING_CONFIG_FILES = [
   ".prettierrc",
   ".prettierrc.cjs",
@@ -667,6 +679,12 @@ function expectNoUnsupportedWorkflowCommands(label, path, workflow) {
   }
   if (textHasBlockedNpmConfigEnvKey(workflow)) {
     fail(label, `${relativePackagePath(path)} must not set publish-altering npm config env`);
+  }
+  if (textHasBlockedWorkflowStartupEnvKey(workflow)) {
+    fail(label, `${relativePackagePath(path)} must not set startup hook env`);
+  }
+  if (scriptWritesGitHubActionsEnvironmentFile(workflow)) {
+    fail(label, `${relativePackagePath(path)} must not write GitHub Actions environment files`);
   }
 }
 
@@ -2435,7 +2453,8 @@ function escapeRegExpChar(char) {
 
 function localScriptDependencySpecifiers(text) {
   const specifiers = [];
-  const callPattern = /\b(?:import|require)\s*\(\s*(?:\/\*[\s\S]*?\*\/\s*)*(["'`])(\.[^"'`$]+)\1/gu;
+  const callPattern =
+    /\b(?:import|require)\s*(?:\/\*[\s\S]*?\*\/\s*)*\(\s*(?:\/\*[\s\S]*?\*\/\s*)*(["'`])(\.[^"'`$]+)\1/gu;
   const shellSourcePattern =
     /^\s*(?:\.|source)\s+((?:\.{1,2}\/|[A-Za-z0-9_.-]+\/)[^\s;&|]+|[A-Za-z0-9_.-]+\.(?:bash|sh))\b/u;
 
@@ -2448,6 +2467,7 @@ function localScriptDependencySpecifiers(text) {
     specifiers.push(decodeJavaScriptString(match[2]));
   }
   specifiers.push(...localJavaScriptVariableDependencySpecifiers(text));
+  specifiers.push(...localJavaScriptNewUrlDependencySpecifiers(text));
   if (textHasExecutedConfigLocalPathKey(text) || textHasLocalConfigPathList(text)) {
     specifiers.push(...localConfigDependencySpecifiers(text));
   }
@@ -2456,6 +2476,46 @@ function localScriptDependencySpecifiers(text) {
 }
 
 function localJavaScriptVariableDependencySpecifiers(text) {
+  const variables = localJavaScriptStringVariables(text);
+  if (variables.size === 0) return [];
+
+  const specifiers = [];
+  const variableCallPattern =
+    /\b(?:import|require)\s*(?:\/\*[\s\S]*?\*\/\s*)*\(\s*([A-Za-z_$][A-Za-z0-9_$]*)\s*\)/gu;
+  for (const match of text.matchAll(variableCallPattern)) {
+    const specifier = variables.get(match[1]);
+    if (specifier) {
+      specifiers.push(specifier);
+    }
+  }
+
+  return specifiers;
+}
+
+function localJavaScriptNewUrlDependencySpecifiers(text) {
+  const specifiers = [];
+  const directNewUrlPattern =
+    /\bnew\s+URL\s*\(\s*(?:\/\*[\s\S]*?\*\/\s*)*(["'`])(\.[^"'`$]+)\1\s*,\s*(?:\/\*[\s\S]*?\*\/\s*)*import\.meta\.url\s*\)/gu;
+  for (const match of text.matchAll(directNewUrlPattern)) {
+    specifiers.push(decodeJavaScriptString(match[2]));
+  }
+
+  const variables = localJavaScriptStringVariables(text);
+  if (variables.size === 0) return specifiers;
+
+  const variableNewUrlPattern =
+    /\bnew\s+URL\s*\(\s*(?:\/\*[\s\S]*?\*\/\s*)*([A-Za-z_$][A-Za-z0-9_$]*)\s*,\s*(?:\/\*[\s\S]*?\*\/\s*)*import\.meta\.url\s*\)/gu;
+  for (const match of text.matchAll(variableNewUrlPattern)) {
+    const specifier = variables.get(match[1]);
+    if (specifier) {
+      specifiers.push(specifier);
+    }
+  }
+
+  return specifiers;
+}
+
+function localJavaScriptStringVariables(text) {
   const variables = new Map();
   const assignmentPattern = /\b(?:const|let|var)\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*=\s*/gu;
 
@@ -2465,18 +2525,8 @@ function localJavaScriptVariableDependencySpecifiers(text) {
       variables.set(match[1], string.value);
     }
   }
-  if (variables.size === 0) return [];
 
-  const specifiers = [];
-  const variableCallPattern = /\b(?:import|require)\s*\(\s*([A-Za-z_$][A-Za-z0-9_$]*)\s*\)/gu;
-  for (const match of text.matchAll(variableCallPattern)) {
-    const specifier = variables.get(match[1]);
-    if (specifier) {
-      specifiers.push(specifier);
-    }
-  }
-
-  return specifiers;
+  return variables;
 }
 
 function textHasExecutedConfigLocalPathKey(text) {
@@ -3602,22 +3652,25 @@ function evaluatedGitHubActionsExpressionString(expression) {
   const literal = githubActionsExpressionStringLiteral(expression);
   if (literal !== null) return literal;
 
+  if (expression === "github.workspace") return "$GITHUB_WORKSPACE";
+
   const formatCall = /^format\(([\s\S]*)\)$/u.exec(expression);
   if (formatCall) {
     return evaluatedGitHubActionsFormatCall(formatCall[1]);
   }
 
-  return "";
+  return UNKNOWN_GITHUB_ACTIONS_EXPRESSION;
 }
 
 function evaluatedGitHubActionsFormatCall(argumentsText) {
   const args = githubActionsExpressionArguments(argumentsText);
-  if (args.length === 0) return "";
+  if (args.length === 0) return UNKNOWN_GITHUB_ACTIONS_EXPRESSION;
 
   const template = githubActionsExpressionStringLiteral(args[0]);
-  if (template === null) return "";
+  if (template === null) return UNKNOWN_GITHUB_ACTIONS_EXPRESSION;
 
-  const values = args.slice(1).map((argument) => githubActionsExpressionStringLiteral(argument) ?? "");
+  const values = args.slice(1).map((argument) => githubActionsExpressionStringLiteral(argument));
+  if (values.some((value) => value === null)) return UNKNOWN_GITHUB_ACTIONS_EXPRESSION;
   return template.replace(/\{\{|\}\}|\{(\d+)\}/gu, (match, index) => {
     if (match === "{{") return "{";
     if (match === "}}") return "}";
@@ -3809,8 +3862,8 @@ function yamlBlockContainingHeader(lines, header, indent) {
 function recordWorkflowEnvValue(envValues, key, value) {
   const name = unquoteYamlKey(key).trim();
   if (!/^[A-Za-z_][A-Za-z0-9_]*$/u.test(name)) return;
-  if (typeof value !== "string" || value.includes("${{")) return;
-  envValues.set(name, value);
+  if (typeof value !== "string") return;
+  envValues.set(name, normalizeGitHubActionsExpressions(value));
 }
 
 function startsMultilineQuotedYamlScalar(value) {
@@ -4052,7 +4105,10 @@ function countNpmPublishCommandsInLine(
     publishCommandCount += countEnvSplitStringPublishCommands(tokens, index, shellVariables);
     publishCommandCount += countEvalWrappedPublishCommands(tokens, index, shellVariables);
     publishCommandCount += countInterpreterWrappedPublishCommands(tokens, index, shellVariables);
-    if (!isPackagePublishCommandToken(resolvedWord, packagePublishCommandVariables) && !npmFunctionNames.has(resolvedWord)) {
+    const mayBePackagePublishCommand =
+      isPackagePublishCommandToken(resolvedWord, packagePublishCommandVariables) ||
+      isPotentialPackagePublishCommandToken(tokens[index], resolvedWord, shellVariables);
+    if (!mayBePackagePublishCommand && !npmFunctionNames.has(resolvedWord)) {
       continue;
     }
 
@@ -4890,6 +4946,15 @@ function isPackagePublishCommandToken(token, packagePublishCommandVariables = ne
   );
 }
 
+function isPotentialPackagePublishCommandToken(rawToken, resolvedWord, shellVariables) {
+  if (resolvedWord.includes(UNKNOWN_GITHUB_ACTIONS_EXPRESSION)) return true;
+
+  const variableName = shellVariableReferenceName(shellWordValue(rawToken));
+  if (!variableName) return false;
+
+  return !shellVariables.has(variableName) || resolvedWord === "";
+}
+
 function isNpxCommandToken(token, npxVariables = new Set()) {
   return (
     /(?:^|\/)npx$/u.test(token.replace(/\\/gu, "/")) ||
@@ -5306,6 +5371,14 @@ function textHasBlockedNpmConfigEnvKey(text) {
   return false;
 }
 
+function textHasBlockedWorkflowStartupEnvKey(text) {
+  const keyPattern = new RegExp(
+    `(?:^|[\\s{,])["']?(?:${BLOCKED_WORKFLOW_STARTUP_ENV_KEYS.join("|")})["']?\\s*[:=]`,
+    "mu",
+  );
+  return keyPattern.test(text);
+}
+
 function isBlockedNpmConfigEnvKey(envName) {
   const normalizedEnvName = normalizeEnvKeyName(envName);
   if (!normalizedEnvName.startsWith("npm_config_")) return false;
@@ -5368,6 +5441,14 @@ function workflowScalarValues(workflow, keyName) {
   for (let index = 0; index < lines.length; index += 1) {
     const line = lines[index];
     const normalizedLine = normalizedYamlLine(line);
+    if (normalizedLine.startsWith("{")) {
+      for (const entry of inlineMappingEntries(normalizedLine)) {
+        if (`${entry.key}:` === keyName) {
+          values.push(entry.value);
+        }
+      }
+      continue;
+    }
     if (yamlKey(normalizedLine) !== keyName) continue;
 
     const rawValue = yamlValue(normalizedLine);

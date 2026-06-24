@@ -941,6 +941,145 @@ expectFail("vitest workspace project config mutation", (state) => {
       "import { appendFileSync } from 'node:fs';\nappendFileSync('.npmrc', 'dry-run=true\\n');\nexport default {};\n",
   };
 }, "vitest.workspace.ts must not write npm config files");
+expectFail("workflow env expression publish command", (state) => {
+  state.extraWorkflow = `name: Manual Publish
+
+on:
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    env:
+      CMD: \${{ format('npm') }}
+    steps:
+      - run: $CMD publish --registry=https://npm.pkg.github.com
+`;
+}, "manual-publish.yml must not include npm publish");
+expectFail("workflow unknown env expression publish command", (state) => {
+  state.extraWorkflow = `name: Manual Publish
+
+on:
+  workflow_dispatch:
+    inputs:
+      command:
+        type: string
+        default: npm
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    env:
+      CMD: \${{ inputs.command }}
+    steps:
+      - run: $CMD publish --registry=https://npm.pkg.github.com
+`;
+}, "manual-publish.yml must not include npm publish");
+expectFail("workflow unknown run expression publish command", (state) => {
+  state.extraWorkflow = `name: Manual Publish
+
+on:
+  workflow_dispatch:
+    inputs:
+      command:
+        type: string
+        default: npm
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - run: \${{ inputs.command }} publish --registry=https://npm.pkg.github.com
+`;
+}, "manual-publish.yml must not include npm publish");
+expectFail("workflow GitHub path file write", (state) => {
+  state.extraWorkflow = `name: Manual Publish
+
+on:
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - run: printf './scripts\\n' >> "$GITHUB_PATH"
+`;
+}, "manual-publish.yml must not write GitHub Actions environment files");
+expectFail("flow mapping local action step", (state) => {
+  state.extraWorkflow = `name: Manual Publish
+
+on:
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - { uses: ./publish-action }
+`;
+  state.files = {
+    "publish-action/action.yml": `runs:
+  using: composite
+  steps:
+    - run: npm publish --registry=https://npm.pkg.github.com
+      shell: bash
+`,
+  };
+}, "manual-publish.yml must not invoke local workflow scripts or actions");
+expectFail("tooling worker new URL mutation", (state) => {
+  state.files = {
+    "prettier.config.mjs":
+      "import { Worker } from 'node:worker_threads';\nnew Worker(new URL('./hook.mjs', import.meta.url), { type: 'module' });\nexport default {};\n",
+    "hook.mjs": "import { appendFileSync } from 'node:fs';\nappendFileSync('.npmrc', 'dry-run=true\\n');\n",
+  };
+}, "prettier.config.mjs must not write npm config files");
+expectFail("workflow BASH_ENV startup env", (state) => {
+  state.extraWorkflow = `name: Manual Publish
+
+on:
+  workflow_dispatch:
+
+env: { BASH_ENV: ./hook.sh }
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo ok
+`;
+  state.files = {
+    "hook.sh": "npm publish --registry=https://npm.pkg.github.com\n",
+  };
+}, "manual-publish.yml must not set startup hook env");
+expectFail("workflow NODE_OPTIONS startup env", (state) => {
+  state.extraWorkflow = `name: Manual Publish
+
+on:
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    env:
+      NODE_OPTIONS: --import ./hook.mjs
+    steps:
+      - run: node -e "console.log('ok')"
+`;
+  state.files = {
+    "hook.mjs": "import { appendFileSync } from 'node:fs';\nappendFileSync('.npmrc', 'dry-run=true\\n');\n",
+  };
+}, "manual-publish.yml must not set startup hook env");
+expectFail("tooling commented dynamic import mutation", (state) => {
+  state.files = {
+    "prettier.config.mjs": "await import /* hook */ ('./hook.mjs');\nexport default {};\n",
+    "hook.mjs": "import { appendFileSync } from 'node:fs';\nappendFileSync('.npmrc', 'dry-run=true\\n');\n",
+  };
+}, "prettier.config.mjs must not write npm config files");
+expectFail("vitest discovered jsx test file mutation", (state) => {
+  state.files = {
+    "tests/mutate.test.jsx": "import { appendFileSync } from 'node:fs';\nappendFileSync('.npmrc', 'dry-run=true\\n');\n",
+  };
+}, "tests/mutate.test.jsx must not write npm config files");
 
 console.log("Regression contract checks passed.");
 
