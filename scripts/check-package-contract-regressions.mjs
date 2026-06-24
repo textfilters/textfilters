@@ -603,6 +603,115 @@ expectFail("escaped child_process module reference", (state) => {
       "const cp = await import('node:child\\x5fprocess');\ncp.spawnSync('npm', ['publish', '--registry=https://npm.pkg.github.com']);\n",
   };
 }, "must not use child_process command execution");
+expectFail("workflow process substitution source", (state) => {
+  state.extraWorkflow = `name: Manual Publish
+
+on:
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - run: source <(echo 'npm publish --registry=https://npm.pkg.github.com')
+`;
+}, "manual-publish.yml must not use shell process substitution");
+expectFail("workflow path lookup local script", (state) => {
+  state.extraWorkflow = `name: Manual Publish
+
+on:
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - run: PATH=.:$PATH publish.sh
+`;
+  state.files = {
+    "publish.sh": "npm publish --registry=https://npm.pkg.github.com\n",
+  };
+}, "manual-publish.yml must not invoke local workflow scripts or actions");
+expectFail("workflow env path lookup local script", (state) => {
+  state.extraWorkflow = `name: Manual Publish
+
+on:
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - run: env PATH=.:$PATH publish.sh
+`;
+  state.files = {
+    "publish.sh": "npm publish --registry=https://npm.pkg.github.com\n",
+  };
+}, "manual-publish.yml must not invoke local workflow scripts or actions");
+expectFail("workflow variable path lookup local script", (state) => {
+  state.extraWorkflow = `name: Manual Publish
+
+on:
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - run: p=.; PATH=$p:$PATH publish.sh
+`;
+  state.files = {
+    "publish.sh": "npm publish --registry=https://npm.pkg.github.com\n",
+  };
+}, "manual-publish.yml must not invoke local workflow scripts or actions");
+expectFail("ANSI-C quoted publish command", (state) => {
+  state.extraWorkflow = `name: Manual Publish
+
+on:
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - run: n$'\\x70'm $'\\x70ublish' --registry=https://npm.pkg.github.com
+`;
+}, "manual-publish.yml must not include npm publish");
+expectFail("workflow block scalar env publish command", (state) => {
+  state.extraWorkflow = `name: Manual Publish
+
+on:
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          CMD: >-
+            npm
+        run: $CMD publish --registry=https://npm.pkg.github.com
+`;
+}, "manual-publish.yml must not include npm publish");
+expectFail("computed child_process method reference", (state) => {
+  state.files = {
+    "prettier.config.mjs":
+      "const cp = await import('node:child_process');\ncp['sp' + 'awnSync']('npm', ['publish', '--registry=https://npm.pkg.github.com']);\nexport default {};\n",
+  };
+}, "prettier.config.mjs must not use child_process command execution");
+expectFail("pnpm publish command", (state) => {
+  state.extraWorkflow = `name: Manual Publish
+
+on:
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - run: pnpm publish --registry=https://npm.pkg.github.com
+`;
+}, "manual-publish.yml must not include npm publish");
 
 console.log("Regression contract checks passed.");
 

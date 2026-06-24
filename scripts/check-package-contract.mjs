@@ -16,6 +16,14 @@ const AUDITED_RUNNER_OS = "linux";
 const AUDITED_RUNNER_CPU = "x64";
 const AUDITED_RUNNER_LIBC = "glibc";
 const NPM_PUBLISH_SUBCOMMANDS = new Set(["publish", "pu", "pub", "publ", "publi", "publis"]);
+const CHILD_PROCESS_EXECUTION_METHODS = new Set([
+  "exec",
+  "execSync",
+  "execFile",
+  "execFileSync",
+  "spawn",
+  "spawnSync",
+]);
 const NOOP_SCRIPT_COMMANDS = new Set(["true", ":"]);
 const DEPENDENCY_INSTALL_LIFECYCLE_SCRIPTS = [
   "preinstall",
@@ -603,6 +611,9 @@ function checkPublishCommandScope(label, packageDir, releaseWorkflowPath) {
 function expectNoUnsupportedWorkflowCommands(label, path, workflow) {
   if (hasShellCommandSubstitution(workflow)) {
     fail(label, `${relativePackagePath(path)} must not use shell command substitution`);
+  }
+  if (hasShellProcessSubstitution(workflow)) {
+    fail(label, `${relativePackagePath(path)} must not use shell process substitution`);
   }
   if (hasShellFunctionDefinition(workflow)) {
     fail(label, `${relativePackagePath(path)} must not define shell functions`);
@@ -1618,6 +1629,9 @@ function expectNoUnsupportedPackageScriptSyntax(label, scripts) {
     if (hasShellCommandSubstitution(script)) {
       fail(label, `script ${scriptName} must not use shell command substitution`);
     }
+    if (hasShellProcessSubstitution(script)) {
+      fail(label, `script ${scriptName} must not use shell process substitution`);
+    }
     if (hasShellFunctionDefinition(script)) {
       fail(label, `script ${scriptName} must not define shell functions`);
     }
@@ -1656,6 +1670,44 @@ function expectNoUnsupportedPackageScriptSyntax(label, scripts) {
 
 function hasShellCommandSubstitution(text) {
   return /`|\$\(/u.test(text);
+}
+
+function hasShellProcessSubstitution(text) {
+  return shellScanTexts(text).some((commandText) =>
+    shellContinuationText(shellCommentText(commandText))
+      .split("\n")
+      .some((line) => shellLineHasProcessSubstitution(line)),
+  );
+}
+
+function shellLineHasProcessSubstitution(line) {
+  let quote = "";
+  let escaped = false;
+
+  for (let index = 0; index < line.length - 1; index += 1) {
+    const char = line[index];
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (char === "\\" && quote !== "'") {
+      escaped = true;
+      continue;
+    }
+    if ((char === "'" || char === '"') && quote === "") {
+      quote = char;
+      continue;
+    }
+    if (char === quote) {
+      quote = "";
+      continue;
+    }
+    if (quote === "" && (char === "<" || char === ">") && line[index + 1] === "(") {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 function hasShellFunctionDefinition(text) {
@@ -2352,7 +2404,15 @@ function scriptWritesNpmConfigFile(script) {
 function scriptUsesChildProcessExecution(script) {
   return (
     scriptReferencesChildProcessModule(script) &&
-    /\b(?:exec|execSync|execFile|execFileSync|spawn|spawnSync)\b/u.test(script)
+    scriptReferencesChildProcessExecutionMethod(script)
+  );
+}
+
+function scriptReferencesChildProcessExecutionMethod(script) {
+  return (
+    /\b(?:exec|execSync|execFile|execFileSync|spawn|spawnSync)\b/u.test(script) ||
+    javascriptStringTexts(script).some((value) => CHILD_PROCESS_EXECUTION_METHODS.has(value)) ||
+    javascriptConcatenatedStringTexts(script).some((value) => CHILD_PROCESS_EXECUTION_METHODS.has(value))
   );
 }
 
@@ -3031,7 +3091,24 @@ function hasNpmPublishCommand(text) {
 }
 
 function hasNpmPublishCommandMarker(text) {
-  return /\b(?:npm|npx|publish|pu|pub|publ|publi|publis)\b/u.test(text);
+  const markerPattern = /\b(?:npm|npx|pnpm|publish|pu|pub|publ|publi|publis)\b/u;
+  return markerPattern.test(text) || (text.includes("$'") && markerPattern.test(decodeShellAnsiCStrings(text)));
+}
+
+function decodeShellAnsiCStrings(text) {
+  let decoded = "";
+
+  for (let index = 0; index < text.length; index += 1) {
+    if (text[index] === "$" && text[index + 1] === "'") {
+      const ansiString = readBashAnsiCString(text, index + 2);
+      decoded += ansiString.value;
+      index = ansiString.endIndex;
+      continue;
+    }
+    decoded += text[index];
+  }
+
+  return decoded;
 }
 
 function countNpmPublishCommands(text) {
@@ -3167,7 +3244,15 @@ function workflowEnvValueMap(text) {
       const entry = normalizedYamlLine(entryLine);
       const key = yamlKey(entry);
       if (!key) continue;
-      recordWorkflowEnvValue(envValues, key.slice(0, -1), yamlScalarValue(yamlValue(entry)));
+      const rawValue = yamlValue(entry);
+      const scalarValue = yamlScalarValue(rawValue);
+      if (/^[|>]/u.test(scalarValue)) {
+        const block = yamlRunBlockCommandText(lines, entryIndex, countIndent(entryLine), scalarValue);
+        recordWorkflowEnvValue(envValues, key.slice(0, -1), block.commandText.trim());
+        entryIndex = block.endIndex;
+        continue;
+      }
+      recordWorkflowEnvValue(envValues, key.slice(0, -1), yamlScalarValue(rawValue));
     }
   }
 
@@ -4197,7 +4282,7 @@ function isShellOutputRedirectionToken(token) {
 function isNpmCommandToken(token, npmVariables = new Set()) {
   const normalizedToken = token.replace(/\\/gu, "/");
   return (
-    /(?:^|\/)npm$/u.test(normalizedToken) ||
+    /(?:^|\/)(?:npm|pnpm)$/u.test(normalizedToken) ||
     npmVariables.has(shellVariableReferenceName(token))
   );
 }
@@ -5143,6 +5228,9 @@ function shellLineInvokesLocalCode(line) {
   }
 
   const tokens = shellTokens(line).map((token) => shellWordValue(token));
+  if (shellLineInvokesPathResolvedLocalCode(tokens)) {
+    return true;
+  }
   return tokens.some((token, index) => {
     if (isShellBoundaryToken(token) || isShellRedirectionToken(token)) return false;
     if (isLocalPathToken(token)) return true;
@@ -5154,6 +5242,54 @@ function shellLineInvokesLocalCode(line) {
       (isLocalPathToken(scriptToken) || isBareInterpreterScriptToken(scriptToken))
     );
   });
+}
+
+function shellLineInvokesPathResolvedLocalCode(tokens) {
+  let localPathLookup = false;
+  const shellVariables = new Map();
+
+  for (let index = 0; index < tokens.length; index += 1) {
+    const token = tokens[index];
+    if (isShellBoundaryToken(token)) {
+      localPathLookup = false;
+      continue;
+    }
+    if (isShellRedirectionToken(token)) {
+      index += 1;
+      continue;
+    }
+
+    const assignment = shellVariableAssignment(token);
+    if (assignment) {
+      const value = resolveShellVariables(assignment.value, shellVariables);
+      if (assignment.name === "PATH" && pathValueEnablesLocalLookup(value)) {
+        localPathLookup = true;
+      }
+      shellVariables.set(assignment.name, value);
+      continue;
+    }
+    if (token === "env") {
+      continue;
+    }
+    if (localPathLookup && isBareLocalScriptToken(resolveShellVariables(token, shellVariables))) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function pathValueEnablesLocalLookup(value) {
+  return value
+    .split(":")
+    .some(
+      (entry) =>
+        entry === "." ||
+        entry === "" ||
+        entry === "$GITHUB_WORKSPACE" ||
+        entry === "${GITHUB_WORKSPACE}" ||
+        /^\$\{\{\s*github\.workspace\s*\}\}$/u.test(entry),
+    );
 }
 
 function interpreterInvokesLocalModule(tokens, index) {
