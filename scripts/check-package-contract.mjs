@@ -21,8 +21,20 @@ const CHILD_PROCESS_EXECUTION_METHODS = new Set([
   "execSync",
   "execFile",
   "execFileSync",
+  "fork",
   "spawn",
   "spawnSync",
+]);
+const CHILD_PROCESS_EXECUTION_METHOD_PATTERN = new RegExp(
+  `\\b(?:${[...CHILD_PROCESS_EXECUTION_METHODS].join("|")})\\b`,
+  "u",
+);
+const EXECUTED_CONFIG_LOCAL_PATH_KEYS = new Set([
+  "globalSetup",
+  "include",
+  "plugins",
+  "reporters",
+  "setupFiles",
 ]);
 const NOOP_SCRIPT_COMMANDS = new Set(["true", ":"]);
 const DEPENDENCY_INSTALL_LIFECYCLE_SCRIPTS = [
@@ -109,6 +121,8 @@ const EXECUTED_TOOLING_CONFIG_FILES = [
   ".prettierrc.mjs",
   ".prettierrc.mts",
   ".prettierrc.ts",
+  ".prettierrc.yaml",
+  ".prettierrc.yml",
   "prettier.config.cjs",
   "prettier.config.cts",
   "prettier.config.js",
@@ -2181,13 +2195,193 @@ function localScriptDependencyPaths(scriptText, baseDir, packageDir) {
   const dependencyPaths = new Set();
 
   for (const specifier of localScriptDependencySpecifiers(scriptText)) {
-    const dependencyPath = existingLocalScriptPath(resolve(baseDir, specifier));
-    if (dependencyPath && isPathInsidePackageDir(dependencyPath, packageDir)) {
+    for (const dependencyPath of localScriptDependencyPathsForSpecifier(specifier, baseDir, packageDir)) {
       dependencyPaths.add(dependencyPath);
     }
   }
 
   return [...dependencyPaths];
+}
+
+function localScriptDependencyPathsForSpecifier(specifier, baseDir, packageDir) {
+  if (isLocalGlobSpecifier(specifier)) {
+    return expandLocalGlobSpecifier(specifier, baseDir, packageDir);
+  }
+
+  const dependencyPath = existingLocalScriptPath(resolve(baseDir, specifier));
+  return dependencyPath && isPathInsidePackageDir(dependencyPath, packageDir) ? [dependencyPath] : [];
+}
+
+function isLocalGlobSpecifier(specifier) {
+  return /[*?\[{]/u.test(specifier);
+}
+
+function expandLocalGlobSpecifier(specifier, baseDir, packageDir) {
+  const patternPath = resolve(baseDir, specifier).replace(/\\/gu, "/");
+  const patterns = expandBracePatterns(patternPath).map((pattern) => globPathPatternRegex(pattern));
+  return listPackageScriptFiles(packageDir).filter((filePath) => {
+    const normalizedPath = filePath.replace(/\\/gu, "/");
+    return patterns.some((pattern) => pattern.test(normalizedPath));
+  });
+}
+
+function listPackageScriptFiles(directory) {
+  const files = [];
+  let entries = [];
+
+  try {
+    entries = readdirSync(directory, { withFileTypes: true });
+  } catch {
+    return files;
+  }
+
+  for (const entry of entries) {
+    const entryPath = join(directory, entry.name);
+    if (entry.isDirectory()) {
+      if ([".git", "coverage", "dist", "node_modules"].includes(entry.name)) continue;
+      files.push(...listPackageScriptFiles(entryPath));
+    } else if (entry.isFile() && isExecutedToolingScriptFile(entryPath)) {
+      files.push(entryPath);
+    }
+  }
+
+  return files;
+}
+
+function globPathPatternRegex(pattern) {
+  let source = "^";
+
+  for (let index = 0; index < pattern.length; index += 1) {
+    const char = pattern[index];
+    const extglob = globExtglobSource(pattern, index);
+    if (extglob) {
+      source += extglob.source;
+      index = extglob.endIndex;
+      continue;
+    }
+    if (char === "*" && pattern[index + 1] === "*") {
+      if (pattern[index + 2] === "/") {
+        source += "(?:.*/)?";
+        index += 2;
+        continue;
+      }
+      source += ".*";
+      index += 1;
+      continue;
+    }
+    if (char === "*") {
+      source += "[^/]*";
+      continue;
+    }
+    if (char === "?") {
+      source += "[^/]";
+      continue;
+    }
+    if (char === "[") {
+      const charClass = globCharacterClassSource(pattern, index);
+      if (charClass) {
+        source += charClass.source;
+        index = charClass.endIndex;
+        continue;
+      }
+    }
+    source += escapeRegExpChar(char);
+  }
+
+  return new RegExp(`${source}$`, "u");
+}
+
+function expandBracePatterns(pattern) {
+  const startIndex = pattern.indexOf("{");
+  if (startIndex === -1) return [pattern];
+
+  const endIndex = matchingBraceEndIndex(pattern, startIndex);
+  if (endIndex === -1) return [pattern];
+
+  const prefix = pattern.slice(0, startIndex);
+  const suffix = pattern.slice(endIndex + 1);
+  return splitBraceOptions(pattern.slice(startIndex + 1, endIndex)).flatMap((option) =>
+    expandBracePatterns(`${prefix}${option}${suffix}`),
+  );
+}
+
+function matchingBraceEndIndex(pattern, startIndex) {
+  let depth = 0;
+  for (let index = startIndex; index < pattern.length; index += 1) {
+    const char = pattern[index];
+    if (char === "{") {
+      depth += 1;
+    } else if (char === "}") {
+      depth -= 1;
+      if (depth === 0) return index;
+    }
+  }
+
+  return -1;
+}
+
+function splitBraceOptions(value) {
+  const options = [];
+  let option = "";
+  let depth = 0;
+
+  for (const char of value) {
+    if (char === "," && depth === 0) {
+      options.push(option);
+      option = "";
+      continue;
+    }
+    if (char === "{") depth += 1;
+    if (char === "}" && depth > 0) depth -= 1;
+    option += char;
+  }
+
+  options.push(option);
+  return options;
+}
+
+function globExtglobSource(pattern, startIndex) {
+  const operator = pattern[startIndex];
+  if (!["?", "@", "+", "*"].includes(operator) || pattern[startIndex + 1] !== "(") return null;
+
+  const endIndex = matchingParenEndIndex(pattern, startIndex + 1);
+  if (endIndex === -1) return null;
+
+  const alternatives = pattern
+    .slice(startIndex + 2, endIndex)
+    .split("|")
+    .map((alternative) => alternative.replace(/[\\^$.*+?()[\]{}|]/gu, "\\$&"))
+    .join("|");
+  const source = `(?:${alternatives})`;
+  const quantifier = operator === "?" ? "?" : operator === "@" ? "" : operator;
+  return { source: `${source}${quantifier}`, endIndex };
+}
+
+function matchingParenEndIndex(pattern, startIndex) {
+  let depth = 0;
+  for (let index = startIndex; index < pattern.length; index += 1) {
+    const char = pattern[index];
+    if (char === "(") {
+      depth += 1;
+    } else if (char === ")") {
+      depth -= 1;
+      if (depth === 0) return index;
+    }
+  }
+
+  return -1;
+}
+
+function globCharacterClassSource(pattern, startIndex) {
+  const endIndex = pattern.indexOf("]", startIndex + 1);
+  if (endIndex === -1) return null;
+
+  const value = pattern.slice(startIndex + 1, endIndex).replace(/\\/gu, "\\\\");
+  return { source: `[${value}]`, endIndex };
+}
+
+function escapeRegExpChar(char) {
+  return /[\\^$.*+?()[\]{}|]/u.test(char) ? `\\${char}` : char;
 }
 
 function localScriptDependencySpecifiers(text) {
@@ -2204,15 +2398,65 @@ function localScriptDependencySpecifiers(text) {
   for (const match of text.matchAll(callPattern)) {
     specifiers.push(match[2]);
   }
-  if (/\b(?:plugins|setupFiles)\b/u.test(text)) {
-    for (const specifier of javascriptStringTexts(text)) {
-      if (specifier.startsWith("./") || specifier.startsWith("../")) {
-        specifiers.push(specifier);
-      }
-    }
+  if (textHasExecutedConfigLocalPathKey(text)) {
+    specifiers.push(...localConfigDependencySpecifiers(text));
   }
 
   return [...new Set(specifiers)];
+}
+
+function textHasExecutedConfigLocalPathKey(text) {
+  return [...EXECUTED_CONFIG_LOCAL_PATH_KEYS].some((key) => new RegExp(`\\b${key}\\b`, "u").test(text));
+}
+
+function localConfigDependencySpecifiers(text) {
+  return [
+    ...javascriptStringTexts(text).filter((specifier) => isLocalConfigDependencySpecifier(specifier)),
+    ...yamlConfigDependencySpecifiers(text),
+  ];
+}
+
+function yamlConfigDependencySpecifiers(text) {
+  const specifiers = [];
+  const lines = text.split("\n");
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const normalizedLine = normalizedYamlLine(lines[index]);
+    const key = yamlKey(normalizedLine).replace(/:$/u, "");
+    if (!EXECUTED_CONFIG_LOCAL_PATH_KEYS.has(key)) continue;
+
+    specifiers.push(...localConfigValueSpecifiers(yamlValue(normalizedLine)));
+
+    const keyIndent = countIndent(lines[index]) + (lines[index].trimStart().startsWith("- ") ? 2 : 0);
+    for (let childIndex = index + 1; childIndex < lines.length; childIndex += 1) {
+      const line = lines[childIndex];
+      if (line.trim() !== "" && countIndent(line) <= keyIndent) break;
+
+      const childLine = line.trimStart();
+      if (!childLine.startsWith("- ")) continue;
+      specifiers.push(...localConfigValueSpecifiers(childLine.slice(2)));
+    }
+  }
+
+  return specifiers;
+}
+
+function localConfigValueSpecifiers(value) {
+  const scalar = yamlScalarValue(value);
+  const values = [
+    scalar,
+    ...javascriptStringTexts(scalar),
+    ...scalar
+      .replace(/^\[/u, "")
+      .replace(/\]$/u, "")
+      .split(",")
+      .map((entry) => yamlScalarValue(entry)),
+  ];
+  return values.filter((specifier) => isLocalConfigDependencySpecifier(specifier));
+}
+
+function isLocalConfigDependencySpecifier(specifier) {
+  return specifier.startsWith("./") || specifier.startsWith("../");
 }
 
 function localStaticImportExportSpecifiers(text) {
@@ -2410,7 +2654,7 @@ function scriptUsesChildProcessExecution(script) {
 
 function scriptReferencesChildProcessExecutionMethod(script) {
   return (
-    /\b(?:exec|execSync|execFile|execFileSync|spawn|spawnSync)\b/u.test(script) ||
+    CHILD_PROCESS_EXECUTION_METHOD_PATTERN.test(script) ||
     javascriptStringTexts(script).some((value) => CHILD_PROCESS_EXECUTION_METHODS.has(value)) ||
     javascriptConcatenatedStringTexts(script).some((value) => CHILD_PROCESS_EXECUTION_METHODS.has(value))
   );
@@ -3559,6 +3803,16 @@ function countNpmPublishCommandsInLine(
     const word = shellWordValue(tokens[index]);
     recordShellVariable(word, shellVariables);
     const resolvedWord = resolveShellVariables(word, shellVariables);
+    const expandedCommandCount = countExpandedVariableCommandPublishCommands(
+      tokens,
+      index,
+      resolvedWord,
+      shellVariables,
+    );
+    if (expandedCommandCount > 0) {
+      publishCommandCount += expandedCommandCount;
+      continue;
+    }
     recordNpmCommandVariable(resolvedWord, npmVariables);
     recordNpmPublishSubcommandVariable(resolvedWord, publishSubcommandVariables);
     const functionDefinition = recordNpmFunctionWrapper(
@@ -3594,6 +3848,56 @@ function countNpmPublishCommandsInLine(
   }
 
   return publishCommandCount;
+}
+
+function countExpandedVariableCommandPublishCommands(tokens, index, resolvedWord, shellVariables) {
+  if (!isUnquotedShellVariableReferenceToken(tokens[index])) return 0;
+  if (!/\s/u.test(resolvedWord)) return 0;
+  if (!shellTokenStartsCommand(tokens, index)) return 0;
+
+  const expandedWords = shellTokens(resolvedWord).map((token) => shellWordValue(token));
+  if (expandedWords.length < 2) return 0;
+
+  const trailingWords = [];
+  for (let trailingIndex = index + 1; trailingIndex < tokens.length; trailingIndex += 1) {
+    const word = shellWordValue(tokens[trailingIndex]);
+    trailingWords.push(resolveShellVariables(word, shellVariables));
+    if (isShellBoundaryToken(word)) break;
+  }
+
+  return countNpmPublishCommandsInShellText([...expandedWords, ...trailingWords].join(" "));
+}
+
+function isUnquotedShellVariableReferenceToken(token) {
+  return /^\$(?:[A-Za-z_][A-Za-z0-9_]*|\{[A-Za-z_][A-Za-z0-9_]*\})$/u.test(token);
+}
+
+function shellTokenStartsCommand(tokens, index) {
+  let startIndex = 0;
+  for (let currentIndex = index - 1; currentIndex >= 0; currentIndex -= 1) {
+    if (isShellBoundaryToken(shellWordValue(tokens[currentIndex]))) {
+      startIndex = currentIndex + 1;
+      break;
+    }
+  }
+
+  let sawEnvCommand = false;
+  for (let currentIndex = startIndex; currentIndex < index; currentIndex += 1) {
+    const word = shellWordValue(tokens[currentIndex]);
+    if (isShellRedirectionToken(word)) {
+      currentIndex += 1;
+      continue;
+    }
+    if (shellVariableAssignment(word)) continue;
+    if (isEnvCommandToken(word)) {
+      sawEnvCommand = true;
+      continue;
+    }
+    if (sawEnvCommand && (word === "--" || word.startsWith("-"))) continue;
+    return false;
+  }
+
+  return true;
 }
 
 function countEnvSplitStringPublishCommands(tokens, index, shellVariables) {
@@ -4111,7 +4415,7 @@ function countInterpreterEvalPublishCommands(command, scriptText) {
 }
 
 function countJavaScriptEmbeddedPublishCommands(text) {
-  if (!/\b(?:exec|execSync|execFile|execFileSync|spawn|spawnSync)\b/u.test(text)) {
+  if (!CHILD_PROCESS_EXECUTION_METHOD_PATTERN.test(text)) {
     return 0;
   }
 
@@ -4897,7 +5201,7 @@ function interpreterEvalHasBlockedNpmConfigCommand(command, scriptText) {
 }
 
 function javascriptEmbeddedHasBlockedNpmConfigCommand(text) {
-  if (!/\b(?:exec|execSync|execFile|execFileSync|spawn|spawnSync)\b/u.test(text)) {
+  if (!CHILD_PROCESS_EXECUTION_METHOD_PATTERN.test(text)) {
     return false;
   }
 
@@ -5286,10 +5590,15 @@ function pathValueEnablesLocalLookup(value) {
       (entry) =>
         entry === "." ||
         entry === "" ||
+        pathEntryIsRelativeLocalLookup(entry) ||
         entry === "$GITHUB_WORKSPACE" ||
         entry === "${GITHUB_WORKSPACE}" ||
         /^\$\{\{\s*github\.workspace\s*\}\}$/u.test(entry),
     );
+}
+
+function pathEntryIsRelativeLocalLookup(entry) {
+  return entry !== "" && !entry.startsWith("/") && !entry.startsWith("$") && !entry.startsWith("~");
 }
 
 function interpreterInvokesLocalModule(tokens, index) {

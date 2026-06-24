@@ -712,6 +712,73 @@ jobs:
       - run: pnpm publish --registry=https://npm.pkg.github.com
 `;
 }, "manual-publish.yml must not include npm publish");
+expectFail("vitest global setup file mutation", (state) => {
+  state.files = {
+    "vitest.config.mjs": "export default { test: { globalSetup: ['./setup.ts'] } };\n",
+    "setup.ts": "import { appendFileSync } from 'node:fs';\nappendFileSync('.npmrc', 'dry-run=true\\n');\n",
+  };
+}, "vitest.config.mjs must not write npm config files");
+expectFail("vitest include glob outside tests mutation", (state) => {
+  state.files = {
+    "vitest.config.mjs": "export default { test: { include: ['./src/**/*.{test,spec}.?(c|m)[jt]s?(x)'] } };\n",
+    "src/nested/mutate.test.ts":
+      "import { appendFileSync } from 'node:fs';\nappendFileSync('.npmrc', 'dry-run=true\\n');\n",
+  };
+}, "vitest.config.mjs must not write npm config files");
+expectFail("workflow expanded variable command word publish", (state) => {
+  state.extraWorkflow = `name: Manual Publish
+
+on:
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - run: CMD='npm publish'; $CMD --registry=https://npm.pkg.github.com
+`;
+}, "manual-publish.yml must not include npm publish");
+expectFail("vitest reporter file mutation", (state) => {
+  state.files = {
+    "vitest.config.mjs": "export default { test: { reporters: ['./reporter.ts'] } };\n",
+    "reporter.ts": "import { appendFileSync } from 'node:fs';\nappendFileSync('.npmrc', 'dry-run=true\\n');\n",
+  };
+}, "vitest.config.mjs must not write npm config files");
+expectFail("tooling child_process fork execution", (state) => {
+  state.files = {
+    "prettier.config.mjs":
+      "import { fork } from 'node:child_process';\nfork('./hook.mjs');\nexport default {};\n",
+    "hook.mjs": "console.log('hook');\n",
+  };
+}, "prettier.config.mjs must not use child_process command execution");
+expectFail("workflow relative PATH lookup local script", (state) => {
+  state.extraWorkflow = `name: Manual Publish
+
+on:
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - run: PATH=./scripts:$PATH publish.sh
+`;
+  state.files = {
+    "scripts/publish.sh": "npm publish --registry=https://npm.pkg.github.com\n",
+  };
+}, "manual-publish.yml must not invoke local workflow scripts or actions");
+expectFail("prettier YAML plugin mutation", (state) => {
+  state.files = {
+    ".prettierrc.yaml": "plugins:\n  - ./plugin.mjs\n",
+    "plugin.mjs": "import { appendFileSync } from 'node:fs';\nappendFileSync('.npmrc', 'dry-run=true\\n');\n",
+  };
+}, ".prettierrc.yaml must not write npm config files");
+expectFail("prettier YML plugin mutation", (state) => {
+  state.files = {
+    ".prettierrc.yml": "plugins: ['./plugin.mjs']\n",
+    "plugin.mjs": "import { appendFileSync } from 'node:fs';\nappendFileSync('.npmrc', 'dry-run=true\\n');\n",
+  };
+}, ".prettierrc.yml must not write npm config files");
 
 console.log("Regression contract checks passed.");
 
