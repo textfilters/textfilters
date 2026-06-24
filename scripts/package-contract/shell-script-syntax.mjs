@@ -277,11 +277,45 @@ export function shellTextWritesAndExecutesGeneratedTempScript(text) {
     const tokens = shellTokens(line).map((token) => shellWordValue(token));
     return tokens.some((token, index) => {
       if (generatedScriptPaths.has(token) && shellTokenStartsSimpleCommand(tokens, index)) return true;
+      if (shellSourceCommandRunsGeneratedTempScript(tokens, index, generatedScriptPaths)) return true;
       if (!isFileArgumentInterpreterToken(token)) return false;
+      if (interpreterReadsGeneratedTempScriptFromStdin(tokens, index + 1, generatedScriptPaths)) return true;
       const scriptToken = interpreterFileArgumentToken(tokens, index + 1);
       return generatedScriptPaths.has(scriptToken);
     });
   });
+}
+
+export function shellSourceCommandRunsGeneratedTempScript(tokens, index, generatedScriptPaths) {
+  if (tokens[index] !== "." && tokens[index] !== "source") return false;
+
+  for (let tokenIndex = index + 1; tokenIndex < tokens.length; tokenIndex += 1) {
+    const token = tokens[tokenIndex];
+    if (isShellBoundaryToken(token)) return false;
+    if (isShellRedirectionToken(token)) {
+      tokenIndex += 1;
+      continue;
+    }
+    return generatedScriptPaths.has(token);
+  }
+
+  return false;
+}
+
+export function interpreterReadsGeneratedTempScriptFromStdin(tokens, startIndex, generatedScriptPaths) {
+  for (let index = startIndex; index < tokens.length; index += 1) {
+    const token = tokens[index];
+    if (isShellBoundaryToken(token)) return false;
+    if (isShellInputRedirectionToken(token)) {
+      return generatedScriptPaths.has(tokens[index + 1] ?? "");
+    }
+    if (isShellRedirectionToken(token)) {
+      index += 1;
+      continue;
+    }
+  }
+
+  return false;
 }
 
 export function isGeneratedTempScriptPathToken(token) {

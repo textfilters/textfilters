@@ -325,9 +325,57 @@ export function normalizeWorkflowRunCommandText(text, workflowEnvValues) {
 }
 
 export function normalizeGitHubActionsExpressions(text) {
-  return text.replace(/\$\{\{\s*([^}]*)\s*\}\}/gu, (_match, expression) => {
-    return evaluatedGitHubActionsExpressionString(expression.trim());
-  });
+  let normalized = "";
+  let startIndex = 0;
+
+  while (startIndex < text.length) {
+    const expressionStart = text.indexOf("${{", startIndex);
+    if (expressionStart === -1) {
+      normalized += text.slice(startIndex);
+      break;
+    }
+
+    const expressionEnd = githubActionsExpressionEndIndex(text, expressionStart + 3);
+    if (expressionEnd === -1) {
+      normalized += text.slice(startIndex);
+      break;
+    }
+
+    normalized += text.slice(startIndex, expressionStart);
+    normalized += evaluatedGitHubActionsExpressionString(text.slice(expressionStart + 3, expressionEnd).trim());
+    startIndex = expressionEnd + 2;
+  }
+
+  return normalized;
+}
+
+export function githubActionsExpressionEndIndex(text, startIndex) {
+  let quote = "";
+
+  for (let index = startIndex; index < text.length - 1; index += 1) {
+    const char = text[index];
+    if (char === "'" && quote === "'") {
+      if (text[index + 1] === "'") {
+        index += 1;
+        continue;
+      }
+      quote = "";
+      continue;
+    }
+    if ((char === "'" || char === '"') && quote === "") {
+      quote = char;
+      continue;
+    }
+    if (char === quote) {
+      quote = "";
+      continue;
+    }
+    if (quote === "" && char === "}" && text[index + 1] === "}") {
+      return index;
+    }
+  }
+
+  return -1;
 }
 
 export function evaluatedGitHubActionsExpressionString(expression) {

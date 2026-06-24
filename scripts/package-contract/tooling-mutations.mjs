@@ -135,7 +135,7 @@ export function expectNoPublishEnvMutationInScriptText(label, subject, script) {
 }
 
 export function scriptWritesGitHubActionsEnvironmentFile(script) {
-  if (/\bGITHUB_(ENV|PATH)\b/u.test(script)) {
+  if (/\bGITHUB_(ENV|PATH|OUTPUT)\b/u.test(script)) {
     return true;
   }
   if (
@@ -143,7 +143,7 @@ export function scriptWritesGitHubActionsEnvironmentFile(script) {
       ...javascriptConcatenatedStringTexts(script),
       ...javascriptJoinedStringTexts(script),
       ...javascriptStaticTemplateTexts(script),
-    ].some((value) => value === "GITHUB_ENV" || value === "GITHUB_PATH")
+    ].some((value) => value === "GITHUB_ENV" || value === "GITHUB_PATH" || value === "GITHUB_OUTPUT")
   ) {
     return true;
   }
@@ -153,7 +153,7 @@ export function scriptWritesGitHubActionsEnvironmentFile(script) {
     .some((line) =>
       shellTokens(line)
         .map((token) => shellWordValue(token))
-        .some((word) => /\bGITHUB_(ENV|PATH)\b/u.test(word)),
+        .some((word) => /\bGITHUB_(ENV|PATH|OUTPUT)\b/u.test(word)),
   );
 }
 
@@ -195,7 +195,9 @@ export function scriptReferencesChildProcessExecutionMethod(script) {
   return (
     CHILD_PROCESS_EXECUTION_METHOD_PATTERN.test(script) ||
     javascriptStringTexts(script).some((value) => CHILD_PROCESS_EXECUTION_METHODS.has(value)) ||
-    javascriptConcatenatedStringTexts(script).some((value) => CHILD_PROCESS_EXECUTION_METHODS.has(value))
+    javascriptConcatenatedStringTexts(script).some((value) => CHILD_PROCESS_EXECUTION_METHODS.has(value)) ||
+    javascriptJoinedStringTexts(script).some((value) => CHILD_PROCESS_EXECUTION_METHODS.has(value)) ||
+    javascriptStaticTemplateTexts(script).some((value) => CHILD_PROCESS_EXECUTION_METHODS.has(value))
   );
 }
 
@@ -205,7 +207,9 @@ export function scriptReferencesChildProcessModule(script) {
     javascriptStringTexts(script).some((value) => value === "child_process" || value === "node:child_process") ||
     javascriptConcatenatedStringTexts(script).some(
       (value) => value === "child_process" || value === "node:child_process",
-    )
+    ) ||
+    javascriptJoinedStringTexts(script).some((value) => value === "child_process" || value === "node:child_process") ||
+    javascriptStaticTemplateTexts(script).some((value) => value === "child_process" || value === "node:child_process")
   );
 }
 
@@ -408,7 +412,18 @@ export function scriptComputesTargetPathNearWriteOperation(script, isTargetPathT
 }
 
 export function scriptUsesJavaScriptWriteApi(script) {
-  return /\b(?:writeFile(?:Sync)?|appendFile(?:Sync)?|createWriteStream|openSync)\s*\(/u.test(script);
+  return (
+    /\b(?:writeFile(?:Sync)?|appendFile(?:Sync)?|createWriteStream|openSync)\s*\(/u.test(script) ||
+    [
+      ...javascriptConcatenatedStringTexts(script),
+      ...javascriptJoinedStringTexts(script),
+      ...javascriptStaticTemplateTexts(script),
+    ].some((value) => isJavaScriptWriteApiName(value))
+  );
+}
+
+export function isJavaScriptWriteApiName(value) {
+  return /^(?:writeFile(?:Sync)?|appendFile(?:Sync)?|createWriteStream|openSync)$/u.test(value);
 }
 
 export function scriptMentionsTargetPathWithWriteOperation(script, isTargetPathToken) {
@@ -421,6 +436,7 @@ export function scriptMentionsTargetPathWithWriteOperation(script, isTargetPathT
   return [
     ...javascriptStringTexts(script),
     ...javascriptConcatenatedStringTexts(script),
+    ...javascriptJoinedStringTexts(script),
     ...javascriptStaticTemplateTexts(script),
   ].some((value) => isTargetPathToken(value));
 }

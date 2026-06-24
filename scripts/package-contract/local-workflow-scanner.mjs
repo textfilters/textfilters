@@ -104,6 +104,7 @@ export function shellLineInvokesBareLocalCode(line) {
     if (interpreterPreloadInvokesLocalCode(tokens, index)) return true;
     if (interpreterEvalInvokesLocalCode(tokens, index)) return true;
     if (shellEvalInvokesLocalCode(tokens, index)) return true;
+    if (awkInterpreterInvokesLocalProgram(tokens, index)) return true;
     if (interpreterUsesLocalTestDiscovery(tokens, index)) return true;
     const scriptToken = interpreterFileArgumentToken(tokens, index + 1);
     return isFileArgumentInterpreterToken(token) && Boolean(scriptToken) && isBareInterpreterScriptToken(scriptToken);
@@ -111,11 +112,11 @@ export function shellLineInvokesBareLocalCode(line) {
 }
 
 export function isBareLocalScriptToken(token) {
-  return /^[A-Za-z0-9_.-]+\.(?:cjs|js|mjs|sh|ts|tsx|py|rb|pl|php)$/u.test(token);
+  return /^[A-Za-z0-9_.-]+\.(?:awk|cjs|js|mjs|sh|ts|tsx|py|rb|pl|php)$/u.test(token);
 }
 
 export function isBareInterpreterScriptToken(token) {
-  return /^[A-Za-z0-9_.-]+(?:\.(?:cjs|js|mjs|sh|ts|tsx|py|rb|pl|php))?$/u.test(token) && !token.startsWith("-");
+  return /^[A-Za-z0-9_.-]+(?:\.(?:awk|cjs|js|mjs|sh|ts|tsx|py|rb|pl|php))?$/u.test(token) && !token.startsWith("-");
 }
 
 export function isNonRootWorkingDirectory(value) {
@@ -144,6 +145,7 @@ export function shellLineInvokesLocalCode(line, state = { localPathLookup: false
     if (interpreterPreloadInvokesLocalCode(tokens, index)) return true;
     if (interpreterEvalInvokesLocalCode(tokens, index)) return true;
     if (shellEvalInvokesLocalCode(tokens, index, state.shellVariables)) return true;
+    if (awkInterpreterInvokesLocalProgram(tokens, index)) return true;
     if (interpreterUsesLocalTestDiscovery(tokens, index)) return true;
     const scriptToken = interpreterFileArgumentToken(tokens, index + 1);
     return (
@@ -254,6 +256,8 @@ export function pathValueEnablesLocalLookup(value) {
         entry === "." ||
         entry === "" ||
         pathEntryIsRelativeLocalLookup(entry) ||
+        entry === "$PWD" ||
+        entry === "${PWD}" ||
         entry === "$GITHUB_WORKSPACE" ||
         entry === "${GITHUB_WORKSPACE}" ||
         /^\$\{\{\s*github\.workspace\s*\}\}$/u.test(entry),
@@ -401,6 +405,36 @@ export function interpreterUsesLocalTestDiscovery(tokens, index) {
       }
       continue;
     }
+    return false;
+  }
+
+  return false;
+}
+
+export function awkInterpreterInvokesLocalProgram(tokens, index) {
+  if (!["awk", "gawk"].includes(commandBasename(tokens[index]))) return false;
+
+  for (let tokenIndex = index + 1; tokenIndex < tokens.length; tokenIndex += 1) {
+    const token = tokens[tokenIndex];
+    if (isShellBoundaryToken(token)) return false;
+    if (isShellRedirectionToken(token)) {
+      tokenIndex += 1;
+      continue;
+    }
+    if (token === "--") continue;
+    if (token === "-f" || token === "--file") {
+      const scriptToken = tokens[tokenIndex + 1] ?? "";
+      return isLocalPathToken(scriptToken) || isBareInterpreterScriptToken(scriptToken);
+    }
+    if (token.startsWith("-f") && token.length > 2) {
+      const scriptToken = token.slice(2);
+      return isLocalPathToken(scriptToken) || isBareInterpreterScriptToken(scriptToken);
+    }
+    if (token.startsWith("--file=")) {
+      const scriptToken = token.slice("--file=".length);
+      return isLocalPathToken(scriptToken) || isBareInterpreterScriptToken(scriptToken);
+    }
+    if (token.startsWith("-")) continue;
     return false;
   }
 

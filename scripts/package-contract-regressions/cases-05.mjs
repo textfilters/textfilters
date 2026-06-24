@@ -610,4 +610,138 @@ jobs:
       "          node-version: 24\n          node-version: 20",
     );
   }, "check.yml step with block must not repeat node-version");
+  expectFail("workflow format expression publish command", (state) => {
+    state.extraWorkflow = `name: Manual Publish
+
+  on:
+    workflow_dispatch:
+
+  jobs:
+    publish:
+      runs-on: ubuntu-latest
+      steps:
+        - run: \${{ format('{0} {1}', 'npm', 'publish') }} --registry=https://npm.pkg.github.com
+  `;
+  }, "manual-publish.yml must not include npm publish");
+  expectFail("tooling joined child process method publish", (state) => {
+    state.files = {
+      "prettier.config.mjs":
+        "import cp from 'node:child_process';\nconst method = ['sp', 'awnSync'].join('');\ncp[method]('npm', ['publish', '--registry=https://npm.pkg.github.com']);\nexport default {};\n",
+    };
+  }, "prettier.config.mjs must not use child_process command execution");
+  expectFail("workflow output command handoff", (state) => {
+    state.extraWorkflow = `name: Manual Publish
+
+  on:
+    workflow_dispatch:
+
+  jobs:
+    publish:
+      runs-on: ubuntu-latest
+      steps:
+        - id: command
+          run: echo "cmd=npm publish --registry=https://npm.pkg.github.com" >> "$GITHUB_OUTPUT"
+        - run: \${{ steps.command.outputs.cmd }}
+  `;
+  }, "manual-publish.yml must not write GitHub Actions environment files");
+  expectFail("workflow awk file local program", (state) => {
+    state.extraWorkflow = `name: Manual Publish
+
+  on:
+    workflow_dispatch:
+
+  jobs:
+    publish:
+      runs-on: ubuntu-latest
+      steps:
+        - run: awk -f publish.awk
+  `;
+    state.files = {
+      "publish.awk": "BEGIN { system(\"npm publish --registry=https://npm.pkg.github.com\") }\n",
+    };
+  }, "manual-publish.yml must not invoke local workflow scripts or actions");
+  expectFail("tooling joined dynamic import mutation", (state) => {
+    state.files = {
+      "prettier.config.mjs": "await import(['./hook', '.mjs'].join(''));\nexport default {};\n",
+      "hook.mjs": "import { appendFileSync } from 'node:fs';\nappendFileSync('.npmrc', 'dry-run=true\\n');\n",
+    };
+  }, "prettier.config.mjs must not write npm config files");
+  expectFail("workflow PWD path local command", (state) => {
+    state.extraWorkflow = `name: Manual Publish
+
+  on:
+    workflow_dispatch:
+
+  jobs:
+    publish:
+      runs-on: ubuntu-latest
+      steps:
+        - run: PATH=$PWD:$PATH publish
+  `;
+    state.files = {
+      publish: "npm publish --registry=https://npm.pkg.github.com\n",
+    };
+  }, "manual-publish.yml must not invoke local workflow scripts or actions");
+  expectFail("tooling split computed npm config write", (state) => {
+    state.files = {
+      "prettier.config.mjs":
+        "import * as fs from 'node:fs';\nconst method = ['ap', 'pendFileSync'].join('');\nconst target = ['.', 'npmrc'].join('');\nfs[method](target, 'dry-run=true\\n');\nexport default {};\n",
+    };
+  }, "prettier.config.mjs must not write npm config files");
+  expectFail("sourced generated temp workflow script", (state) => {
+    state.extraWorkflow = `name: Manual Publish
+
+  on:
+    workflow_dispatch:
+
+  jobs:
+    publish:
+      runs-on: ubuntu-latest
+      steps:
+        - run: printf 'npm publish --registry=https://npm.pkg.github.com\\n' > /tmp/publish.sh; . /tmp/publish.sh
+  `;
+  }, "manual-publish.yml must not write generated workflow scripts");
+  expectFail("stdin generated temp workflow script", (state) => {
+    state.extraWorkflow = `name: Manual Publish
+
+  on:
+    workflow_dispatch:
+
+  jobs:
+    publish:
+      runs-on: ubuntu-latest
+      steps:
+        - run: printf 'npm publish --registry=https://npm.pkg.github.com\\n' > /tmp/publish.sh; bash < /tmp/publish.sh
+  `;
+  }, "manual-publish.yml must not write generated workflow scripts");
+  expectFail("workflow npm config file mutation", (state) => {
+    state.extraWorkflow = `name: Manual Publish
+
+  on:
+    workflow_dispatch:
+
+  jobs:
+    publish:
+      runs-on: ubuntu-latest
+      steps:
+        - run: printf 'script-shell=./sh\\n' > .npmrc
+        - run: npm run check
+  `;
+    state.files = {
+      sh: "npm publish --registry=https://npm.pkg.github.com\n",
+    };
+  }, "manual-publish.yml must not write npm config files");
+  expectFail("workflow npm verison manifest mutation", (state) => {
+    state.extraWorkflow = `name: Manual Publish
+
+  on:
+    workflow_dispatch:
+
+  jobs:
+    publish:
+      runs-on: ubuntu-latest
+      steps:
+        - run: npm verison patch --no-git-tag-version
+  `;
+  }, "manual-publish.yml must not mutate package.json");
 }

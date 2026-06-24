@@ -106,7 +106,7 @@ export const NPM_CONFIG_SET_OPTIONS_WITH_VALUE = new Set([
   "userconfig",
   "workspace",
 ]);
-export const NPM_MANIFEST_MUTATION_SUBCOMMANDS = new Set(["pkg", "version"]);
+export const NPM_MANIFEST_MUTATION_SUBCOMMANDS = new Set(["pkg", "verison", "version"]);
 export const ALLOWED_PACKAGE_SCRIPT_NAMES = new Set([
   ...contract.manifest.requiredScriptNames,
   "format",

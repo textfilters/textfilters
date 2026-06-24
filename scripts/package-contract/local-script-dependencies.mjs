@@ -21,6 +21,7 @@ export function localScriptDependencySpecifiers(text) {
     if (isRelativeLocalDependencySpecifier(specifier)) specifiers.push(specifier);
   }
   specifiers.push(...localJavaScriptConcatenatedCallSpecifiers(text));
+  specifiers.push(...localJavaScriptJoinedCallSpecifiers(text));
   specifiers.push(...localJavaScriptStaticTemplateCallSpecifiers(text));
   specifiers.push(...localJavaScriptCreateRequireDependencySpecifiers(text));
   specifiers.push(...localJavaScriptVariableDependencySpecifiers(text));
@@ -59,6 +60,23 @@ export function localJavaScriptConcatenatedCallSpecifiers(text) {
     const specifier = readJavaScriptStaticStringAt(text, match.index + match[0].length);
     if (specifier.closed && isRelativeLocalDependencySpecifier(specifier.value)) {
       specifiers.push(specifier.value);
+    }
+  }
+
+  return specifiers;
+}
+
+export function localJavaScriptJoinedCallSpecifiers(text) {
+  const specifiers = [];
+  const callPattern =
+    /\b(?:import|require)\s*(?:\/\*[\s\S]*?\*\/\s*)*\(\s*(?:\/\*[\s\S]*?\*\/\s*)*/gu;
+
+  for (const match of text.matchAll(callPattern)) {
+    const argumentText = text.slice(match.index + match[0].length, match.index + match[0].length + 280);
+    for (const specifier of javascriptJoinedStringTexts(argumentText)) {
+      if (isRelativeLocalDependencySpecifier(specifier)) {
+        specifiers.push(specifier);
+      }
     }
   }
 
@@ -172,6 +190,15 @@ export function localJavaScriptStringVariables(text) {
     const string = readJavaScriptStaticStringAt(text, match.index + match[0].length);
     if (string.closed && isRelativeLocalDependencySpecifier(string.value)) {
       variables.set(match[1], string.value);
+      continue;
+    }
+
+    const initializerText = text.slice(match.index + match[0].length, match.index + match[0].length + 280);
+    const joinedSpecifier = javascriptJoinedStringTexts(initializerText).find((specifier) =>
+      isRelativeLocalDependencySpecifier(specifier),
+    );
+    if (joinedSpecifier) {
+      variables.set(match[1], joinedSpecifier);
     }
   }
 
