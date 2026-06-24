@@ -342,8 +342,11 @@ export function expectWorkflowJobs(label, path, workflow, expectedJobKeys) {
   const actualJobKeys = topLevelChildKeys(jobsBlock, 2);
 
   for (const jobKey of expectedJobKeys) {
-    if (!actualJobKeys.includes(jobKey)) {
+    const count = actualJobKeys.filter((actualJobKey) => actualJobKey === jobKey).length;
+    if (count === 0) {
       fail(label, `${relativePackagePath(path)} jobs block must include ${jobKey}`);
+    } else if (count !== 1) {
+      fail(label, `${relativePackagePath(path)} jobs block must include exactly one ${jobKey}`);
     }
   }
 
@@ -512,6 +515,9 @@ export function expectStepWithUses(label, path, jobBlock, usesAction) {
     fail(label, `${relativePackagePath(path)} must include uses: ${usesAction} in a step`);
     return "";
   }
+  if (stepTopLevelKeyCount(stepBlock, "uses:") !== 1) {
+    fail(label, `${relativePackagePath(path)} step must not repeat uses`);
+  }
 
   return stepBlock;
 }
@@ -526,6 +532,9 @@ export function expectSingleStepWithUses(label, path, jobBlock, usesAction) {
   }
   if (matchingSteps.length !== 1) {
     fail(label, `${relativePackagePath(path)} must include exactly one uses: ${usesAction} step`);
+  }
+  if (stepTopLevelKeyCount(matchingSteps[0], "uses:") !== 1) {
+    fail(label, `${relativePackagePath(path)} step must not repeat uses`);
   }
 
   return matchingSteps[0];

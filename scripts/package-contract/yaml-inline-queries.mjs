@@ -48,9 +48,20 @@ export function stepInlineEnvHasKey(stepBlock, envName) {
 }
 
 export function stepRunCommand(stepBlock) {
-  const line = stepBlock.split("\n").find((entry) => stepTopLevelLine(stepBlock, entry).startsWith("run: "));
-  if (!line) return "";
-  return stepTopLevelLine(stepBlock, line).slice("run: ".length);
+  const lines = stepBlock.split("\n");
+  const lineIndex = lines.findIndex((entry) => stepTopLevelLine(stepBlock, entry).startsWith("run: "));
+  if (lineIndex === -1) return "";
+
+  const commandParts = [stepTopLevelLine(stepBlock, lines[lineIndex]).slice("run: ".length)];
+  const runIndent = countIndent(lines[lineIndex]);
+  for (let index = lineIndex + 1; index < lines.length; index += 1) {
+    const line = lines[index];
+    if (line.trim() === "") continue;
+    if (countIndent(line) <= runIndent) break;
+    commandParts.push(line.trim());
+  }
+
+  return commandParts.join(" ");
 }
 
 export function stepTopLevelValue(stepBlock, key) {

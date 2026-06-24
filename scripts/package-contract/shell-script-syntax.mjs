@@ -326,7 +326,7 @@ export function interpreterReadsGeneratedTempScriptFromStdin(tokens, startIndex,
 }
 
 export function isGeneratedTempScriptPathToken(token) {
-  return /^(?:\/tmp\/|\$RUNNER_TEMP\/|\$\{RUNNER_TEMP\}\/)[A-Za-z0-9_.-]+$/u.test(token);
+  return /^(?:\/tmp\/|\$RUNNER_TEMP\/|\$\{RUNNER_TEMP\}\/)[A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)*$/u.test(token);
 }
 
 export function collectGeneratedTempScriptTeeTargets(tokens, startIndex, generatedScriptPaths, shellVariables = new Map()) {

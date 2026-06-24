@@ -422,7 +422,7 @@ export function interpreterUsesLocalTestDiscovery(tokens, index) {
 }
 
 export function awkInterpreterInvokesLocalProgram(tokens, index) {
-  if (!["awk", "gawk"].includes(commandBasename(tokens[index]))) return false;
+  if (!["awk", "gawk", "mawk", "nawk"].includes(commandBasename(tokens[index]))) return false;
 
   for (let tokenIndex = index + 1; tokenIndex < tokens.length; tokenIndex += 1) {
     const token = tokens[tokenIndex];
@@ -518,6 +518,8 @@ export function isLocalPathToken(token) {
     token.startsWith("./") ||
     token.startsWith("../") ||
     isRelativeLocalPathToken(token) ||
+    token.startsWith("$PWD/") ||
+    token.startsWith("${PWD}/") ||
     token.startsWith("$GITHUB_WORKSPACE/") ||
     token.startsWith("${GITHUB_WORKSPACE}/") ||
     /^\$\{\{\s*github\.workspace\s*\}\}\//u.test(token)
@@ -525,7 +527,7 @@ export function isLocalPathToken(token) {
 }
 
 export function lineReferencesWorkspaceLocalPath(line) {
-  return /(?:\$GITHUB_WORKSPACE|\$\{GITHUB_WORKSPACE\}|\$\{\{\s*github\.workspace\s*\}\})\//u.test(line);
+  return /(?:\$PWD|\$\{PWD\}|\$GITHUB_WORKSPACE|\$\{GITHUB_WORKSPACE\}|\$\{\{\s*github\.workspace\s*\}\})\//u.test(line);
 }
 
 export function shellWordValue(token) {

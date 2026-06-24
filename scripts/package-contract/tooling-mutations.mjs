@@ -556,7 +556,7 @@ export function isTeeCommandToken(token) {
 }
 
 export function isCopyCommandToken(token) {
-  return /(?:^|\/)cp$/u.test(token.replace(/\\/gu, "/"));
+  return /(?:^|\/)(?:cp|mv)$/u.test(token.replace(/\\/gu, "/"));
 }
 
 export function isInPlaceEditCommandToken(token) {

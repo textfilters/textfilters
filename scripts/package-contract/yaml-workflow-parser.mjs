@@ -122,7 +122,13 @@ export function hasLineAtIndent(text, expected, indent) {
 }
 
 export function hasNpmPublishCommand(text) {
-  if (!hasNpmPublishCommandMarker(text) && !hasDecodedYamlNpmPublishCommandMarker(text)) return false;
+  if (
+    !hasNpmPublishCommandMarker(text) &&
+    !hasDecodedYamlNpmPublishCommandMarker(text) &&
+    !text.includes("${{")
+  ) {
+    return false;
+  }
   return countNpmPublishCommands(text) > 0;
 }
 

@@ -324,10 +324,32 @@ export function nodeEvalUsesOnlyBuiltDistEntrypoint(scriptText) {
 }
 
 export function javascriptImportSpecifiers(scriptText) {
-  const specifiers = [];
+  const specifiers = javascriptStaticImportSpecifiers(scriptText);
   const importPattern = /\bimport\s*(?:\/\*[\s\S]*?\*\/\s*)*\(\s*(?:\/\*[\s\S]*?\*\/\s*)*/gu;
 
   for (const match of scriptText.matchAll(importPattern)) {
+    const specifier = readJavaScriptStaticStringAt(scriptText, match.index + match[0].length);
+    if (specifier.closed) {
+      specifiers.push(specifier.value);
+    }
+  }
+
+  return specifiers;
+}
+
+export function javascriptStaticImportSpecifiers(scriptText) {
+  const specifiers = [];
+  const sideEffectPattern = /\bimport\s*(?:\/\*[\s\S]*?\*\/\s*)*/gu;
+  for (const match of scriptText.matchAll(sideEffectPattern)) {
+    if (scriptText[match.index + match[0].length] === "(") continue;
+    const specifier = readJavaScriptStaticStringAt(scriptText, match.index + match[0].length);
+    if (specifier.closed) {
+      specifiers.push(specifier.value);
+    }
+  }
+
+  const fromPattern = /\bfrom\s*(?:\/\*[\s\S]*?\*\/\s*)*/gu;
+  for (const match of scriptText.matchAll(fromPattern)) {
     const specifier = readJavaScriptStaticStringAt(scriptText, match.index + match[0].length);
     if (specifier.closed) {
       specifiers.push(specifier.value);

@@ -281,13 +281,14 @@ export function npmConfigValue(text, key) {
 
 export function npmConfigEntry(text, key) {
   const normalizedKey = normalizeNpmConfigKey(key);
+  let matchingEntry = null;
   for (const { key: entryKey, value } of npmConfigEntries(text)) {
     if (normalizeNpmConfigKey(entryKey) === normalizedKey) {
-      return { present: true, value };
+      matchingEntry = { present: true, value };
     }
   }
 
-  return { present: false, value: "" };
+  return matchingEntry ?? { present: false, value: "" };
 }
 
 export function npmConfigEntries(text) {
