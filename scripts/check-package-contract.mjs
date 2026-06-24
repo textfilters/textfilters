@@ -34,6 +34,8 @@ const BLOCKED_NPM_CONFIG_KEYS = [
   "ignore-scripts",
   "node-options",
   "prefix",
+  "provenance",
+  "provenance-file",
   "script-shell",
   "tag",
   "userconfig",
@@ -88,6 +90,30 @@ const CHECK_SCRIPT_WITH_BUILD = "npm run lint && npm test && npm run build && np
 const CHECK_SCRIPT_WITH_SMOKE_BUILD = "npm run lint && npm test && npm run smoke:dist && npm run pack:dry-run";
 const PROFANITY_DIST_SMOKE_SCRIPT =
   "npm run build && tsc --ignoreConfig --noEmit --target ES2024 --module NodeNext --moduleResolution NodeNext --strict --skipLibCheck tests/dist-public-api-smoke.ts && node tests/dist-public-api-smoke.mjs";
+const EXECUTED_TOOLING_SCRIPT_EXTENSIONS = new Set([".cjs", ".cts", ".js", ".mjs", ".mts", ".sh", ".ts", ".tsx"]);
+const EXECUTED_TOOLING_CONFIG_FILES = [
+  ".prettierrc.cjs",
+  ".prettierrc.js",
+  ".prettierrc.mjs",
+  "prettier.config.cjs",
+  "prettier.config.cts",
+  "prettier.config.js",
+  "prettier.config.mjs",
+  "prettier.config.mts",
+  "prettier.config.ts",
+  "vite.config.cjs",
+  "vite.config.cts",
+  "vite.config.js",
+  "vite.config.mjs",
+  "vite.config.mts",
+  "vite.config.ts",
+  "vitest.config.cjs",
+  "vitest.config.cts",
+  "vitest.config.js",
+  "vitest.config.mjs",
+  "vitest.config.mts",
+  "vitest.config.ts",
+];
 
 for (const pkgSpec of contract.packages) {
   const packageDir = join(packagesRoot, pkgSpec.directory);
@@ -175,6 +201,7 @@ function checkPackage(pkgSpec, packageDir) {
   expectNoUnsupportedPackageScriptSyntax(label, pkg.scripts);
   expectNoPublishInScripts(label, packageDir, pkg.scripts);
   expectNoPublishEnvMutationInScripts(label, pkg.scripts);
+  expectNoExecutedPackageToolingMutations(label, packageDir);
   expectNoPublishLifecycleScripts(label, pkg.scripts);
   expectNoWorkspaces(label, pkg);
   expectAuditableNpmCiLockfile(label, npmCiLockfile);
@@ -574,6 +601,12 @@ function expectNoUnsupportedWorkflowCommands(label, path, workflow) {
   if (hasShellFunctionDefinition(workflow)) {
     fail(label, `${relativePackagePath(path)} must not define shell functions`);
   }
+  if (hasShellAliasDefinition(workflow)) {
+    fail(label, `${relativePackagePath(path)} must not define shell aliases`);
+  }
+  if (textFeedsShellInterpreterOnStdin(workflow)) {
+    fail(label, `${relativePackagePath(path)} must not feed scripts to shell interpreters on stdin`);
+  }
   if (scriptUsesChildProcessExecution(workflow)) {
     fail(label, `${relativePackagePath(path)} must not use child_process command execution`);
   }
@@ -582,6 +615,9 @@ function expectNoUnsupportedWorkflowCommands(label, path, workflow) {
   }
   if (scriptUsesNpmExec(workflow)) {
     fail(label, `${relativePackagePath(path)} must not use npm exec`);
+  }
+  if (scriptUsesXargs(workflow)) {
+    fail(label, `${relativePackagePath(path)} must not use xargs command execution`);
   }
   if (scriptMutatesPackageManifest(workflow)) {
     fail(label, `${relativePackagePath(path)} must not mutate package.json`);
@@ -1576,6 +1612,12 @@ function expectNoUnsupportedPackageScriptSyntax(label, scripts) {
     if (hasShellFunctionDefinition(script)) {
       fail(label, `script ${scriptName} must not define shell functions`);
     }
+    if (hasShellAliasDefinition(script)) {
+      fail(label, `script ${scriptName} must not define shell aliases`);
+    }
+    if (textFeedsShellInterpreterOnStdin(script)) {
+      fail(label, `script ${scriptName} must not feed scripts to shell interpreters on stdin`);
+    }
     if (splitScriptCommandParts(script).some((part) => part.separator === "|")) {
       fail(label, `script ${scriptName} must not use shell pipelines`);
     }
@@ -1591,6 +1633,9 @@ function expectNoUnsupportedPackageScriptSyntax(label, scripts) {
     if (scriptUsesNpmExec(script)) {
       fail(label, `script ${scriptName} must not use npm exec`);
     }
+    if (scriptUsesXargs(script)) {
+      fail(label, `script ${scriptName} must not use xargs command execution`);
+    }
     if (scriptMutatesPackageManifest(script)) {
       fail(label, `script ${scriptName} must not mutate package.json`);
     }
@@ -1605,10 +1650,31 @@ function hasShellFunctionDefinition(text) {
   return /(?:^|[;&|({}\n]\s*)(?:function\s+)?[A-Za-z_][A-Za-z0-9_]*\s*(?:\(\s*\))?\s*\{/u.test(text);
 }
 
+function hasShellAliasDefinition(text) {
+  return shellScanTexts(text).some((commandText) =>
+    /(?:^|[;&|\n]\s*)alias\s+[A-Za-z_][A-Za-z0-9_]*=/u.test(shellContinuationText(commandText)),
+  );
+}
+
 function hasShellCommandNegation(text) {
   return shellContinuationText(shellCommentText(text))
     .split("\n")
     .some((line) => shellTokens(line).some((token) => shellWordValue(token) === "!"));
+}
+
+function textFeedsShellInterpreterOnStdin(text) {
+  return shellScanTexts(text).some((commandText) => shellTextFeedsShellInterpreterOnStdin(commandText));
+}
+
+function shellTextFeedsShellInterpreterOnStdin(text) {
+  const strippedText = shellContinuationText(shellCommentText(text));
+  return strippedText
+    .split("\n")
+    .some(
+      (line) =>
+        /(?:^|[;&]\s*)(?:bash|sh)\b[^;&|]*(?:<<<|<<)/u.test(line) ||
+        /\|\s*(?:bash|sh)\b/u.test(line),
+    );
 }
 
 function expectNoPublishInScripts(label, packageDir, scripts) {
@@ -1939,33 +2005,35 @@ function localScriptDirectoryEntrypointText(path, packageDir, visited) {
 function localScriptDependencyPaths(scriptText, baseDir, packageDir) {
   const dependencyPaths = new Set();
 
-  for (const rawLine of scriptText.split("\n")) {
-    for (const specifier of localScriptDependencySpecifiers(rawLine)) {
-      const dependencyPath = existingLocalScriptPath(resolve(baseDir, specifier));
-      if (dependencyPath && isPathInsidePackageDir(dependencyPath, packageDir)) {
-        dependencyPaths.add(dependencyPath);
-      }
+  for (const specifier of localScriptDependencySpecifiers(scriptText)) {
+    const dependencyPath = existingLocalScriptPath(resolve(baseDir, specifier));
+    if (dependencyPath && isPathInsidePackageDir(dependencyPath, packageDir)) {
+      dependencyPaths.add(dependencyPath);
     }
   }
 
   return [...dependencyPaths];
 }
 
-function localScriptDependencySpecifiers(line) {
+function localScriptDependencySpecifiers(text) {
   const specifiers = [];
-  const staticImport = /^\s*import\s+(?:(?!["'`]).*?\s+from\s+)?(["'`])(\.[^"'`$]+)\1/u.exec(line);
-  const exportFrom = /^\s*export\s+(?:\*|\{[^}]*\})\s+from\s+(["'`])(\.[^"'`$]+)\1/u.exec(line);
-  const callPattern = /\b(?:import|require)\s*\(\s*(["'`])(\.[^"'`$]+)\1/gu;
-  const shellSource = /^\s*(?:\.|source)\s+((?:\.{1,2}\/|[A-Za-z0-9_.-]+\/)[^\s;&|]+|[A-Za-z0-9_.-]+\.(?:bash|sh))\b/u.exec(
-    line,
-  );
+  const staticImportPattern = /^\s*import\s+(?:(?!["'`]).*?\s+from\s+)?(["'`])(\.[^"'`$]+)\1/u;
+  const exportFromPattern = /^\s*export\s+(?:\*|\{[^}]*\})\s+from\s+(["'`])(\.[^"'`$]+)\1/u;
+  const callPattern = /\b(?:import|require)\s*\(\s*(?:\/\*[\s\S]*?\*\/\s*)*(["'`])(\.[^"'`$]+)\1/gu;
+  const shellSourcePattern =
+    /^\s*(?:\.|source)\s+((?:\.{1,2}\/|[A-Za-z0-9_.-]+\/)[^\s;&|]+|[A-Za-z0-9_.-]+\.(?:bash|sh))\b/u;
 
-  if (staticImport) specifiers.push(staticImport[2]);
-  if (exportFrom) specifiers.push(exportFrom[2]);
-  for (const match of line.matchAll(callPattern)) {
+  for (const rawLine of text.split("\n")) {
+    const staticImport = staticImportPattern.exec(rawLine);
+    const exportFrom = exportFromPattern.exec(rawLine);
+    const shellSource = shellSourcePattern.exec(rawLine);
+    if (staticImport) specifiers.push(staticImport[2]);
+    if (exportFrom) specifiers.push(exportFrom[2]);
+    if (shellSource) specifiers.push(shellSource[1]);
+  }
+  for (const match of text.matchAll(callPattern)) {
     specifiers.push(match[2]);
   }
-  if (shellSource) specifiers.push(shellSource[1]);
 
   return specifiers;
 }
@@ -1975,6 +2043,89 @@ function expectNoPublishEnvMutationInScripts(label, scripts) {
     if (typeof script !== "string") continue;
     expectNoPublishEnvMutationInScriptText(label, `script ${scriptName}`, script);
   }
+}
+
+function expectNoExecutedPackageToolingMutations(label, packageDir) {
+  for (const scriptPath of executedPackageToolingScriptPaths(packageDir)) {
+    const scriptText = readExecutedToolingScriptText(scriptPath, packageDir);
+    if (!scriptText) continue;
+
+    const subject = `tooling file ${relativePackagePath(scriptPath)}`;
+    if (hasNpmPublishCommand(scriptText)) {
+      fail(label, `${subject} must not include npm publish`);
+    }
+    expectNoUnsupportedLocalScriptText(label, subject, scriptText);
+    expectNoPublishEnvMutationInScriptText(label, subject, scriptText);
+  }
+}
+
+function executedPackageToolingScriptPaths(packageDir) {
+  const scriptPaths = new Set();
+
+  for (const configFile of EXECUTED_TOOLING_CONFIG_FILES) {
+    const configPath = join(packageDir, configFile);
+    if (existsSync(configPath)) {
+      scriptPaths.add(configPath);
+    }
+  }
+
+  collectExecutedToolingScriptPaths(join(packageDir, "tests"), scriptPaths);
+  return [...scriptPaths].filter((scriptPath) => isPathInsidePackageDir(scriptPath, packageDir));
+}
+
+function collectExecutedToolingScriptPaths(directory, scriptPaths) {
+  if (!existsSync(directory)) return;
+
+  let entries = [];
+  try {
+    entries = readdirSync(directory, { withFileTypes: true });
+  } catch {
+    return;
+  }
+
+  for (const entry of entries) {
+    const entryPath = join(directory, entry.name);
+    if (entry.isDirectory()) {
+      collectExecutedToolingScriptPaths(entryPath, scriptPaths);
+    } else if (entry.isFile() && isExecutedToolingScriptFile(entryPath)) {
+      scriptPaths.add(entryPath);
+    }
+  }
+}
+
+function isExecutedToolingScriptFile(path) {
+  if (path.endsWith(".d.ts")) return false;
+  return EXECUTED_TOOLING_SCRIPT_EXTENSIONS.has(extname(path));
+}
+
+function readExecutedToolingScriptText(scriptPath, packageDir, visited = new Set()) {
+  if (!existsSync(scriptPath)) return "";
+  if (!isPathInsidePackageDir(scriptPath, packageDir)) return "";
+  if (visited.has(scriptPath)) return "";
+  visited.add(scriptPath);
+
+  let scriptText = "";
+  try {
+    scriptText = readFileSync(scriptPath, "utf8");
+  } catch {
+    return "";
+  }
+
+  const dependencyTexts = localScriptDependencyPaths(scriptText, dirname(scriptPath), packageDir)
+    .filter((dependencyPath) => shouldScanExecutedToolingDependency(dependencyPath, packageDir))
+    .map((dependencyPath) => readExecutedToolingScriptText(dependencyPath, packageDir, visited));
+  return [scriptText, ...dependencyTexts].filter(Boolean).join("\n");
+}
+
+function shouldScanExecutedToolingDependency(dependencyPath, packageDir) {
+  const relativePath = dependencyPath.slice(packageDir.length + 1);
+  return (
+    !relativePath.startsWith("dist/") &&
+    !relativePath.startsWith("examples/") &&
+    !relativePath.startsWith("src/") &&
+    relativePath !== "package.json" &&
+    relativePath !== "package-lock.json"
+  );
 }
 
 function expectNoPublishEnvMutationInScriptText(label, subject, script) {
@@ -2055,6 +2206,21 @@ function scriptUsesNpmExec(script) {
   return shellContinuationText(shellCommentText(script))
     .split("\n")
     .some((line) => lineUsesNpmExec(line, shellVariables, npmVariables, npxVariables));
+}
+
+function scriptUsesXargs(script) {
+  const shellVariables = new Map();
+  return shellScanTexts(script).some((commandText) =>
+    shellContinuationText(shellCommentText(commandText))
+      .split("\n")
+      .some((line) =>
+        shellTokens(line).some((token) => {
+          const word = shellWordValue(token);
+          recordShellVariable(word, shellVariables);
+          return commandBasename(resolveShellVariables(word, shellVariables)) === "xargs";
+        }),
+      ),
+  );
 }
 
 function lineUsesNpmExec(line, shellVariables, npmVariables, npxVariables) {
@@ -2199,7 +2365,7 @@ function scriptWritesTargetFileThroughJavaScriptVariable(script, isTargetPathTok
 }
 
 function scriptMentionsTargetPathWithWriteOperation(script, isTargetPathToken) {
-  if (!/\b(?:append|copy|create|open|rename|replace|touch|truncate|write)(?:\b|_)/iu.test(script)) {
+  if (!/\b(?:append|copy|cp(?:Sync)?|create|open|rename|replace|touch|truncate|write)(?:\b|_)/u.test(script)) {
     return false;
   }
 
@@ -4566,6 +4732,9 @@ function shellLineInvokesLocalCode(line) {
   if (lineReferencesWorkspaceLocalPath(line)) {
     return true;
   }
+  if (shellLineInvokesMake(line)) {
+    return true;
+  }
 
   const tokens = shellTokens(line).map((token) => shellWordValue(token));
   return tokens.some((token, index) => {
@@ -4578,6 +4747,11 @@ function shellLineInvokesLocalCode(line) {
       (isLocalPathToken(scriptToken) || isBareInterpreterScriptToken(scriptToken))
     );
   });
+}
+
+function shellLineInvokesMake(line) {
+  const tokens = shellTokens(line).map((token) => shellWordValue(token));
+  return tokens.some((token) => commandBasename(token) === "make" || commandBasename(token) === "gmake");
 }
 
 function interpreterFileArgumentToken(tokens, startIndex) {

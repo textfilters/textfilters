@@ -91,19 +91,24 @@ Each package repository keeps its own source, tests, and package-specific
   publish commands and publish-altering mutations.
 - Package scripts are intentionally fail-closed for unsupported dynamic command
   forms. Shell command substitutions, shell function definitions, shell
-  pipelines, delegated-work `||` short circuits, shell command negation,
-  non-shell interpreter eval snippets, `child_process` command execution,
-  `npm exec` and `npx` snippets, `npm pkg` and `npm version` mutations, and
-  direct package manifest writes are contract drift rather than interpreted as
-  safe. Delegated `smoke:dist` build commands must be chained with `&&` before
-  smoke work. Local script files invoked by package scripts are scanned
-  recursively through local `import`, static template-literal `import`, dynamic
-  `import()`, `require()`, ESM re-export dependencies, and shell `source` or
-  `.` helpers, and Node preload modules from `NODE_OPTIONS`, `--require`,
-  `--import`, `--loader`, and `--experimental-loader` are treated as referenced
-  local code. Node eval snippets may only import the built `./dist/index.js`
-  entry point. GNU `env -S` split strings are parsed when resolving local script
-  invocations.
+  aliases, shell pipelines, delegated-work `||` short circuits, shell command
+  negation, shell stdin scripts, non-shell interpreter eval snippets,
+  `child_process` command execution, `npm exec`, `npx`, and `xargs` snippets,
+  `npm pkg` and `npm version` mutations, and direct package manifest writes are
+  contract drift rather than interpreted as safe. Delegated `smoke:dist` build
+  commands must be chained with `&&` before smoke work. Local script files
+  invoked by package scripts are scanned recursively through local `import`,
+  static template-literal `import`, dynamic `import()` including multi-line
+  static local specifiers, `require()`, ESM re-export dependencies, and shell
+  `source` or `.` helpers, and Node preload modules from `NODE_OPTIONS`,
+  `--require`, `--import`, `--loader`, and `--experimental-loader` are treated
+  as referenced local code. Node eval snippets may only import the built
+  `./dist/index.js` entry point. GNU `env -S` split strings are parsed when
+  resolving local script invocations.
+- Tooling files executed by audited templates are scanned for publish and
+  publish-altering mutations. This includes JavaScript and TypeScript Prettier,
+  Vite, and Vitest config files plus script files under `tests` that
+  `vitest run` can discover.
 - Packages and locked dependencies must not expose an `npm` binary that can
   shadow the npm CLI inside npm-run-script PATH handling.
 - Lockfiles must use lockfile version 2 or newer with a `packages` map. Package
@@ -115,10 +120,10 @@ Each package repository keeps its own source, tests, and package-specific
 - Packages must not define npm workspaces.
 - Package-level npm configuration must not set `access`, `dry-run`,
   `script-shell`, workspace options, `tag`, `userconfig`, `globalconfig`,
-  `ignore-scripts`, `node-options`, `prefix`, a non-contract registry, or any
-  auth-related npm config key, including scoped registry token entries.
-  Valueless npmrc keys and npmrc array-form keys are treated as configured
-  keys.
+  `ignore-scripts`, `node-options`, `prefix`, provenance options, a
+  non-contract registry, or any auth-related npm config key, including scoped
+  registry token entries. Valueless npmrc keys and npmrc array-form keys are
+  treated as configured keys.
 
 Runtime dependency compatibility is tracked separately from this repository
 workflow contract. This guard focuses on manifest shape, scripts, CI, release,
@@ -203,11 +208,13 @@ is shared:
   considered when deciding whether a command invokes checked-in local code.
 - Non-release workflow command surfaces are also fail-closed for unsupported
   dynamic execution: shell command substitutions, shell function definitions,
-  non-shell interpreter eval snippets, `child_process` command execution,
-  `npm exec` snippets, publish-altering npm config environment keys, and
-  package manifest mutations are rejected. Workflow `uses` values are decoded
-  from quoted, plain, folded, and block-scalar YAML before release, publish, and
-  local-action guards are evaluated.
+  shell aliases, shell stdin scripts, non-shell interpreter eval snippets,
+  `child_process` command execution, `npm exec` snippets, `xargs` snippets,
+  publish-altering npm config environment keys, and package manifest mutations
+  are rejected. Workflow `uses` values are decoded from quoted, plain, folded,
+  and block-scalar YAML before release, publish, and local-action guards are
+  evaluated. `make` and `gmake` invocations are treated as checked-in local
+  workflow code.
 
 ## Release Please Contract
 

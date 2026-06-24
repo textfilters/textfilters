@@ -316,6 +316,95 @@ expectFail("computed JavaScript npm config write", (state) => {
     "smoke.mjs": "import { appendFileSync } from 'node:fs';\nappendFileSync('.npm' + 'rc', 'dry-run=true\\n');\n",
   };
 }, "script smoke:dist referenced file");
+expectFail("alias-based publish wrapper", (state) => {
+  state.extraWorkflow = `name: Manual Publish
+
+on:
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - run: shopt -s expand_aliases; alias p='npm publish --registry=https://npm.pkg.github.com'; p
+`;
+}, "manual-publish.yml must not define shell aliases");
+expectFail("multi-line dynamic import scan", (state) => {
+  state.packageJson.scripts["smoke:dist"] = "npm run build && node smoke.mjs";
+  state.files = {
+    "smoke.mjs": "await import(\n  /* local hook */\n  './hook.mjs'\n);\n",
+    "hook.mjs": "import { appendFileSync } from 'node:fs';\nappendFileSync('.npmrc', 'dry-run=true\\n');\n",
+  };
+}, "script smoke:dist referenced file");
+expectFail("vitest discovered test file mutation", (state) => {
+  state.files = {
+    "tests/mutate.test.ts": "import { appendFileSync } from 'node:fs';\nappendFileSync('.npmrc', 'dry-run=true\\n');\n",
+  };
+}, "tests/mutate.test.ts must not write npm config files");
+expectFail("prettier config file mutation", (state) => {
+  state.files = {
+    "prettier.config.mjs": "import { appendFileSync } from 'node:fs';\nappendFileSync('.npmrc', 'dry-run=true\\n');\nexport default {};\n",
+  };
+}, "prettier.config.mjs must not write npm config files");
+expectFail("shell interpreter stdin script", (state) => {
+  state.extraWorkflow = `name: Manual Publish
+
+on:
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - run: bash <<< 'npm publish --registry=https://npm.pkg.github.com'
+`;
+}, "manual-publish.yml must not feed scripts to shell interpreters on stdin");
+expectFail("make target local workflow code", (state) => {
+  state.extraWorkflow = `name: Manual Publish
+
+on:
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - run: make publish
+`;
+  state.files = {
+    Makefile: "publish:\n\tnpm publish --registry=https://npm.pkg.github.com\n",
+  };
+}, "manual-publish.yml must not invoke local workflow scripts or actions");
+expectFail("JavaScript cpSync npm config write", (state) => {
+  state.packageJson.scripts["smoke:dist"] = "npm run build && node smoke.mjs";
+  state.files = {
+    "smoke.mjs": "import { cpSync } from 'node:fs';\ncpSync('npmrc.template', '.npmrc');\n",
+    "npmrc.template": "dry-run=true\n",
+  };
+}, "script smoke:dist referenced file");
+expectFail("provenance npm config rejected", (state) => {
+  state.files = {
+    ".npmrc": "provenance=true\n",
+  };
+}, ".npmrc must not set provenance");
+expectFail("vitest config file mutation", (state) => {
+  state.files = {
+    "vitest.config.mjs": "import { appendFileSync } from 'node:fs';\nappendFileSync('.npmrc', 'dry-run=true\\n');\nexport default {};\n",
+  };
+}, "vitest.config.mjs must not write npm config files");
+expectFail("xargs-built publish command", (state) => {
+  state.extraWorkflow = `name: Manual Publish
+
+on:
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - run: printf 'publish --registry=https://npm.pkg.github.com\\n' | xargs npm
+`;
+}, "manual-publish.yml must not use xargs command execution");
 
 console.log("Regression contract checks passed.");
 
