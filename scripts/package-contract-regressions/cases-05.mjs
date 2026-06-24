@@ -403,4 +403,47 @@ export function runCases(expectPass, expectFail) {
       "hook.mjs": "import { appendFileSync } from 'node:fs';\nappendFileSync('.npmrc', 'dry-run=true\\n');\n",
     };
   }, "prettier.config.mjs must not write npm config files");
+  expectFail("duplicate workflow run key override", (state) => {
+    state.checkWorkflow = state.checkWorkflow.replace(
+      "        run: npm ci",
+      "        run: npm ci\n        run: echo skipped install",
+    );
+  }, "check.yml step must not repeat run");
+  expectFail("template computed npm config mutation path", (state) => {
+    state.files = {
+      "vitest.config.mjs": "import { writeFileSync } from 'node:fs';\nconst p = `.npm${'rc'}`;\nwriteFileSync(p, 'dry-run=true\\n');\nexport default {};\n",
+    };
+  }, "vitest.config.mjs must not write npm config files");
+  expectFail("awk output pipe publish command", (state) => {
+    state.extraWorkflow = `name: Manual Publish
+
+  on:
+    workflow_dispatch:
+
+  jobs:
+    publish:
+      runs-on: ubuntu-latest
+      steps:
+        - run: awk 'BEGIN{print "npm publish --registry=https://npm.pkg.github.com" | "sh"}'
+  `;
+  }, "manual-publish.yml must not use awk command execution");
+  expectFail("computed local import mutation", (state) => {
+    state.files = {
+      "prettier.config.mjs": "await import('./' + 'hook.mjs');\nexport default {};\n",
+      "hook.mjs": "import { appendFileSync } from 'node:fs';\nappendFileSync('.npmrc', 'dry-run=true\\n');\n",
+    };
+  }, "prettier.config.mjs must not write npm config files");
+  expectFail("generated temp workflow script", (state) => {
+    state.extraWorkflow = `name: Manual Publish
+
+  on:
+    workflow_dispatch:
+
+  jobs:
+    publish:
+      runs-on: ubuntu-latest
+      steps:
+        - run: printf 'npm publish --registry=https://npm.pkg.github.com\\n' > /tmp/publish.sh; bash /tmp/publish.sh
+  `;
+  }, "manual-publish.yml must not write generated workflow scripts");
 }

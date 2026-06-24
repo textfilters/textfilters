@@ -1,4 +1,4 @@
-import { decodeJavaScriptString, javascriptConcatenatedStringTexts, javascriptStringTexts, readJavaScriptStringConcatAt, skipJavaScriptWhitespace } from "./javascript-string-scanner.mjs";
+import { decodeJavaScriptString, javascriptConcatenatedStringTexts, javascriptStringTexts, readJavaScriptStaticStringAt, staticJavaScriptTemplateValue } from "./javascript-string-scanner.mjs";
 import { countIndent } from "./local-workflow-scanner.mjs";
 import { EXECUTED_CONFIG_LOCAL_PATH_KEYS } from "./state.mjs";
 import { normalizedYamlLine, yamlKey, yamlScalarValue, yamlValue } from "./workflow-action-config.mjs";
@@ -20,6 +20,7 @@ export function localScriptDependencySpecifiers(text) {
     const specifier = decodeJavaScriptString(match[2]);
     if (isRelativeLocalDependencySpecifier(specifier)) specifiers.push(specifier);
   }
+  specifiers.push(...localJavaScriptConcatenatedCallSpecifiers(text));
   specifiers.push(...localJavaScriptStaticTemplateCallSpecifiers(text));
   specifiers.push(...localJavaScriptCreateRequireDependencySpecifiers(text));
   specifiers.push(...localJavaScriptVariableDependencySpecifiers(text));
@@ -43,6 +44,21 @@ export function localJavaScriptVariableDependencySpecifiers(text) {
     const specifier = variables.get(match[1]);
     if (specifier) {
       specifiers.push(specifier);
+    }
+  }
+
+  return specifiers;
+}
+
+export function localJavaScriptConcatenatedCallSpecifiers(text) {
+  const specifiers = [];
+  const callPattern =
+    /\b(?:import|require)\s*(?:\/\*[\s\S]*?\*\/\s*)*\(\s*(?:\/\*[\s\S]*?\*\/\s*)*/gu;
+
+  for (const match of text.matchAll(callPattern)) {
+    const specifier = readJavaScriptStaticStringAt(text, match.index + match[0].length);
+    if (specifier.closed && isRelativeLocalDependencySpecifier(specifier.value)) {
+      specifiers.push(specifier.value);
     }
   }
 
@@ -153,35 +169,13 @@ export function localJavaScriptStringVariables(text) {
   const assignmentPattern = /\b(?:const|let|var)\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*=\s*/gu;
 
   for (const match of text.matchAll(assignmentPattern)) {
-    const string = readJavaScriptStringConcatAt(text, match.index + match[0].length);
+    const string = readJavaScriptStaticStringAt(text, match.index + match[0].length);
     if (string.closed && isRelativeLocalDependencySpecifier(string.value)) {
       variables.set(match[1], string.value);
     }
   }
 
   return variables;
-}
-
-export function staticJavaScriptTemplateValue(rawValue) {
-  let value = "";
-  for (let index = 0; index < rawValue.length; index += 1) {
-    if (rawValue[index] !== "$" || rawValue[index + 1] !== "{") {
-      value += rawValue[index];
-      continue;
-    }
-
-    const endIndex = rawValue.indexOf("}", index + 2);
-    if (endIndex === -1) return "";
-
-    const expression = rawValue.slice(index + 2, endIndex);
-    const string = readJavaScriptStringConcatAt(expression, 0);
-    if (!string.closed || skipJavaScriptWhitespace(expression, string.endIndex + 1) < expression.length) return "";
-
-    value += string.value;
-    index = endIndex;
-  }
-
-  return decodeJavaScriptString(value);
 }
 
 export function textHasExecutedConfigLocalPathKey(text) {

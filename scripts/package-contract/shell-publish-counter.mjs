@@ -693,7 +693,7 @@ export function shellTextUsesAwkSystemExecution(text) {
             argumentIndex += 1;
             continue;
           }
-          if (/\bsystem\s*\(/u.test(token)) {
+          if (awkProgramUsesCommandExecution(token)) {
             return true;
           }
         }
@@ -701,6 +701,17 @@ export function shellTextUsesAwkSystemExecution(text) {
 
       return false;
     });
+}
+
+export function awkProgramUsesCommandExecution(program) {
+  return /\bsystem\s*\(/u.test(program) || awkProgramUsesOutputCommandPipe(program);
+}
+
+export function awkProgramUsesOutputCommandPipe(program) {
+  return (
+    /\b(?:print|printf)\b[\s\S]*\|[\s\S]*(?:"[^"]+"|'[^']+'|[A-Za-z_][A-Za-z0-9_./-]*)/u.test(program) ||
+    /\|[\s\S]*\bgetline\b/u.test(program)
+  );
 }
 
 export function shellCommandBasename(command) {

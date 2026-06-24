@@ -1,4 +1,4 @@
-import { isNpmCommandToken, isNpxCommandToken, isShellBoundaryToken, isShellOutputRedirectionToken, isShellRedirectionToken, javascriptConcatenatedStringTexts, javascriptStringTexts, readJavaScriptStringConcatAt } from "./javascript-string-scanner.mjs";
+import { isNpmCommandToken, isNpxCommandToken, isShellBoundaryToken, isShellOutputRedirectionToken, isShellRedirectionToken, javascriptConcatenatedStringTexts, javascriptStaticTemplateTexts, javascriptStringTexts, readJavaScriptStaticStringAt } from "./javascript-string-scanner.mjs";
 import { commandBasename, expectNoUnsupportedLocalScriptText, isPathInsidePackageDir, listPackageScriptFiles, localScriptDependencyPaths } from "./local-script-execution.mjs";
 import { relativePackagePath, shellWordValue } from "./local-workflow-scanner.mjs";
 import { checkWorkflow } from "./package-checks.mjs";
@@ -332,7 +332,7 @@ export function scriptWritesPackageManifestFile(script) {
 export function scriptWritesTargetFileThroughJavaScriptLiteral(script, isTargetPathToken) {
   const writeCallPattern = /\b(?:writeFile(?:Sync)?|appendFile(?:Sync)?|createWriteStream|openSync)\s*\(/gu;
   for (const match of script.matchAll(writeCallPattern)) {
-    const string = readJavaScriptStringConcatAt(script, match.index + match[0].length);
+    const string = readJavaScriptStaticStringAt(script, match.index + match[0].length);
     if (string.closed && isTargetPathToken(string.value)) {
       return true;
     }
@@ -346,7 +346,7 @@ export function scriptWritesTargetFileThroughJavaScriptVariable(script, isTarget
   const assignmentPattern = /\b(?:const|let|var)\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*=\s*/gu;
 
   for (const match of script.matchAll(assignmentPattern)) {
-    const string = readJavaScriptStringConcatAt(script, match.index + match[0].length);
+    const string = readJavaScriptStaticStringAt(script, match.index + match[0].length);
     if (string.closed && isTargetPathToken(string.value)) {
       targetVariables.add(match[1]);
     }
@@ -395,9 +395,11 @@ export function scriptMentionsTargetPathWithWriteOperation(script, isTargetPathT
     return false;
   }
 
-  return [...javascriptStringTexts(script), ...javascriptConcatenatedStringTexts(script)].some((value) =>
-    isTargetPathToken(value),
-  );
+  return [
+    ...javascriptStringTexts(script),
+    ...javascriptConcatenatedStringTexts(script),
+    ...javascriptStaticTemplateTexts(script),
+  ].some((value) => isTargetPathToken(value));
 }
 
 export function shellTokensWritePackageManifestFile(tokens) {

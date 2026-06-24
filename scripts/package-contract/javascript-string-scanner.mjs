@@ -46,6 +46,84 @@ export function javascriptConcatenatedStringTexts(text) {
   return strings;
 }
 
+export function javascriptStaticTemplateTexts(text) {
+  const strings = [];
+  for (let index = 0; index < text.length; index += 1) {
+    if (text[index] !== "`") continue;
+
+    const template = readJavaScriptRawTemplateAt(text, index + 1);
+    if (!template.closed) continue;
+    if (template.value.includes("${")) {
+      const value = staticJavaScriptTemplateValue(template.value);
+      if (value) strings.push(value);
+    }
+    index = template.endIndex;
+  }
+
+  return strings;
+}
+
+export function readJavaScriptStaticStringAt(text, startIndex) {
+  const index = skipJavaScriptWhitespace(text, startIndex);
+  if (text[index] === "`") {
+    const template = readJavaScriptRawTemplateAt(text, index + 1);
+    if (template.closed && template.value.includes("${")) {
+      const value = staticJavaScriptTemplateValue(template.value);
+      return { value, endIndex: template.endIndex, parts: value ? 1 : 0, closed: Boolean(value) };
+    }
+  }
+
+  return readJavaScriptStringConcatAt(text, startIndex);
+}
+
+export function readJavaScriptRawTemplateAt(text, startIndex) {
+  let rawValue = "";
+  let escaped = false;
+
+  for (let index = startIndex; index < text.length; index += 1) {
+    const char = text[index];
+    if (escaped) {
+      rawValue += `\\${char}`;
+      escaped = false;
+      continue;
+    }
+    if (char === "\\") {
+      escaped = true;
+      continue;
+    }
+    if (char === "`") {
+      return { value: rawValue, endIndex: index, closed: true };
+    }
+    rawValue += char;
+  }
+
+  return { value: rawValue, endIndex: text.length - 1, closed: false };
+}
+
+export function staticJavaScriptTemplateValue(rawValue) {
+  let value = "";
+  for (let index = 0; index < rawValue.length; index += 1) {
+    if (rawValue[index] !== "$" || rawValue[index + 1] !== "{") {
+      value += rawValue[index];
+      continue;
+    }
+
+    const endIndex = rawValue.indexOf("}", index + 2);
+    if (endIndex === -1) return "";
+
+    const expression = rawValue.slice(index + 2, endIndex);
+    const string = readJavaScriptStringConcatAt(expression, 0);
+    if (!string.closed || skipJavaScriptWhitespace(expression, string.endIndex + 1) < expression.length) {
+      return "";
+    }
+
+    value += string.value;
+    index = endIndex;
+  }
+
+  return decodeJavaScriptString(value);
+}
+
 export function readJavaScriptStringConcatAt(text, startIndex) {
   let index = skipJavaScriptWhitespace(text, startIndex);
   let value = "";

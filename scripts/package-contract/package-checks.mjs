@@ -2,13 +2,13 @@ import { expectNoPublishInScripts } from "./local-script-execution.mjs";
 import { hasLocalWorkflowExecution, relativePackagePath } from "./local-workflow-scanner.mjs";
 import { expectAbsentPrivate, expectAuditedPackageScriptTemplates, expectBuildBeforeDistSmoke, expectCheckScriptOnlyAuditedCommands, expectDelegatedScriptWork, expectEqual, expectNoPackageFileExclusions, expectOnlyJsonObjectKeys, expectOnlyPackageConfig, expectReleasePleaseConfigKeys, expectScriptCommand, expectScriptCommandOrder, expectSemver, readJson, readText } from "./package-json-policy.mjs";
 import { textUsesAwkSystemExecution, textUsesNonShellInterpreterEval } from "./shell-publish-counter.mjs";
-import { expectNoExitBeforeScriptCommands, expectNoUnsupportedPackageScriptSyntax, hasShellAliasDefinition, hasShellCommandSubstitution, hasShellFunctionDefinition, hasShellProcessSubstitution, textFeedsShellInterpreterOnStdin, workflowRunCommandsUseShellGlobs, workflowRunCommandsUseUnsupportedShellParameterExpansion, workflowUsesUnsupportedRunShell } from "./shell-script-syntax.mjs";
+import { expectNoExitBeforeScriptCommands, expectNoUnsupportedPackageScriptSyntax, hasShellAliasDefinition, hasShellCommandSubstitution, hasShellFunctionDefinition, hasShellProcessSubstitution, textFeedsShellInterpreterOnStdin, workflowRunCommandsUseShellGlobs, workflowRunCommandsUseUnsupportedShellParameterExpansion, workflowRunCommandsWriteGeneratedTempScripts, workflowUsesUnsupportedRunShell } from "./shell-script-syntax.mjs";
 import { BLOCKED_NPM_CONFIG_ENV_KEYS, contract } from "./state.mjs";
 import { expectAuditableNpmCiLockfile, expectNoDependencyInstallLifecycleScripts, expectNoExecutedPackageToolingMutations, expectNoLocalDependencySpecs, expectNoNpmBinaryShadowing, expectNoPublishEnvMutationInScripts, expectNoPublishLifecycleScripts, expectNoWorkspaces, expectSafeNpmConfig, npmCiLockfilePath, scriptMutatesPackageManifest, scriptUsesChildProcessExecution, scriptUsesNpmExec, scriptUsesXargs, scriptWritesGitHubActionsEnvironmentFile } from "./tooling-mutations.mjs";
 import { workflowHasPackageWritePermission, workflowUsesPublishAction, workflowUsesReleasePleaseAction } from "./workflow-action-config.mjs";
-import { expectBlock, expectBlockLine, expectBlockingJob, expectBlockingStep, expectEffectivePermissions, expectEnvAvailable, expectEventKeys, expectExactSteps, expectJobBlock, expectJobBlockContainingRun, expectJobLine, expectJobPermissions, expectJobRunner, expectNoEnvKey, expectNoNpmConfigEnvOverrides, expectNoStepChildBlock, expectNoYamlAnchorsOrAliases, expectPackageRootStep, expectPublishGate, expectPushBranchesOnly, expectSingleActionText, expectSingleJobBlockContainingRun, expectSingleListEntry, expectSinglePublishCommandText, expectSingleStepWithUses, expectStepInputsOnly, expectStepLine, expectStepOrder, expectStepWithInput, expectStepWithRun, expectStepWithoutInput, expectUnfilteredEvent, expectWorkflowJobs, expectWorkflowName, fail } from "./workflow-assertions.mjs";
-import { textHasBlockedNpmConfigEnvKey, textHasBlockedWorkflowStartupEnvKey } from "./yaml-inline-queries.mjs";
-import { hasNpmPublishCommand, stripYamlComments } from "./yaml-workflow-parser.mjs";
+import { expectBlock, expectBlockLine, expectBlockingJob, expectBlockingStep, expectEffectivePermissions, expectEnvAvailable, expectEventKeys, expectExactSteps, expectJobBlock, expectJobBlockContainingRun, expectJobLine, expectJobPermissions, expectJobRunner, expectNoEnvKey, expectNoNpmConfigEnvOverrides, expectNoStepChildBlock, expectNoYamlAnchorsOrAliases, expectPackageRootStep, expectPublishGate, expectPushBranchesOnly, expectSingleActionText, expectSingleJobBlockContainingRun, expectSingleListEntry, expectSinglePublishCommandText, expectSingleStepWithUses, expectStepInputsOnly, expectStepLine, expectStepOrder, expectStepWithInput, expectStepWithRun, expectStepWithoutInput, expectUnfilteredEvent, expectWorkflowJobs, expectWorkflowName, fail, getOptionalBlock } from "./workflow-assertions.mjs";
+import { stepTopLevelKeyCount, textHasBlockedNpmConfigEnvKey, textHasBlockedWorkflowStartupEnvKey } from "./yaml-inline-queries.mjs";
+import { extractNestedBlocks, extractStepBlocks, hasNpmPublishCommand, stripYamlComments } from "./yaml-workflow-parser.mjs";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
@@ -121,6 +121,7 @@ export function checkWorkflow(label, workflowPath) {
   const workflow = readText(label, workflowPath);
   if (!workflow) return;
   expectNoYamlAnchorsOrAliases(label, workflowPath, workflow);
+  expectNoDuplicateWorkflowStepRunKeys(label, workflowPath, workflow);
   expectNoBlockedNpmConfigEnvKeys(label, workflowPath, workflow);
   const onBlock = expectBlock(label, workflowPath, workflow, "on:", 0);
   const pullRequestBlock = expectBlock(label, workflowPath, onBlock, "pull_request:", 2);
@@ -220,6 +221,7 @@ export function checkReleaseWorkflow(label, workflowPath) {
   const workflow = readText(label, workflowPath);
   if (!workflow) return;
   expectNoYamlAnchorsOrAliases(label, workflowPath, workflow);
+  expectNoDuplicateWorkflowStepRunKeys(label, workflowPath, workflow);
   expectNoBlockedNpmConfigEnvKeys(label, workflowPath, workflow);
   const onBlock = expectBlock(label, workflowPath, workflow, "on:", 0);
   const pushBlock = expectBlock(label, workflowPath, onBlock, "push:", 2);
@@ -443,6 +445,7 @@ export function checkPublishCommandScope(label, packageDir, releaseWorkflowPath)
   const workflowsDir = join(packageDir, ".github", "workflows");
   if (!existsSync(workflowsDir)) return;
 
+  const checkWorkflowPath = join(packageDir, contract.checkWorkflow.path);
   for (const entry of readdirSync(workflowsDir, { withFileTypes: true })) {
     if (!entry.isFile() || !/\.ya?ml$/u.test(entry.name)) continue;
 
@@ -451,6 +454,9 @@ export function checkPublishCommandScope(label, packageDir, releaseWorkflowPath)
 
     const workflow = stripYamlComments(readFileSync(workflowPath, "utf8"));
     expectNoYamlAnchorsOrAliases(label, workflowPath, workflow);
+    if (workflowPath !== checkWorkflowPath) {
+      expectNoDuplicateWorkflowStepRunKeys(label, workflowPath, workflow);
+    }
     expectNoUnsupportedWorkflowCommands(label, workflowPath, workflow);
     if (hasNpmPublishCommand(workflow)) {
       fail(
@@ -498,6 +504,9 @@ export function expectNoUnsupportedWorkflowCommands(label, path, workflow) {
   if (workflowRunCommandsUseUnsupportedShellParameterExpansion(workflow)) {
     fail(label, `${relativePackagePath(path)} must not use unsupported shell parameter expansion`);
   }
+  if (workflowRunCommandsWriteGeneratedTempScripts(workflow)) {
+    fail(label, `${relativePackagePath(path)} must not write generated workflow scripts`);
+  }
   if (workflowUsesUnsupportedRunShell(workflow)) {
     fail(label, `${relativePackagePath(path)} must not use non-shell run shells`);
   }
@@ -527,6 +536,17 @@ export function expectNoUnsupportedWorkflowCommands(label, path, workflow) {
   }
   if (scriptWritesGitHubActionsEnvironmentFile(workflow)) {
     fail(label, `${relativePackagePath(path)} must not write GitHub Actions environment files`);
+  }
+}
+
+export function expectNoDuplicateWorkflowStepRunKeys(label, path, workflow) {
+  const jobsBlock = getOptionalBlock(workflow, "jobs:", 0);
+  for (const jobBlock of extractNestedBlocks(jobsBlock, 2)) {
+    for (const stepBlock of extractStepBlocks(jobBlock)) {
+      if (stepTopLevelKeyCount(stepBlock, "run:") > 1) {
+        fail(label, `${relativePackagePath(path)} step must not repeat run`);
+      }
+    }
   }
 }
 

@@ -62,6 +62,13 @@ export function stepTopLevelValue(stepBlock, key) {
   return entry ? yamlValue(entry) : "";
 }
 
+export function stepTopLevelKeyCount(stepBlock, key) {
+  return stepBlock
+    .split("\n")
+    .map((entry) => stepTopLevelLine(stepBlock, entry))
+    .filter((entry) => yamlKey(entry) === key).length;
+}
+
 export function workflowDefaultsWorkingDirectory(workflow) {
   return Boolean(workflowDefaultsWorkingDirectoryValue(workflow));
 }

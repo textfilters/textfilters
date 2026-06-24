@@ -1,5 +1,5 @@
-import { isShellBoundaryToken, isShellInputRedirectionToken, isShellRedirectionToken } from "./javascript-string-scanner.mjs";
-import { isBareInterpreterScriptToken, isFileArgumentInterpreterToken, isLocalPathToken, shellWordValue } from "./local-workflow-scanner.mjs";
+import { isShellBoundaryToken, isShellInputRedirectionToken, isShellOutputRedirectionToken, isShellRedirectionToken } from "./javascript-string-scanner.mjs";
+import { interpreterFileArgumentToken, isBareInterpreterScriptToken, isFileArgumentInterpreterToken, isLocalPathToken, shellWordValue } from "./local-workflow-scanner.mjs";
 import { isSuccessfulExitCommand } from "./package-json-policy.mjs";
 import { hasUnsupportedShellParameterExpansion, shellTokens, textUsesNonShellInterpreterEval } from "./shell-publish-counter.mjs";
 import { scriptMutatesPackageManifest, scriptUsesChildProcessExecution, scriptUsesNpmExec, scriptUsesXargs } from "./tooling-mutations.mjs";
@@ -246,6 +246,64 @@ export function textFeedsShellInterpreterOnStdin(text) {
 export function workflowRunCommandsUseShellGlobs(workflow) {
   const lines = workflow.split("\n");
   return workflowRunCommandTexts(lines).some((commandText) => textUsesShellGlobs(commandText));
+}
+
+export function workflowRunCommandsWriteGeneratedTempScripts(workflow) {
+  const lines = workflow.split("\n");
+  return workflowRunCommandTexts(lines).some((commandText) =>
+    shellTextWritesAndExecutesGeneratedTempScript(commandText),
+  );
+}
+
+export function shellTextWritesAndExecutesGeneratedTempScript(text) {
+  const generatedScriptPaths = new Set();
+  const lines = shellContinuationText(shellCommentText(text)).split("\n");
+
+  for (const line of lines) {
+    const tokens = shellTokens(line).map((token) => shellWordValue(token));
+    for (let index = 0; index < tokens.length; index += 1) {
+      if (isShellOutputRedirectionToken(tokens[index]) && isGeneratedTempScriptPathToken(tokens[index + 1] ?? "")) {
+        generatedScriptPaths.add(tokens[index + 1]);
+      }
+      if (isTeeCommandToken(tokens[index])) {
+        collectGeneratedTempScriptTeeTargets(tokens, index + 1, generatedScriptPaths);
+      }
+    }
+  }
+
+  if (generatedScriptPaths.size === 0) return false;
+
+  return lines.some((line) => {
+    const tokens = shellTokens(line).map((token) => shellWordValue(token));
+    return tokens.some((token, index) => {
+      if (!isFileArgumentInterpreterToken(token)) return false;
+      const scriptToken = interpreterFileArgumentToken(tokens, index + 1);
+      return generatedScriptPaths.has(scriptToken);
+    });
+  });
+}
+
+export function isGeneratedTempScriptPathToken(token) {
+  return /^(?:\/tmp\/|\$RUNNER_TEMP\/|\$\{RUNNER_TEMP\}\/)[A-Za-z0-9_.-]+$/u.test(token);
+}
+
+export function collectGeneratedTempScriptTeeTargets(tokens, startIndex, generatedScriptPaths) {
+  for (let index = startIndex; index < tokens.length; index += 1) {
+    const token = tokens[index];
+    if (isShellBoundaryToken(token)) break;
+    if (isShellRedirectionToken(token)) {
+      index += 1;
+      continue;
+    }
+    if (token === "--" || token.startsWith("-")) continue;
+    if (isGeneratedTempScriptPathToken(token)) {
+      generatedScriptPaths.add(token);
+    }
+  }
+}
+
+export function isTeeCommandToken(token) {
+  return /(?:^|\/)tee$/u.test(token.replace(/\\/gu, "/"));
 }
 
 export function textUsesShellGlobs(text) {
