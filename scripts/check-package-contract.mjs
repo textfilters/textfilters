@@ -92,9 +92,15 @@ const PROFANITY_DIST_SMOKE_SCRIPT =
   "npm run build && tsc --ignoreConfig --noEmit --target ES2024 --module NodeNext --moduleResolution NodeNext --strict --skipLibCheck tests/dist-public-api-smoke.ts && node tests/dist-public-api-smoke.mjs";
 const EXECUTED_TOOLING_SCRIPT_EXTENSIONS = new Set([".cjs", ".cts", ".js", ".mjs", ".mts", ".sh", ".ts", ".tsx"]);
 const EXECUTED_TOOLING_CONFIG_FILES = [
+  ".prettierrc",
   ".prettierrc.cjs",
+  ".prettierrc.cts",
   ".prettierrc.js",
+  ".prettierrc.json",
+  ".prettierrc.json5",
   ".prettierrc.mjs",
+  ".prettierrc.mts",
+  ".prettierrc.ts",
   "prettier.config.cjs",
   "prettier.config.cts",
   "prettier.config.js",
@@ -606,6 +612,9 @@ function expectNoUnsupportedWorkflowCommands(label, path, workflow) {
   }
   if (textFeedsShellInterpreterOnStdin(workflow)) {
     fail(label, `${relativePackagePath(path)} must not feed scripts to shell interpreters on stdin`);
+  }
+  if (workflowRunCommandsUseShellGlobs(workflow)) {
+    fail(label, `${relativePackagePath(path)} must not use shell globs in run commands`);
   }
   if (scriptUsesChildProcessExecution(workflow)) {
     fail(label, `${relativePackagePath(path)} must not use child_process command execution`);
@@ -1618,6 +1627,9 @@ function expectNoUnsupportedPackageScriptSyntax(label, scripts) {
     if (textFeedsShellInterpreterOnStdin(script)) {
       fail(label, `script ${scriptName} must not feed scripts to shell interpreters on stdin`);
     }
+    if (textUsesShellGlobs(script)) {
+      fail(label, `script ${scriptName} must not use shell globs`);
+    }
     if (splitScriptCommandParts(script).some((part) => part.separator === "|")) {
       fail(label, `script ${scriptName} must not use shell pipelines`);
     }
@@ -1666,24 +1678,96 @@ function textFeedsShellInterpreterOnStdin(text) {
   return shellScanTexts(text).some((commandText) => shellTextFeedsShellInterpreterOnStdin(commandText));
 }
 
+function workflowRunCommandsUseShellGlobs(workflow) {
+  const lines = workflow.split("\n");
+  return workflowRunCommandTexts(lines).some((commandText) => textUsesShellGlobs(commandText));
+}
+
+function textUsesShellGlobs(text) {
+  return shellContinuationText(shellCommentText(text))
+    .split("\n")
+    .some((line) => shellTokens(line).some((token) => shellTokenContainsUnquotedGlob(token)));
+}
+
+function shellTokenContainsUnquotedGlob(token) {
+  let quote = "";
+  let escaped = false;
+
+  for (let index = 0; index < token.length; index += 1) {
+    const char = token[index];
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (char === "\\" && quote !== "'") {
+      escaped = true;
+      continue;
+    }
+    if ((char === "'" || char === '"') && quote === "") {
+      quote = char;
+      continue;
+    }
+    if (char === quote) {
+      quote = "";
+      continue;
+    }
+    if (quote === "" && (char === "*" || char === "?" || char === "[")) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 function shellTextFeedsShellInterpreterOnStdin(text) {
   const strippedText = shellContinuationText(shellCommentText(text));
   return strippedText
     .split("\n")
-    .some(
-      (line) =>
+    .some((line) => {
+      if (
         /(?:^|[;&]\s*)(?:bash|bun|deno|node|perl|php|python|python3|ruby|sh|tsx)\b[^;&|]*(?:<<<|<<)/u.test(line) ||
-        /\|\s*(?:bash|bun|deno|node|perl|php|python|python3|ruby|sh|tsx)\b/u.test(line),
-    );
+        /\|\s*(?:bash|bun|deno|node|perl|php|python|python3|ruby|sh|tsx)\b/u.test(line)
+      ) {
+        return true;
+      }
+
+      const tokens = shellTokens(line).map((token) => shellWordValue(token));
+      for (let index = 0; index < tokens.length; index += 1) {
+        if (!isFileArgumentInterpreterToken(tokens[index])) continue;
+        if (interpreterReadsLocalFileFromStdin(tokens, index + 1)) {
+          return true;
+        }
+      }
+
+      return false;
+    });
+}
+
+function interpreterReadsLocalFileFromStdin(tokens, startIndex) {
+  for (let index = startIndex; index < tokens.length; index += 1) {
+    const token = tokens[index];
+    if (isShellBoundaryToken(token)) return false;
+    if (isShellInputRedirectionToken(token)) {
+      const scriptToken = tokens[index + 1] ?? "";
+      return isLocalPathToken(scriptToken) || isBareInterpreterScriptToken(scriptToken);
+    }
+    if (isShellRedirectionToken(token)) {
+      index += 1;
+      continue;
+    }
+  }
+
+  return false;
 }
 
 function expectNoPublishInScripts(label, packageDir, scripts) {
+  const localScriptTextCache = new Map();
   for (const [scriptName, script] of Object.entries(scripts ?? {})) {
     if (typeof script === "string" && hasNpmPublishCommand(script)) {
       fail(label, `script ${scriptName} must not include npm publish`);
     }
     for (const scriptPath of localFilesInvokedByScript(packageDir, script)) {
-      const scriptText = readExistingLocalScriptFile(scriptPath, packageDir);
+      const scriptText = readExistingLocalScriptFile(scriptPath, packageDir, new Set(), localScriptTextCache);
       if (scriptText && hasNpmPublishCommand(scriptText)) {
         fail(label, `script ${scriptName} referenced file ${relativePackagePath(scriptPath)} must not include npm publish`);
       }
@@ -1721,11 +1805,15 @@ function localFilesInvokedByScript(packageDir, script) {
   const shellVariables = new Map();
   for (const command of splitScriptCommands(script)) {
     const tokens = shellTokens(command).map((token) => shellWordValue(token));
+    let resolvedTokens;
+    const commandResolvedTokens = () => {
+      resolvedTokens ??= tokens.map((candidate) => resolveShellVariables(candidate, shellVariables));
+      return resolvedTokens;
+    };
     for (let index = 0; index < tokens.length; index += 1) {
       const word = tokens[index];
       recordShellVariable(word, shellVariables);
       const token = resolveShellVariables(word, shellVariables);
-      const resolvedTokens = tokens.map((candidate) => resolveShellVariables(candidate, shellVariables));
       for (const scriptToken of nodeOptionsLocalScriptTokens(token)) {
         localFiles.add(resolve(packageDir, scriptToken));
       }
@@ -1733,16 +1821,16 @@ function localFilesInvokedByScript(packageDir, script) {
         localFiles.add(resolve(packageDir, token));
       }
       if (isShellOrNodeInterpreterToken(token)) {
-        for (const scriptToken of interpreterLocalScriptTokens(token, resolvedTokens, index + 1)) {
+        for (const scriptToken of interpreterLocalScriptTokens(token, commandResolvedTokens(), index + 1)) {
           localFiles.add(resolve(packageDir, scriptToken));
         }
       } else if (isFileArgumentInterpreterToken(token)) {
-        const scriptToken = interpreterFileArgumentToken(resolvedTokens, index + 1);
+        const scriptToken = interpreterFileArgumentToken(commandResolvedTokens(), index + 1);
         if (scriptToken && (isLocalScriptFileToken(scriptToken) || isBareInterpreterScriptToken(scriptToken))) {
           localFiles.add(resolve(packageDir, scriptToken));
         }
       } else if (isEnvCommandToken(token)) {
-        for (const scriptToken of envCommandLocalScriptTokens(resolvedTokens, index + 1)) {
+        for (const scriptToken of envCommandLocalScriptTokens(commandResolvedTokens(), index + 1)) {
           localFiles.add(resolve(packageDir, scriptToken));
         }
       }
@@ -1968,22 +2056,27 @@ function isRelativeLocalPathToken(token) {
   return /^[A-Za-z0-9_.-]+\/(?:[A-Za-z0-9_.-]+\/?)*$/u.test(token);
 }
 
-function readExistingLocalScriptFile(path, packageDir, visited = new Set()) {
+function readExistingLocalScriptFile(path, packageDir, visited = new Set(), textCache = new Map()) {
   const scriptPath = existingLocalScriptPath(path);
   if (!scriptPath) return "";
   if (!isPathInsidePackageDir(scriptPath, packageDir)) return "";
   if (visited.has(scriptPath)) return "";
+  if (textCache.has(scriptPath)) return textCache.get(scriptPath);
   visited.add(scriptPath);
 
   try {
     if (statSync(scriptPath).isDirectory()) {
-      return localScriptDirectoryEntrypointText(scriptPath, packageDir, visited);
+      const directoryText = localScriptDirectoryEntrypointText(scriptPath, packageDir, visited, textCache);
+      textCache.set(scriptPath, directoryText);
+      return directoryText;
     }
     const scriptText = readFileSync(scriptPath, "utf8");
     const dependencyTexts = localScriptDependencyPaths(scriptText, dirname(scriptPath), packageDir).map(
-      (dependencyPath) => readExistingLocalScriptFile(dependencyPath, packageDir, visited),
+      (dependencyPath) => readExistingLocalScriptFile(dependencyPath, packageDir, visited, textCache),
     );
-    return [scriptText, ...dependencyTexts].filter(Boolean).join("\n");
+    const combinedText = [scriptText, ...dependencyTexts].filter(Boolean).join("\n");
+    textCache.set(scriptPath, combinedText);
+    return combinedText;
   } catch {
     return "";
   }
@@ -2003,7 +2096,7 @@ function existingLocalScriptPath(path) {
   return "";
 }
 
-function localScriptDirectoryEntrypointText(path, packageDir, visited) {
+function localScriptDirectoryEntrypointText(path, packageDir, visited, textCache) {
   const entrypointTexts = [];
   const packageJsonPath = join(path, "package.json");
   if (existsSync(packageJsonPath)) {
@@ -2013,7 +2106,7 @@ function localScriptDirectoryEntrypointText(path, packageDir, visited) {
         if (typeof entrypoint === "string") {
           const entrypointPath = resolve(path, entrypoint);
           if (isPathInsidePackageDir(entrypointPath, packageDir) && existsSync(entrypointPath)) {
-            entrypointTexts.push(readExistingLocalScriptFile(entrypointPath, packageDir, visited));
+            entrypointTexts.push(readExistingLocalScriptFile(entrypointPath, packageDir, visited, textCache));
           }
         }
       }
@@ -2025,7 +2118,7 @@ function localScriptDirectoryEntrypointText(path, packageDir, visited) {
   for (const entrypoint of ["index.js", "index.mjs", "index.cjs", "index.ts", "index.tsx", "index.sh"]) {
     const entrypointPath = join(path, entrypoint);
     if (existsSync(entrypointPath)) {
-      entrypointTexts.push(readExistingLocalScriptFile(entrypointPath, packageDir, visited));
+      entrypointTexts.push(readExistingLocalScriptFile(entrypointPath, packageDir, visited, textCache));
     }
   }
 
@@ -2047,25 +2140,66 @@ function localScriptDependencyPaths(scriptText, baseDir, packageDir) {
 
 function localScriptDependencySpecifiers(text) {
   const specifiers = [];
-  const staticImportPattern = /^\s*import\s+(?:(?!["'`]).*?\s+from\s+)?(["'`])(\.[^"'`$]+)\1/u;
-  const exportFromPattern = /^\s*export\s+(?:\*|\{[^}]*\})\s+from\s+(["'`])(\.[^"'`$]+)\1/u;
   const callPattern = /\b(?:import|require)\s*\(\s*(?:\/\*[\s\S]*?\*\/\s*)*(["'`])(\.[^"'`$]+)\1/gu;
   const shellSourcePattern =
     /^\s*(?:\.|source)\s+((?:\.{1,2}\/|[A-Za-z0-9_.-]+\/)[^\s;&|]+|[A-Za-z0-9_.-]+\.(?:bash|sh))\b/u;
 
+  specifiers.push(...localStaticImportExportSpecifiers(text));
   for (const rawLine of text.split("\n")) {
-    const staticImport = staticImportPattern.exec(rawLine);
-    const exportFrom = exportFromPattern.exec(rawLine);
     const shellSource = shellSourcePattern.exec(rawLine);
-    if (staticImport) specifiers.push(staticImport[2]);
-    if (exportFrom) specifiers.push(exportFrom[2]);
     if (shellSource) specifiers.push(shellSource[1]);
   }
   for (const match of text.matchAll(callPattern)) {
     specifiers.push(match[2]);
   }
+  if (/\b(?:plugins|setupFiles)\b/u.test(text)) {
+    for (const specifier of javascriptStringTexts(text)) {
+      if (specifier.startsWith("./") || specifier.startsWith("../")) {
+        specifiers.push(specifier);
+      }
+    }
+  }
+
+  return [...new Set(specifiers)];
+}
+
+function localStaticImportExportSpecifiers(text) {
+  const specifiers = [];
+  let statement = "";
+  let statementLineCount = 0;
+
+  const flushStatement = () => {
+    if (!statement) return;
+    const localSpecifier = staticImportExportLocalSpecifier(statement);
+    if (localSpecifier) {
+      specifiers.push(localSpecifier);
+    }
+    statement = "";
+    statementLineCount = 0;
+  };
+
+  for (const line of text.split("\n")) {
+    if (!statement && !/^\s*(?:import|export)\b/u.test(line)) continue;
+    if (!statement && /^\s*import\s*\(/u.test(line)) continue;
+
+    statement = statement ? `${statement}\n${line}` : line;
+    statementLineCount += 1;
+
+    if (staticImportExportLocalSpecifier(statement) || /;\s*(?:\/\/.*)?$/u.test(line) || statementLineCount >= 40) {
+      flushStatement();
+    }
+  }
+  flushStatement();
 
   return specifiers;
+}
+
+function staticImportExportLocalSpecifier(statement) {
+  const fromMatch = /\bfrom\s*(?:\/\*[\s\S]*?\*\/\s*)*(["'`])(\.[^"'`$]+)\1/u.exec(statement);
+  if (fromMatch) return fromMatch[2];
+
+  const sideEffectImport = /^\s*import\s*(?:\/\*[\s\S]*?\*\/\s*)*(["'`])(\.[^"'`$]+)\1/u.exec(statement);
+  return sideEffectImport?.[2] ?? "";
 }
 
 function expectNoPublishEnvMutationInScripts(label, scripts) {
@@ -2076,8 +2210,9 @@ function expectNoPublishEnvMutationInScripts(label, scripts) {
 }
 
 function expectNoExecutedPackageToolingMutations(label, packageDir) {
+  const toolingTextCache = new Map();
   for (const scriptPath of executedPackageToolingScriptPaths(packageDir)) {
-    const scriptText = readExecutedToolingScriptText(scriptPath, packageDir);
+    const scriptText = readExecutedToolingScriptText(scriptPath, packageDir, new Set(), toolingTextCache);
     if (!scriptText) continue;
 
     const subject = `tooling file ${relativePackagePath(scriptPath)}`;
@@ -2128,10 +2263,11 @@ function isExecutedToolingScriptFile(path) {
   return EXECUTED_TOOLING_SCRIPT_EXTENSIONS.has(extname(path));
 }
 
-function readExecutedToolingScriptText(scriptPath, packageDir, visited = new Set()) {
+function readExecutedToolingScriptText(scriptPath, packageDir, visited = new Set(), textCache = new Map()) {
   if (!existsSync(scriptPath)) return "";
   if (!isPathInsidePackageDir(scriptPath, packageDir)) return "";
   if (visited.has(scriptPath)) return "";
+  if (textCache.has(scriptPath)) return textCache.get(scriptPath);
   visited.add(scriptPath);
 
   let scriptText = "";
@@ -2143,15 +2279,16 @@ function readExecutedToolingScriptText(scriptPath, packageDir, visited = new Set
 
   const dependencyTexts = localScriptDependencyPaths(scriptText, dirname(scriptPath), packageDir)
     .filter((dependencyPath) => shouldScanExecutedToolingDependency(dependencyPath, packageDir))
-    .map((dependencyPath) => readExecutedToolingScriptText(dependencyPath, packageDir, visited));
-  return [scriptText, ...dependencyTexts].filter(Boolean).join("\n");
+    .map((dependencyPath) => readExecutedToolingScriptText(dependencyPath, packageDir, visited, textCache));
+  const combinedText = [scriptText, ...dependencyTexts].filter(Boolean).join("\n");
+  textCache.set(scriptPath, combinedText);
+  return combinedText;
 }
 
 function shouldScanExecutedToolingDependency(dependencyPath, packageDir) {
   const relativePath = dependencyPath.slice(packageDir.length + 1);
   return (
     !relativePath.startsWith("dist/") &&
-    !relativePath.startsWith("examples/") &&
     relativePath !== "package.json" &&
     relativePath !== "package-lock.json"
   );
@@ -2222,6 +2359,7 @@ function scriptUsesChildProcessExecution(script) {
 function scriptReferencesChildProcessModule(script) {
   return (
     /\b(?:node:)?child_process\b/u.test(script) ||
+    javascriptStringTexts(script).some((value) => value === "child_process" || value === "node:child_process") ||
     javascriptConcatenatedStringTexts(script).some(
       (value) => value === "child_process" || value === "node:child_process",
     )
@@ -2888,7 +3026,12 @@ function hasLineAtIndent(text, expected, indent) {
 }
 
 function hasNpmPublishCommand(text) {
+  if (!hasNpmPublishCommandMarker(text)) return false;
   return countNpmPublishCommands(text) > 0;
+}
+
+function hasNpmPublishCommandMarker(text) {
+  return /\b(?:npm|npx|publish|pu|pub|publ|publi|publis)\b/u.test(text);
 }
 
 function countNpmPublishCommands(text) {
@@ -2906,30 +3049,21 @@ function shellContinuationText(text) {
 
 function shellScanTexts(text) {
   const lines = text.split("\n");
+  const runCommands = new Map(workflowRunCommandEntries(lines).map((entry) => [entry.startIndex, entry]));
   const commandTexts = [];
-  const workflowEnvValues = workflowEnvValueMap(text);
 
   for (let index = 0; index < lines.length; index += 1) {
+    const runCommand = runCommands.get(index);
+    if (runCommand) {
+      commandTexts.push(runCommand.commandText);
+      index = runCommand.endIndex;
+      continue;
+    }
+
     const line = lines[index];
     const normalizedLine = normalizedYamlLine(line);
 
     if (yamlKey(normalizedLine) === "run:") {
-      const runValue = yamlScalarValue(yamlValue(normalizedLine));
-      if (/^[|>]/u.test(runValue)) {
-        const block = yamlRunBlockCommandText(lines, index, countIndent(line), runValue);
-        commandTexts.push(normalizeWorkflowRunCommandText(block.commandText, workflowEnvValues));
-        index = block.endIndex;
-      } else if (startsMultilineQuotedYamlScalar(yamlValue(normalizedLine))) {
-        const scalar = yamlMultilineQuotedScalarText(lines, index, countIndent(line), yamlValue(normalizedLine));
-        commandTexts.push(normalizeWorkflowRunCommandText(scalar.commandText, workflowEnvValues));
-        index = scalar.endIndex;
-      } else if (hasMultilinePlainYamlScalar(lines, index, countIndent(line))) {
-        const scalar = yamlMultilinePlainScalarText(lines, index, countIndent(line), runValue);
-        commandTexts.push(normalizeWorkflowRunCommandText(scalar.commandText, workflowEnvValues));
-        index = scalar.endIndex;
-      } else {
-        commandTexts.push(normalizeWorkflowRunCommandText(runValue, workflowEnvValues));
-      }
       continue;
     }
 
@@ -2937,6 +3071,58 @@ function shellScanTexts(text) {
   }
 
   return commandTexts;
+}
+
+function workflowRunCommandTexts(lines) {
+  return workflowRunCommandEntries(lines).map((entry) => entry.commandText);
+}
+
+function workflowRunCommandEntries(lines) {
+  const commandEntries = [];
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    const normalizedLine = normalizedYamlLine(line);
+
+    if (yamlKey(normalizedLine) !== "run:") continue;
+
+    const workflowEnvValues = workflowRunEnvValueMap(lines, index);
+    const rawRunValue = yamlValue(normalizedLine);
+    const runValue = yamlScalarValue(rawRunValue);
+    if (/^[|>]/u.test(runValue)) {
+      const block = yamlRunBlockCommandText(lines, index, countIndent(line), runValue);
+      commandEntries.push({
+        commandText: normalizeWorkflowRunCommandText(block.commandText, workflowEnvValues),
+        startIndex: index,
+        endIndex: block.endIndex,
+      });
+      index = block.endIndex;
+    } else if (startsMultilineQuotedYamlScalar(rawRunValue)) {
+      const scalar = yamlMultilineQuotedScalarText(lines, index, countIndent(line), rawRunValue);
+      commandEntries.push({
+        commandText: normalizeWorkflowRunCommandText(scalar.commandText, workflowEnvValues),
+        startIndex: index,
+        endIndex: scalar.endIndex,
+      });
+      index = scalar.endIndex;
+    } else if (hasMultilinePlainYamlScalar(lines, index, countIndent(line))) {
+      const scalar = yamlMultilinePlainScalarText(lines, index, countIndent(line), runValue);
+      commandEntries.push({
+        commandText: normalizeWorkflowRunCommandText(scalar.commandText, workflowEnvValues),
+        startIndex: index,
+        endIndex: scalar.endIndex,
+      });
+      index = scalar.endIndex;
+    } else {
+      commandEntries.push({
+        commandText: normalizeWorkflowRunCommandText(runValue, workflowEnvValues),
+        startIndex: index,
+        endIndex: index,
+      });
+    }
+  }
+
+  return commandEntries;
 }
 
 function normalizeWorkflowRunCommandText(text, workflowEnvValues) {
@@ -2986,6 +3172,94 @@ function workflowEnvValueMap(text) {
   }
 
   return envValues;
+}
+
+function workflowRunEnvValueMap(lines, runIndex) {
+  const envValues = workflowEnvValueMap(getTopLevelWorkflowEnvText(lines));
+  const jobBlock = workflowJobBlockContainingLine(lines, runIndex);
+  recordWorkflowBlockEnvValues(envValues, jobBlock, countIndent(jobBlock[0] ?? "") + 2);
+  const stepBlock = workflowStepBlockContainingLine(lines, runIndex);
+  recordWorkflowBlockEnvValues(envValues, stepBlock, countIndent(stepBlock[0] ?? ""));
+  recordWorkflowBlockEnvValues(envValues, stepBlock, countIndent(stepBlock[0] ?? "") + 2);
+
+  return envValues;
+}
+
+function getTopLevelWorkflowEnvText(lines) {
+  return yamlBlockContainingHeader(lines, "env:", 0).join("\n");
+}
+
+function workflowJobBlockContainingLine(lines, lineIndex) {
+  let startIndex = -1;
+
+  for (let index = lineIndex; index >= 0; index -= 1) {
+    const line = lines[index];
+    if (countIndent(line) === 2 && yamlKey(normalizedYamlLine(line))) {
+      startIndex = index;
+      break;
+    }
+  }
+  if (startIndex === -1) return [];
+
+  let endIndex = lines.length;
+  for (let index = startIndex + 1; index < lines.length; index += 1) {
+    if (lines[index].trim() !== "" && countIndent(lines[index]) <= 2) {
+      endIndex = index;
+      break;
+    }
+  }
+
+  return lines.slice(startIndex, endIndex);
+}
+
+function workflowStepBlockContainingLine(lines, lineIndex) {
+  let startIndex = -1;
+
+  for (let index = lineIndex; index >= 0; index -= 1) {
+    const line = lines[index];
+    if (line.trim() !== "" && normalizedYamlLine(line).startsWith("run:")) continue;
+    if (line.trimStart().startsWith("- ") && countIndent(line) <= countIndent(lines[lineIndex])) {
+      startIndex = index;
+      break;
+    }
+  }
+  if (startIndex === -1) return [];
+
+  const stepIndent = countIndent(lines[startIndex]);
+  let endIndex = lines.length;
+  for (let index = startIndex + 1; index < lines.length; index += 1) {
+    if (lines[index].trim() !== "" && countIndent(lines[index]) <= stepIndent) {
+      endIndex = index;
+      break;
+    }
+  }
+
+  return lines.slice(startIndex, endIndex);
+}
+
+function recordWorkflowBlockEnvValues(envValues, blockLines, envIndent) {
+  if (blockLines.length === 0) return;
+  const envText = yamlBlockContainingHeader(blockLines, "env:", envIndent).join("\n");
+  for (const [key, value] of workflowEnvValueMap(envText)) {
+    envValues.set(key, value);
+  }
+}
+
+function yamlBlockContainingHeader(lines, header, indent) {
+  const startIndex = lines.findIndex((line) => isYamlBlockHeader(line, header, indent));
+  if (startIndex === -1) return [];
+
+  const headerIndent =
+    countIndent(lines[startIndex]) + (lines[startIndex].trimStart().startsWith("- ") ? 2 : 0);
+  let endIndex = lines.length;
+  for (let index = startIndex + 1; index < lines.length; index += 1) {
+    if (lines[index].trim() !== "" && countIndent(lines[index]) <= headerIndent) {
+      endIndex = index;
+      break;
+    }
+  }
+
+  return lines.slice(startIndex, endIndex);
 }
 
 function recordWorkflowEnvValue(envValues, key, value) {
@@ -3849,12 +4123,59 @@ function readJavaScriptString(text, startIndex, quote) {
       continue;
     }
     if (char === quote) {
-      return { value: decodeDoubleQuotedYamlKey(rawValue), endIndex: index, closed: true };
+      return { value: decodeJavaScriptString(rawValue), endIndex: index, closed: true };
     }
     rawValue += char;
   }
 
   return { value: rawValue, endIndex: text.length - 1, closed: false };
+}
+
+function decodeJavaScriptString(value) {
+  let decoded = "";
+
+  for (let index = 0; index < value.length; index += 1) {
+    const char = value[index];
+    if (char !== "\\") {
+      decoded += char;
+      continue;
+    }
+
+    const escaped = value[index + 1] ?? "";
+    if (escaped === "x" && /^[0-9a-fA-F]{2}$/u.test(value.slice(index + 2, index + 4))) {
+      decoded += String.fromCodePoint(Number.parseInt(value.slice(index + 2, index + 4), 16));
+      index += 3;
+      continue;
+    }
+    if (escaped === "u" && value[index + 2] === "{") {
+      const endIndex = value.indexOf("}", index + 3);
+      const codePoint = endIndex === -1 ? "" : value.slice(index + 3, endIndex);
+      if (/^[0-9a-fA-F]+$/u.test(codePoint)) {
+        decoded += String.fromCodePoint(Number.parseInt(codePoint, 16));
+        index = endIndex;
+        continue;
+      }
+    }
+    if (escaped === "u" && /^[0-9a-fA-F]{4}$/u.test(value.slice(index + 2, index + 6))) {
+      decoded += String.fromCodePoint(Number.parseInt(value.slice(index + 2, index + 6), 16));
+      index += 5;
+      continue;
+    }
+
+    const escapes = {
+      "0": "\0",
+      b: "\b",
+      f: "\f",
+      n: "\n",
+      r: "\r",
+      t: "\t",
+      v: "\v",
+    };
+    decoded += escapes[escaped] ?? escaped;
+    index += 1;
+  }
+
+  return decoded;
 }
 
 function isShellBoundaryToken(token) {
@@ -3863,6 +4184,10 @@ function isShellBoundaryToken(token) {
 
 function isShellRedirectionToken(token) {
   return /^\d*(?:<|>|<<|>>)$/u.test(token);
+}
+
+function isShellInputRedirectionToken(token) {
+  return /^\d*<$/u.test(token);
 }
 
 function isShellOutputRedirectionToken(token) {
@@ -4713,37 +5038,9 @@ function hasLocalWorkflowExecution(workflow) {
     return true;
   }
 
-  for (let index = 0; index < lines.length; index += 1) {
-    const line = lines[index];
-    if (line.trim() === "") continue;
-
-    const indent = countIndent(line);
-    const normalizedLine = normalizedYamlLine(line);
-
-    if (yamlKey(normalizedLine) === "run:") {
-      const rawRunValue = yamlValue(normalizedLine);
-      const runValue = yamlScalarValue(rawRunValue);
-      if (/^[|>]/u.test(runValue)) {
-        const block = yamlRunBlockCommandText(lines, index, indent, runValue);
-        if (shellTextInvokesLocalCode(block.commandText)) {
-          return true;
-        }
-        index = block.endIndex;
-      } else if (startsMultilineQuotedYamlScalar(rawRunValue)) {
-        const scalar = yamlMultilineQuotedScalarText(lines, index, indent, rawRunValue);
-        if (shellTextInvokesLocalCode(scalar.commandText)) {
-          return true;
-        }
-        index = scalar.endIndex;
-      } else if (hasMultilinePlainYamlScalar(lines, index, indent)) {
-        const scalar = yamlMultilinePlainScalarText(lines, index, indent, runValue);
-        if (shellTextInvokesLocalCode(scalar.commandText)) {
-          return true;
-        }
-        index = scalar.endIndex;
-      } else if (shellLineInvokesLocalCode(runValue)) {
-        return true;
-      }
+  for (const runCommand of workflowRunCommandTexts(lines)) {
+    if (shellTextInvokesLocalCode(runCommand)) {
+      return true;
     }
   }
 
