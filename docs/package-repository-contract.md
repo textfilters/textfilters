@@ -82,13 +82,15 @@ Each package repository keeps its own source, tests, and package-specific
   publication stays in the audited Release Please workflow. Variable-expanded
   npm config subcommands, shell parameter fallback expansions, shell `eval`
   snippets, command substitutions, and simple npm-forwarding shell functions are
-  resolved before this check. Package scripts must not write npm config files
-  directly, including through shell utilities such as `tee`, `cp`, and in-place
-  edits, JavaScript write APIs, computed JavaScript string paths, or local
-  helper files. Local script files, directory entry points, root script files,
-  extensionless script entry points, non-shell interpreter file arguments, and
-  relative subdirectory script paths invoked by package scripts are scanned for
-  publish commands and publish-altering mutations.
+  resolved before this check. GitHub Actions expression fragments and workflow
+  environment values are normalized before workflow command scanning. Package
+  scripts must not write npm config files directly, including through shell
+  utilities such as `tee`, `cp`, and in-place edits, JavaScript write and
+  link/symlink APIs, computed JavaScript string paths, or local helper files.
+  Local script files, directory entry points, root script files, extensionless
+  script entry points, non-shell interpreter file arguments, and relative
+  subdirectory script paths invoked by package scripts are scanned for publish
+  commands and publish-altering mutations.
 - Package scripts are intentionally fail-closed for unsupported dynamic command
   forms. Shell command substitutions, shell function definitions, shell
   aliases, shell pipelines, delegated-work `||` short circuits, shell command
@@ -108,7 +110,8 @@ Each package repository keeps its own source, tests, and package-specific
 - Tooling files executed by audited templates are scanned for publish and
   publish-altering mutations. This includes JavaScript and TypeScript Prettier,
   Vite, and Vitest config files plus script files under `tests` that
-  `vitest run` can discover.
+  `vitest run` can discover, including local source modules imported by those
+  executed tooling files.
 - Packages and locked dependencies must not expose an `npm` binary that can
   shadow the npm CLI inside npm-run-script PATH handling.
 - Lockfiles must use lockfile version 2 or newer with a `packages` map. Package
@@ -204,8 +207,9 @@ is shared:
   decoded or version-drifted Release Please actions, or invoke local workflow
   scripts or local composite actions. Multiline quoted and plain `run` scalars,
   root and non-root working directories, bare root script file arguments,
-  file-argument interpreters, and extensionless local script entry points are
-  considered when deciding whether a command invokes checked-in local code.
+  file-argument interpreters, Python module entry points, and extensionless
+  local script entry points are considered when deciding whether a command
+  invokes checked-in local code.
 - Non-release workflow command surfaces are also fail-closed for unsupported
   dynamic execution: shell command substitutions, shell function definitions,
   shell aliases, shell stdin scripts, non-shell interpreter eval snippets,

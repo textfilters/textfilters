@@ -405,6 +405,93 @@ jobs:
       - run: printf 'publish --registry=https://npm.pkg.github.com\\n' | xargs npm
 `;
 }, "manual-publish.yml must not use xargs command execution");
+expectFail("env split-string publish command", (state) => {
+  state.extraWorkflow = `name: Manual Publish
+
+on:
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - run: env -S 'npm publish --registry=https://npm.pkg.github.com'
+`;
+}, "manual-publish.yml must not include npm publish");
+expectFail("test-imported source module mutation", (state) => {
+  state.files = {
+    "tests/mutate.test.ts": "import '../src/mutate.ts';\n",
+    "src/mutate.ts": "import { appendFileSync } from 'node:fs';\nappendFileSync('.npmrc', 'dry-run=true\\n');\n",
+  };
+}, "tests/mutate.test.ts must not write npm config files");
+expectFail("actions expression publish command", (state) => {
+  state.extraWorkflow = `name: Manual Publish
+
+on:
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - run: npm\${{ '' }} publish --registry=https://npm.pkg.github.com
+`;
+}, "manual-publish.yml must not include npm publish");
+expectFail("workflow env publish command word", (state) => {
+  state.extraWorkflow = `name: Manual Publish
+
+on:
+  workflow_dispatch:
+
+env:
+  CMD: npm
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - run: $CMD publish --registry=https://npm.pkg.github.com
+`;
+}, "manual-publish.yml must not include npm publish");
+expectFail("python module workflow entry point", (state) => {
+  state.extraWorkflow = `name: Manual Publish
+
+on:
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - run: python3 -m publish
+`;
+  state.files = {
+    "publish.py": "import os\nos.system('npm publish --registry=https://npm.pkg.github.com')\n",
+  };
+}, "manual-publish.yml must not invoke local workflow scripts or actions");
+expectFail("python stdin script", (state) => {
+  state.extraWorkflow = `name: Manual Publish
+
+on:
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          python3 <<'PY'
+          import os
+          os.system('npm publish --registry=https://npm.pkg.github.com')
+          PY
+`;
+}, "manual-publish.yml must not feed scripts to shell interpreters on stdin");
+expectFail("JavaScript symlink npm config write", (state) => {
+  state.files = {
+    "prettier.config.mjs": "import { symlinkSync } from 'node:fs';\nsymlinkSync('npmrc.template', '.npmrc');\nexport default {};\n",
+    "npmrc.template": "dry-run=true\n",
+  };
+}, "prettier.config.mjs must not write npm config files");
 
 console.log("Regression contract checks passed.");
 
