@@ -178,7 +178,7 @@ expectFail("old lockfile version with packages map", (state) => {
 }, "package-lock.json must use lockfileVersion 2 or newer with packages map");
 expectFail("delegated smoke build without success chaining", (state) => {
   state.packageJson.scripts["smoke:dist"] = "npm run build; node smoke.mjs";
-}, "check script must run or delegate npm run build before smoke:dist");
+}, "script smoke:dist must match an audited dist smoke template");
 expectFail("npm exec after valued npm option", (state) => {
   state.packageJson.scripts.lint = "npm --cache .npm-cache exec -c 'node hook.mjs'";
 }, "script lint must not use npm exec");
@@ -234,6 +234,88 @@ jobs:
     "publish.py": "print('publish')\n",
   };
 }, "manual-publish.yml must not invoke local workflow scripts or actions");
+expectFail("shell negation delegated test", (state) => {
+  state.packageJson.scripts.test = "! vitest run";
+}, "script test must not use shell command negation");
+expectFail("node eval local import scan", (state) => {
+  state.packageJson.scripts["smoke:dist"] = "npm run build && node -e \"import('./hook.mjs')\"";
+  state.files = {
+    "hook.mjs": "import { appendFileSync } from 'node:fs';\nappendFileSync('.npmrc', 'dry-run=true\\n');\n",
+  };
+}, "script smoke:dist referenced file");
+expectFail("package script file interpreter scan", (state) => {
+  state.packageJson.scripts.lint = "python3 hook.py && prettier . --check";
+  state.files = {
+    "hook.py": "from pathlib import Path\nPath('.npmrc').write_text('dry-run=true\\n')\n",
+  };
+}, "script lint referenced file");
+expectFail("checked-in scoped npm auth config", (state) => {
+  state.files = {
+    ".npmrc": "//npm.pkg.github.com/:_authToken=bogus\n",
+  };
+}, ".npmrc must not set //npm.pkg.github.com/:_authToken");
+expectFail("shell parameter fallback publish command", (state) => {
+  state.extraWorkflow = `name: Manual Publish
+
+on:
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - run: \${x:-npm} publish --registry=https://npm.pkg.github.com
+`;
+}, "manual-publish.yml must not include npm publish");
+expectFail("obfuscated child_process module reference", (state) => {
+  state.packageJson.scripts["smoke:dist"] = "npm run build && node smoke.mjs";
+  state.files = {
+    "smoke.mjs":
+      "const cp = await import('node:child_' + 'process');\ncp.spawnSync('npm', ['publish', '--registry=https://npm.pkg.github.com']);\n",
+  };
+}, "script smoke:dist referenced file");
+expectFail("template literal local dynamic import scan", (state) => {
+  state.packageJson.scripts["smoke:dist"] = "npm run build && node smoke.mjs";
+  state.files = {
+    "smoke.mjs": "await import(`./hook.mjs`);\n",
+    "hook.mjs": "import { appendFileSync } from 'node:fs';\nappendFileSync('.npmrc', 'dry-run=true\\n');\n",
+  };
+}, "script smoke:dist referenced file");
+expectFail("scoped auth npm config env key", (state) => {
+  state.releaseWorkflow = state.releaseWorkflow.replace(
+    "          NODE_AUTH_TOKEN: ${{ github.token }}\n        run: npm publish --registry=https://npm.pkg.github.com",
+    "          NODE_AUTH_TOKEN: ${{ github.token }}\n          \"npm_config_//npm.pkg.github.com/:_authToken\": bogus\n        run: npm publish --registry=https://npm.pkg.github.com",
+  );
+}, ".github/workflows/release-please.yml must not set publish-altering npm config env");
+expectFail("sourced shell helper dependency scan", (state) => {
+  state.packageJson.scripts["smoke:dist"] = "npm run build && sh smoke.sh";
+  state.files = {
+    "smoke.sh": ". ./hook.sh\n",
+    "hook.sh": "printf 'dry-run=true\\n' > .npmrc\n",
+  };
+}, "script smoke:dist referenced file");
+expectFail("non-shell interpreter eval snippet", (state) => {
+  state.extraWorkflow = `name: Manual Publish
+
+on:
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - run: python3 -c "import subprocess; subprocess.run(['npm', 'publish', '--registry=https://npm.pkg.github.com'])"
+`;
+}, "manual-publish.yml must not use non-shell interpreter eval snippets");
+expectFail("sed in-place npm config edit", (state) => {
+  state.packageJson.scripts.lint = "sed -i '$a dry-run=true' .npmrc && prettier . --check";
+}, "script lint must not write npm config files");
+expectFail("computed JavaScript npm config write", (state) => {
+  state.packageJson.scripts["smoke:dist"] = "npm run build && node smoke.mjs";
+  state.files = {
+    "smoke.mjs": "import { appendFileSync } from 'node:fs';\nappendFileSync('.npm' + 'rc', 'dry-run=true\\n');\n",
+  };
+}, "script smoke:dist referenced file");
 
 console.log("Regression contract checks passed.");
 
@@ -313,13 +395,14 @@ function packageManifest() {
     sideEffects: false,
     files: ["dist", "README.md", "LICENSE"],
     scripts: {
-      lint: "prettier . --check",
+      lint: "prettier README.md docs examples package.json src tests --check",
       test: "vitest run",
       build: "tsc -p tsconfig.json",
       prepack: "npm run build",
-      "smoke:dist": "npm run build && node smoke.mjs",
+      "smoke:dist":
+        "node --input-type=module --eval \"const mod = await import('./dist/index.js'); if (!mod) throw new Error('missing exports');\"",
       "pack:dry-run": "npm pack --dry-run",
-      check: "npm run lint && npm test && npm run smoke:dist && npm run pack:dry-run",
+      check: "npm run lint && npm test && npm run build && npm run smoke:dist && npm run pack:dry-run",
     },
     devDependencies: {
       prettier: "^3.8.3",

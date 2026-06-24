@@ -47,8 +47,11 @@ Each package repository keeps its own source, tests, and package-specific
   `npm-shrinkwrap.json` and `package-lock.json` exist, the shrinkwrap file is
   audited because npm gives it precedence. The audited lockfile must use the
   package map format from lockfile version 2 or newer.
-- Script names include `lint`, `test`, `build`, `smoke:dist`, `pack:dry-run`,
-  and `check`, and required script bodies are non-empty.
+- Script names are limited to the audited package scripts: `lint`, `test`,
+  `build`, `smoke:dist`, `pack:dry-run`, `check`, optional `format`, and
+  `prepack`. Required script bodies are non-empty, and delegated `lint`,
+  `test`, `check`, and `smoke:dist` commands must match the audited command
+  templates used by the current packages.
 - `prepack` runs `npm run build`, and `pack:dry-run` runs
   `npm pack --dry-run`; install, prepare, and publish lifecycle scripts that
   could mutate CI or publish state are not used. Pre/post run-script hooks
@@ -72,29 +75,35 @@ Each package repository keeps its own source, tests, and package-specific
   recorded in `package-contract.json`.
 - Package scripts must not contain `npm publish` or publish aliases, mutate
   GitHub Actions environment files, or set npm config environment variables that
-  alter publication. Package scripts also must not write publish-altering npm
+  alter publication, including scoped registry auth keys expressed through
+  `npm_config_*`. Package scripts also must not write publish-altering npm
   config with `npm config set`, `npm conf set`, `npm c set`, or `npm set`;
   `npm version` and registry auth config keys are also blocked. Release
   publication stays in the audited Release Please workflow. Variable-expanded
-  npm config subcommands, interpreter-evaluated snippets, shell `eval` snippets,
-  command substitutions, and simple npm-forwarding shell functions are resolved
-  before this check. Package scripts must not write npm config files directly,
-  including through shell utilities such as `tee` and `cp`, and local script
-  files, directory entry points, root script files, extensionless script entry
-  points, and relative subdirectory script paths invoked by package scripts are
-  scanned for publish commands and publish-altering mutations.
+  npm config subcommands, shell parameter fallback expansions, shell `eval`
+  snippets, command substitutions, and simple npm-forwarding shell functions are
+  resolved before this check. Package scripts must not write npm config files
+  directly, including through shell utilities such as `tee`, `cp`, and in-place
+  edits, JavaScript write APIs, computed JavaScript string paths, or local
+  helper files. Local script files, directory entry points, root script files,
+  extensionless script entry points, non-shell interpreter file arguments, and
+  relative subdirectory script paths invoked by package scripts are scanned for
+  publish commands and publish-altering mutations.
 - Package scripts are intentionally fail-closed for unsupported dynamic command
   forms. Shell command substitutions, shell function definitions, shell
-  pipelines, delegated-work `||` short circuits, `child_process` command
-  execution, `npm exec` and `npx` snippets, `npm pkg` and `npm version`
-  mutations, and direct package manifest writes are contract drift rather than
-  interpreted as safe. Delegated `smoke:dist` build commands must be chained
-  with `&&` before smoke work. Local script files invoked by package scripts are
-  scanned recursively through local `import`, dynamic `import()`, `require()`,
-  and ESM re-export dependencies, and Node preload modules from `NODE_OPTIONS`,
-  `--require`, `--import`, `--loader`, and `--experimental-loader` are treated
-  as referenced local code. GNU `env -S` split strings are parsed when resolving
-  local script invocations.
+  pipelines, delegated-work `||` short circuits, shell command negation,
+  non-shell interpreter eval snippets, `child_process` command execution,
+  `npm exec` and `npx` snippets, `npm pkg` and `npm version` mutations, and
+  direct package manifest writes are contract drift rather than interpreted as
+  safe. Delegated `smoke:dist` build commands must be chained with `&&` before
+  smoke work. Local script files invoked by package scripts are scanned
+  recursively through local `import`, static template-literal `import`, dynamic
+  `import()`, `require()`, ESM re-export dependencies, and shell `source` or
+  `.` helpers, and Node preload modules from `NODE_OPTIONS`, `--require`,
+  `--import`, `--loader`, and `--experimental-loader` are treated as referenced
+  local code. Node eval snippets may only import the built `./dist/index.js`
+  entry point. GNU `env -S` split strings are parsed when resolving local script
+  invocations.
 - Packages and locked dependencies must not expose an `npm` binary that can
   shadow the npm CLI inside npm-run-script PATH handling.
 - Lockfiles must use lockfile version 2 or newer with a `packages` map. Package
@@ -106,7 +115,8 @@ Each package repository keeps its own source, tests, and package-specific
 - Packages must not define npm workspaces.
 - Package-level npm configuration must not set `access`, `dry-run`,
   `script-shell`, workspace options, `tag`, `userconfig`, `globalconfig`,
-  `ignore-scripts`, `node-options`, `prefix`, or a non-contract registry.
+  `ignore-scripts`, `node-options`, `prefix`, a non-contract registry, or any
+  auth-related npm config key, including scoped registry token entries.
   Valueless npmrc keys and npmrc array-form keys are treated as configured
   keys.
 
@@ -168,7 +178,8 @@ is shared:
   `packages: write`, and the publish step or publish job has the package
   registry token available without a conflicting step-level token override or
   publish-altering npm configuration at workflow, job, step, or package npm
-  config scope, including scoped registry environment overrides.
+  config scope, including scoped registry environment overrides and auth-style
+  `npm_config_*` keys.
 - Required npm install, check, and publish commands run at the package
   repository root with the default shell and without PATH, Bash startup file,
   Node startup option, HOME, or indirect npm config overrides.
@@ -192,10 +203,11 @@ is shared:
   considered when deciding whether a command invokes checked-in local code.
 - Non-release workflow command surfaces are also fail-closed for unsupported
   dynamic execution: shell command substitutions, shell function definitions,
-  `child_process` command execution, `npm exec` snippets, and package manifest
-  mutations are rejected. Workflow `uses` values are decoded from quoted,
-  plain, folded, and block-scalar YAML before release, publish, and local-action
-  guards are evaluated.
+  non-shell interpreter eval snippets, `child_process` command execution,
+  `npm exec` snippets, publish-altering npm config environment keys, and
+  package manifest mutations are rejected. Workflow `uses` values are decoded
+  from quoted, plain, folded, and block-scalar YAML before release, publish, and
+  local-action guards are evaluated.
 
 ## Release Please Contract
 

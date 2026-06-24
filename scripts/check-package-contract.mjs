@@ -78,6 +78,16 @@ const NPM_CONFIG_SET_OPTIONS_WITH_VALUE = new Set([
   "workspace",
 ]);
 const NPM_MANIFEST_MUTATION_SUBCOMMANDS = new Set(["pkg", "version"]);
+const ALLOWED_PACKAGE_SCRIPT_NAMES = new Set([
+  ...contract.manifest.requiredScriptNames,
+  "format",
+  "prepack",
+]);
+const ALLOWED_PRETTIER_PATHS = new Set(["README.md", "docs", "examples", "package.json", "src", "tests"]);
+const CHECK_SCRIPT_WITH_BUILD = "npm run lint && npm test && npm run build && npm run smoke:dist && npm run pack:dry-run";
+const CHECK_SCRIPT_WITH_SMOKE_BUILD = "npm run lint && npm test && npm run smoke:dist && npm run pack:dry-run";
+const PROFANITY_DIST_SMOKE_SCRIPT =
+  "npm run build && tsc --ignoreConfig --noEmit --target ES2024 --module NodeNext --moduleResolution NodeNext --strict --skipLibCheck tests/dist-public-api-smoke.ts && node tests/dist-public-api-smoke.mjs";
 
 for (const pkgSpec of contract.packages) {
   const packageDir = join(packagesRoot, pkgSpec.directory);
@@ -161,6 +171,7 @@ function checkPackage(pkgSpec, packageDir) {
   expectScriptCommandOrder(label, "check", pkg.scripts?.check, contract.manifest.checkScriptMustInclude);
   expectCheckScriptOnlyAuditedCommands(label, pkg.scripts?.check);
   expectNoExitBeforeScriptCommands(label, "check", pkg.scripts?.check, contract.manifest.checkScriptMustInclude);
+  expectAuditedPackageScriptTemplates(label, pkg.scripts);
   expectNoUnsupportedPackageScriptSyntax(label, pkg.scripts);
   expectNoPublishInScripts(label, packageDir, pkg.scripts);
   expectNoPublishEnvMutationInScripts(label, pkg.scripts);
@@ -201,6 +212,7 @@ function checkWorkflow(label, workflowPath) {
   const workflow = readText(label, workflowPath);
   if (!workflow) return;
   expectNoYamlAnchorsOrAliases(label, workflowPath, workflow);
+  expectNoBlockedNpmConfigEnvKeys(label, workflowPath, workflow);
   const onBlock = expectBlock(label, workflowPath, workflow, "on:", 0);
   const pullRequestBlock = expectBlock(label, workflowPath, onBlock, "pull_request:", 2);
   const pushBlock = expectBlock(label, workflowPath, onBlock, "push:", 2);
@@ -299,6 +311,7 @@ function checkReleaseWorkflow(label, workflowPath) {
   const workflow = readText(label, workflowPath);
   if (!workflow) return;
   expectNoYamlAnchorsOrAliases(label, workflowPath, workflow);
+  expectNoBlockedNpmConfigEnvKeys(label, workflowPath, workflow);
   const onBlock = expectBlock(label, workflowPath, workflow, "on:", 0);
   const pushBlock = expectBlock(label, workflowPath, onBlock, "push:", 2);
   const branchesBlock = expectBlock(label, workflowPath, pushBlock, "branches:", 4);
@@ -564,11 +577,23 @@ function expectNoUnsupportedWorkflowCommands(label, path, workflow) {
   if (scriptUsesChildProcessExecution(workflow)) {
     fail(label, `${relativePackagePath(path)} must not use child_process command execution`);
   }
+  if (textUsesNonShellInterpreterEval(workflow)) {
+    fail(label, `${relativePackagePath(path)} must not use non-shell interpreter eval snippets`);
+  }
   if (scriptUsesNpmExec(workflow)) {
     fail(label, `${relativePackagePath(path)} must not use npm exec`);
   }
   if (scriptMutatesPackageManifest(workflow)) {
     fail(label, `${relativePackagePath(path)} must not mutate package.json`);
+  }
+  if (textHasBlockedNpmConfigEnvKey(workflow)) {
+    fail(label, `${relativePackagePath(path)} must not set publish-altering npm config env`);
+  }
+}
+
+function expectNoBlockedNpmConfigEnvKeys(label, path, workflow) {
+  if (textHasBlockedNpmConfigEnvKey(workflow)) {
+    fail(label, `${relativePackagePath(path)} must not set publish-altering npm config env`);
   }
 }
 
@@ -777,6 +802,116 @@ function expectDelegatedScriptWork(label, scriptName, script) {
   if (commands.some((command) => NOOP_SCRIPT_COMMANDS.has(command))) {
     fail(label, `script ${scriptName} must not be a no-op`);
   }
+}
+
+function expectAuditedPackageScriptTemplates(label, scripts) {
+  for (const scriptName of Object.keys(scripts ?? {})) {
+    if (!ALLOWED_PACKAGE_SCRIPT_NAMES.has(scriptName)) {
+      fail(label, `script ${scriptName} must be one of the audited package scripts`);
+    }
+  }
+
+  expectPrettierScriptTemplate(label, "lint", scripts?.lint, "--check");
+  if (typeof scripts?.format === "string") {
+    expectPrettierScriptTemplate(label, "format", scripts.format, "--write");
+  }
+  expectVitestScriptTemplate(label, scripts?.test);
+  expectCheckScriptTemplate(label, scripts?.check);
+  expectDistSmokeScriptTemplate(label, scripts?.["smoke:dist"]);
+}
+
+function expectPrettierScriptTemplate(label, scriptName, script, mode) {
+  const tokens = auditedSimpleScriptTokens(script);
+  if (!tokens) {
+    fail(label, `script ${scriptName} must match the audited prettier ${mode} template`);
+    return;
+  }
+  if (tokens.length === 0) return;
+
+  const paths = tokens.slice(1, -1);
+  if (
+    tokens[0] !== "prettier" ||
+    tokens.at(-1) !== mode ||
+    paths.length === 0 ||
+    paths.some((path) => !ALLOWED_PRETTIER_PATHS.has(path))
+  ) {
+    fail(label, `script ${scriptName} must match the audited prettier ${mode} template`);
+  }
+}
+
+function expectVitestScriptTemplate(label, script) {
+  const tokens = auditedSimpleScriptTokens(script);
+  if (!tokens) {
+    fail(label, "script test must match the audited vitest template");
+    return;
+  }
+  if (tokens.length === 0) return;
+
+  if (tokens[0] !== "vitest" || tokens[1] !== "run") {
+    fail(label, "script test must match the audited vitest template");
+    return;
+  }
+
+  let index = 2;
+  if (tokens[index] === "tests") {
+    index += 1;
+  }
+  if (tokens[index] === "--maxWorkers" && tokens[index + 1] === "4") {
+    index += 2;
+  }
+  if (tokens[index] === "--testTimeout" && tokens[index + 1] === "15000") {
+    index += 2;
+  }
+  if (index !== tokens.length) {
+    fail(label, "script test must match the audited vitest template");
+  }
+}
+
+function expectCheckScriptTemplate(label, script) {
+  if (typeof script !== "string") return;
+  if (script !== CHECK_SCRIPT_WITH_BUILD && script !== CHECK_SCRIPT_WITH_SMOKE_BUILD) {
+    fail(label, "script check must match an audited check template");
+  }
+}
+
+function expectDistSmokeScriptTemplate(label, script) {
+  if (typeof script !== "string" || script.trim() === "") return;
+  if (script === PROFANITY_DIST_SMOKE_SCRIPT) return;
+
+  const tokens = auditedSimpleScriptTokens(script);
+  if (!tokens) {
+    fail(label, "script smoke:dist must match an audited dist smoke template");
+    return;
+  }
+  const evalText = tokens[3] ?? "";
+  if (
+    tokens.length === 4 &&
+    tokens[0] === "node" &&
+    tokens[1] === "--input-type=module" &&
+    tokens[2] === "--eval" &&
+    nodeEvalUsesOnlyBuiltDistEntrypoint(evalText)
+  ) {
+    return;
+  }
+
+  fail(label, "script smoke:dist must match an audited dist smoke template");
+}
+
+function auditedSimpleScriptTokens(script) {
+  if (typeof script !== "string" || script.trim() === "") return [];
+  const parts = splitScriptCommandParts(script);
+  if (parts.length !== 1 || parts[0]?.separator) return null;
+  const tokens = shellTokens(parts[0].command).map((token) => shellWordValue(token));
+  return tokens.some((token) => isShellBoundaryToken(token) || isShellRedirectionToken(token) || token === "!")
+    ? null
+    : tokens;
+}
+
+function nodeEvalUsesOnlyBuiltDistEntrypoint(scriptText) {
+  if (!scriptText.includes("import('./dist/index.js')") && !scriptText.includes('import("./dist/index.js")')) {
+    return false;
+  }
+  return localScriptDependencySpecifiers(scriptText).every((specifier) => specifier === "./dist/index.js");
 }
 
 function isSuccessfulExitCommand(command) {
@@ -1444,8 +1579,14 @@ function expectNoUnsupportedPackageScriptSyntax(label, scripts) {
     if (splitScriptCommandParts(script).some((part) => part.separator === "|")) {
       fail(label, `script ${scriptName} must not use shell pipelines`);
     }
+    if (hasShellCommandNegation(script)) {
+      fail(label, `script ${scriptName} must not use shell command negation`);
+    }
     if (scriptUsesChildProcessExecution(script)) {
       fail(label, `script ${scriptName} must not use child_process command execution`);
+    }
+    if (textUsesNonShellInterpreterEval(script)) {
+      fail(label, `script ${scriptName} must not use non-shell interpreter eval snippets`);
     }
     if (scriptUsesNpmExec(script)) {
       fail(label, `script ${scriptName} must not use npm exec`);
@@ -1462,6 +1603,12 @@ function hasShellCommandSubstitution(text) {
 
 function hasShellFunctionDefinition(text) {
   return /(?:^|[;&|({}\n]\s*)(?:function\s+)?[A-Za-z_][A-Za-z0-9_]*\s*(?:\(\s*\))?\s*\{/u.test(text);
+}
+
+function hasShellCommandNegation(text) {
+  return shellContinuationText(shellCommentText(text))
+    .split("\n")
+    .some((line) => shellTokens(line).some((token) => shellWordValue(token) === "!"));
 }
 
 function expectNoPublishInScripts(label, packageDir, scripts) {
@@ -1521,6 +1668,11 @@ function localFilesInvokedByScript(packageDir, script) {
       }
       if (isShellOrNodeInterpreterToken(token)) {
         for (const scriptToken of interpreterLocalScriptTokens(token, resolvedTokens, index + 1)) {
+          localFiles.add(resolve(packageDir, scriptToken));
+        }
+      } else if (isFileArgumentInterpreterToken(token)) {
+        const scriptToken = interpreterFileArgumentToken(resolvedTokens, index + 1);
+        if (scriptToken && (isLocalScriptFileToken(scriptToken) || isBareInterpreterScriptToken(scriptToken))) {
           localFiles.add(resolve(packageDir, scriptToken));
         }
       } else if (isEnvCommandToken(token)) {
@@ -1637,6 +1789,12 @@ function interpreterLocalScriptTokens(command, tokens, startIndex) {
       continue;
     }
     if (token.startsWith("-")) {
+      const evalScriptToken = nodeEvalOptionConsumesValue(basename, token) ? tokens[index + 1] ?? "" : "";
+      if (evalScriptToken) {
+        scriptTokens.push(...nodeEvalLocalScriptTokens(evalScriptToken));
+        index += 1;
+        continue;
+      }
       if (nodePreloadOptionConsumesValue(basename, token)) {
         const preloadToken = tokens[index + 1] ?? "";
         if (isLocalScriptFileToken(preloadToken) || isBareInterpreterScriptToken(preloadToken)) {
@@ -1656,6 +1814,10 @@ function interpreterLocalScriptTokens(command, tokens, startIndex) {
   return scriptTokens;
 }
 
+function nodeEvalLocalScriptTokens(scriptText) {
+  return localScriptDependencySpecifiers(scriptText).filter((specifier) => specifier !== "./dist/index.js");
+}
+
 function nodePreloadOptionValue(command, token) {
   if (commandBasename(command) !== "node") return "";
 
@@ -1673,6 +1835,10 @@ function nodePreloadOptionConsumesValue(command, token) {
     commandBasename(command) === "node" &&
     ["-r", "--require", "--import", "--loader", "--experimental-loader"].includes(token)
   );
+}
+
+function nodeEvalOptionConsumesValue(command, token) {
+  return commandBasename(command) === "node" && ["-e", "--eval", "-p", "--print"].includes(token);
 }
 
 function interpreterOptionConsumesValue(token) {
@@ -1787,15 +1953,19 @@ function localScriptDependencyPaths(scriptText, baseDir, packageDir) {
 
 function localScriptDependencySpecifiers(line) {
   const specifiers = [];
-  const staticImport = /^\s*import\s+(?:(?!["']).*?\s+from\s+)?(["'])(\.[^"']+)\1/u.exec(line);
-  const exportFrom = /^\s*export\s+(?:\*|\{[^}]*\})\s+from\s+(["'])(\.[^"']+)\1/u.exec(line);
-  const callPattern = /\b(?:import|require)\s*\(\s*(["'])(\.[^"']+)\1/gu;
+  const staticImport = /^\s*import\s+(?:(?!["'`]).*?\s+from\s+)?(["'`])(\.[^"'`$]+)\1/u.exec(line);
+  const exportFrom = /^\s*export\s+(?:\*|\{[^}]*\})\s+from\s+(["'`])(\.[^"'`$]+)\1/u.exec(line);
+  const callPattern = /\b(?:import|require)\s*\(\s*(["'`])(\.[^"'`$]+)\1/gu;
+  const shellSource = /^\s*(?:\.|source)\s+((?:\.{1,2}\/|[A-Za-z0-9_.-]+\/)[^\s;&|]+|[A-Za-z0-9_.-]+\.(?:bash|sh))\b/u.exec(
+    line,
+  );
 
   if (staticImport) specifiers.push(staticImport[2]);
   if (exportFrom) specifiers.push(exportFrom[2]);
   for (const match of line.matchAll(callPattern)) {
     specifiers.push(match[2]);
   }
+  if (shellSource) specifiers.push(shellSource[1]);
 
   return specifiers;
 }
@@ -1842,7 +2012,9 @@ function scriptWritesNpmConfigFile(script) {
     /\b(?:writeFile(?:Sync)?|appendFile(?:Sync)?|createWriteStream|openSync)\s*\([\s\S]{0,240}\.npmrc/u;
   if (
     npmConfigWriteApiPattern.test(script) ||
-    scriptWritesTargetFileThroughJavaScriptVariable(script, isNpmConfigPathToken)
+    scriptWritesTargetFileThroughJavaScriptLiteral(script, isNpmConfigPathToken) ||
+    scriptWritesTargetFileThroughJavaScriptVariable(script, isNpmConfigPathToken) ||
+    scriptMentionsTargetPathWithWriteOperation(script, isNpmConfigPathToken)
   ) {
     return true;
   }
@@ -1862,8 +2034,17 @@ function scriptWritesNpmConfigFile(script) {
 
 function scriptUsesChildProcessExecution(script) {
   return (
-    /\b(?:node:)?child_process\b/u.test(script) &&
+    scriptReferencesChildProcessModule(script) &&
     /\b(?:exec|execSync|execFile|execFileSync|spawn|spawnSync)\b/u.test(script)
+  );
+}
+
+function scriptReferencesChildProcessModule(script) {
+  return (
+    /\b(?:node:)?child_process\b/u.test(script) ||
+    javascriptConcatenatedStringTexts(script).some(
+      (value) => value === "child_process" || value === "node:child_process",
+    )
   );
 }
 
@@ -1961,7 +2142,9 @@ function scriptWritesPackageManifestFile(script) {
     /\b(?:writeFile(?:Sync)?|appendFile(?:Sync)?|createWriteStream|openSync)\s*\([\s\S]{0,240}package\.json/u;
   if (
     packageWriteApiPattern.test(script) ||
-    scriptWritesTargetFileThroughJavaScriptVariable(script, isPackageManifestPathToken)
+    scriptWritesTargetFileThroughJavaScriptLiteral(script, isPackageManifestPathToken) ||
+    scriptWritesTargetFileThroughJavaScriptVariable(script, isPackageManifestPathToken) ||
+    scriptMentionsTargetPathWithWriteOperation(script, isPackageManifestPathToken)
   ) {
     return true;
   }
@@ -1979,13 +2162,25 @@ function scriptWritesPackageManifestFile(script) {
     });
 }
 
+function scriptWritesTargetFileThroughJavaScriptLiteral(script, isTargetPathToken) {
+  const writeCallPattern = /\b(?:writeFile(?:Sync)?|appendFile(?:Sync)?|createWriteStream|openSync)\s*\(/gu;
+  for (const match of script.matchAll(writeCallPattern)) {
+    const string = readJavaScriptStringConcatAt(script, match.index + match[0].length);
+    if (string.closed && isTargetPathToken(string.value)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 function scriptWritesTargetFileThroughJavaScriptVariable(script, isTargetPathToken) {
   const targetVariables = new Set();
-  const assignmentPattern =
-    /\b(?:const|let|var)\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*=\s*(["'])([^"']+)\2/gu;
+  const assignmentPattern = /\b(?:const|let|var)\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*=\s*/gu;
 
   for (const match of script.matchAll(assignmentPattern)) {
-    if (isTargetPathToken(match[3])) {
+    const string = readJavaScriptStringConcatAt(script, match.index + match[0].length);
+    if (string.closed && isTargetPathToken(string.value)) {
       targetVariables.add(match[1]);
     }
   }
@@ -2003,6 +2198,16 @@ function scriptWritesTargetFileThroughJavaScriptVariable(script, isTargetPathTok
   return false;
 }
 
+function scriptMentionsTargetPathWithWriteOperation(script, isTargetPathToken) {
+  if (!/\b(?:append|copy|create|open|rename|replace|touch|truncate|write)(?:\b|_)/iu.test(script)) {
+    return false;
+  }
+
+  return [...javascriptStringTexts(script), ...javascriptConcatenatedStringTexts(script)].some((value) =>
+    isTargetPathToken(value),
+  );
+}
+
 function shellTokensWritePackageManifestFile(tokens) {
   for (let index = 0; index < tokens.length; index += 1) {
     if (isShellOutputRedirectionToken(tokens[index]) && isPackageManifestPathToken(tokens[index + 1] ?? "")) {
@@ -2012,6 +2217,9 @@ function shellTokensWritePackageManifestFile(tokens) {
       return true;
     }
     if (isCopyCommandToken(tokens[index]) && copyCommandTargetsFile(tokens, index + 1, isPackageManifestPathToken)) {
+      return true;
+    }
+    if (isInPlaceEditCommandToken(tokens[index]) && inPlaceEditTargetsFile(tokens, index + 1, isPackageManifestPathToken)) {
       return true;
     }
   }
@@ -2028,6 +2236,9 @@ function shellTokensWriteNpmConfigFile(tokens) {
       return true;
     }
     if (isCopyCommandToken(tokens[index]) && copyCommandTargetsFile(tokens, index + 1, isNpmConfigPathToken)) {
+      return true;
+    }
+    if (isInPlaceEditCommandToken(tokens[index]) && inPlaceEditTargetsFile(tokens, index + 1, isNpmConfigPathToken)) {
       return true;
     }
   }
@@ -2113,6 +2324,42 @@ function isTeeCommandToken(token) {
 
 function isCopyCommandToken(token) {
   return /(?:^|\/)cp$/u.test(token.replace(/\\/gu, "/"));
+}
+
+function isInPlaceEditCommandToken(token) {
+  return /(?:^|\/)(?:perl|sed)$/u.test(token.replace(/\\/gu, "/"));
+}
+
+function inPlaceEditTargetsFile(tokens, startIndex, isTargetPathToken) {
+  let hasInPlaceOption = false;
+
+  for (let index = startIndex; index < tokens.length; index += 1) {
+    const token = tokens[index];
+    if (isShellBoundaryToken(token)) break;
+    if (isShellRedirectionToken(token)) {
+      index += 1;
+      continue;
+    }
+    if (token === "--") {
+      continue;
+    }
+    if (isInPlaceEditOption(token)) {
+      hasInPlaceOption = true;
+      continue;
+    }
+    if (token.startsWith("-")) {
+      continue;
+    }
+    if (hasInPlaceOption && isTargetPathToken(token)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function isInPlaceEditOption(token) {
+  return token === "-i" || /^-i\S*/u.test(token) || /^-[A-Za-z]*i[A-Za-z]*$/u.test(token);
 }
 
 function isNpmConfigPathToken(token) {
@@ -2301,9 +2548,9 @@ function expectSafeNpmConfig(label, npmrcPath) {
 
   const npmrc = readFileSync(npmrcPath, "utf8");
 
-  for (const key of BLOCKED_NPM_CONFIG_KEYS) {
-    if (hasNpmConfigKey(npmrc, key)) {
-      fail(label, `.npmrc must not set ${key}`);
+  for (const entry of npmConfigEntries(npmrc)) {
+    if (isBlockedNpmConfigKey(entry.key, { blockScopedRegistry: false })) {
+      fail(label, `.npmrc must not set ${entry.key}`);
     }
   }
 
@@ -2863,14 +3110,15 @@ function recordShellVariable(word, shellVariables) {
 function resolveShellVariables(word, shellVariables) {
   let resolved = word;
   for (let depth = 0; depth < 5; depth += 1) {
-    const next = resolved.replace(/\$(?:\{([A-Za-z_][A-Za-z0-9_]*)\}|([A-Za-z_][A-Za-z0-9_]*))/gu, (
-      match,
-      bracedName,
-      plainName,
-    ) => {
-      const name = bracedName ?? plainName;
-      return shellVariables.has(name) ? shellVariables.get(name) : match;
-    });
+    const next = resolved
+      .replace(
+        /\$\{([A-Za-z_][A-Za-z0-9_]*)(?:(:?[-+=?])([^}]*))?\}/gu,
+        (match, name, operator = "", fallback = "") =>
+          resolveShellParameterExpansion(match, name, operator, fallback, shellVariables),
+      )
+      .replace(/\$([A-Za-z_][A-Za-z0-9_]*)/gu, (match, name) =>
+        shellVariables.has(name) ? shellVariables.get(name) : match,
+      );
     if (next === resolved) {
       return resolved;
     }
@@ -2878,6 +3126,33 @@ function resolveShellVariables(word, shellVariables) {
   }
 
   return resolved;
+}
+
+function resolveShellParameterExpansion(match, name, operator, fallback, shellVariables) {
+  const hasValue = shellVariables.has(name);
+  const value = hasValue ? shellVariables.get(name) : "";
+  const isSetAndNonEmpty = hasValue && value !== "";
+
+  if (!operator) {
+    return hasValue ? value : match;
+  }
+  if (operator === "-") {
+    return hasValue ? value : fallback;
+  }
+  if (operator === ":-" || operator === ":=" || operator === ":?") {
+    return isSetAndNonEmpty ? value : fallback;
+  }
+  if (operator === "=" || operator === "?") {
+    return hasValue ? value : fallback;
+  }
+  if (operator === "+") {
+    return hasValue ? fallback : "";
+  }
+  if (operator === ":+") {
+    return isSetAndNonEmpty ? fallback : "";
+  }
+
+  return match;
 }
 
 function shellTokens(line) {
@@ -3113,6 +3388,55 @@ function countInterpreterWrappedPublishCommands(tokens, index, shellVariables) {
   return publishCommandCount;
 }
 
+function textUsesNonShellInterpreterEval(text) {
+  return shellScanTexts(text).some((commandText) => shellTextUsesNonShellInterpreterEval(commandText));
+}
+
+function shellTextUsesNonShellInterpreterEval(text) {
+  const shellVariables = new Map();
+  return shellContinuationText(shellCommentText(text))
+    .split("\n")
+    .some((line) => {
+      const tokens = shellTokens(line);
+      for (let index = 0; index < tokens.length; index += 1) {
+        const command = resolveShellVariables(shellWordValue(tokens[index]), shellVariables);
+        recordShellVariable(command, shellVariables);
+        if (!isFileArgumentInterpreterToken(command) || isShellInterpreterCommand(command)) continue;
+        if (interpreterCommandHasEvalSnippet(command, tokens, index + 1, shellVariables)) {
+          return true;
+        }
+      }
+
+      return false;
+    });
+}
+
+function interpreterCommandHasEvalSnippet(command, tokens, startIndex, shellVariables) {
+  for (let index = startIndex; index < tokens.length; index += 1) {
+    const token = resolveShellVariables(shellWordValue(tokens[index]), shellVariables);
+    if (isShellBoundaryToken(token)) return false;
+    if (isShellRedirectionToken(token)) {
+      index += 1;
+      continue;
+    }
+    if (isInterpreterEvalOption(command, token)) {
+      return true;
+    }
+    if (token === "--") {
+      continue;
+    }
+    if (token.startsWith("-")) {
+      if (interpreterFileOptionConsumesValue(token)) {
+        index += 1;
+      }
+      continue;
+    }
+    return false;
+  }
+
+  return false;
+}
+
 function isShellInterpreterCommand(command) {
   return ["node", "bash", "sh"].includes(command.replace(/\\/gu, "/").split("/").pop() ?? "");
 }
@@ -3122,7 +3446,20 @@ function isInterpreterEvalOption(command, option) {
   if (basename === "node") {
     return option === "-e" || option === "--eval" || option === "-p" || option === "--print";
   }
-  return option === "-c";
+  if (basename === "bash" || basename === "sh" || basename === "python" || basename === "python3") {
+    return option === "-c";
+  }
+  if (basename === "perl" || basename === "ruby") {
+    return option === "-e";
+  }
+  if (basename === "php") {
+    return option === "-r";
+  }
+  if (basename === "bun") {
+    return option === "-e" || option === "--eval";
+  }
+
+  return false;
 }
 
 function interpreterEvalArgument(tokens, startIndex, shellVariables) {
@@ -3178,6 +3515,57 @@ function javascriptStringTexts(text) {
   }
 
   return strings;
+}
+
+function javascriptConcatenatedStringTexts(text) {
+  const strings = [];
+  for (let index = 0; index < text.length; index += 1) {
+    const string = readJavaScriptStringConcatAt(text, index);
+    if (!string.closed || string.parts < 2) continue;
+
+    strings.push(string.value);
+    index = string.endIndex;
+  }
+
+  return strings;
+}
+
+function readJavaScriptStringConcatAt(text, startIndex) {
+  let index = skipJavaScriptWhitespace(text, startIndex);
+  let value = "";
+  let endIndex = index;
+  let parts = 0;
+
+  while (index < text.length) {
+    const quote = text[index];
+    if (quote !== "'" && quote !== "\"" && quote !== "`") {
+      return { value, endIndex, parts, closed: parts > 0 };
+    }
+
+    const string = readJavaScriptString(text, index + 1, quote);
+    if (!string.closed) {
+      return { value, endIndex: string.endIndex, parts, closed: false };
+    }
+
+    value += string.value;
+    parts += 1;
+    endIndex = string.endIndex;
+    index = skipJavaScriptWhitespace(text, string.endIndex + 1);
+    if (text[index] !== "+") {
+      return { value, endIndex, parts, closed: true };
+    }
+    index = skipJavaScriptWhitespace(text, index + 1);
+  }
+
+  return { value, endIndex, parts, closed: parts > 0 };
+}
+
+function skipJavaScriptWhitespace(text, index) {
+  let currentIndex = index;
+  while (/\s/u.test(text[currentIndex] ?? "")) {
+    currentIndex += 1;
+  }
+  return currentIndex;
 }
 
 function readJavaScriptString(text, startIndex, quote) {
@@ -3629,14 +4017,23 @@ function inlineMappingScalarValue(doubleQuoted, singleQuoted, plain) {
 }
 
 function textHasBlockedNpmConfigEnvKey(text) {
-  const keyPattern = /[A-Za-z_][A-Za-z0-9_@:-]*/gu;
+  const keyPattern =
+    /(?:^|[\s{,])["']?(npm_config_[^\s:=,'"{}]+(?::[^\s=,'"{}]+)?)["']?\s*[:=]/giu;
   for (const match of text.matchAll(keyPattern)) {
-    if (BLOCKED_NPM_CONFIG_ENV_KEYS.has(normalizeEnvKeyName(`${match[0]}:`))) {
+    if (isBlockedNpmConfigEnvKey(match[1])) {
       return true;
     }
   }
 
   return false;
+}
+
+function isBlockedNpmConfigEnvKey(envName) {
+  const normalizedEnvName = normalizeEnvKeyName(envName);
+  if (!normalizedEnvName.startsWith("npm_config_")) return false;
+
+  const npmConfigKey = normalizedEnvName.slice("npm_config_".length);
+  return isBlockedNpmConfigKey(npmConfigKey);
 }
 
 function workflowHasPackageWritePermission(workflow) {
@@ -3875,11 +4272,12 @@ function hasNpmConfigKey(text, key) {
   return npmConfigEntry(text, key).present;
 }
 
-function isBlockedNpmConfigKey(key) {
+function isBlockedNpmConfigKey(key, options = {}) {
+  const { blockScopedRegistry = true } = options;
   const normalizedKey = normalizeNpmConfigKey(key);
   return (
     BLOCKED_NPM_CONFIG_KEYS.includes(normalizedKey) ||
-    normalizedKey === normalizeNpmConfigKey(`${contract.checkWorkflow.scope}:registry`) ||
+    (blockScopedRegistry && normalizedKey === normalizeNpmConfigKey(`${contract.checkWorkflow.scope}:registry`)) ||
     isBlockedNpmAuthConfigKey(normalizedKey)
   );
 }
@@ -3894,19 +4292,28 @@ function npmConfigValue(text, key) {
 
 function npmConfigEntry(text, key) {
   const normalizedKey = normalizeNpmConfigKey(key);
-  for (const rawLine of text.split("\n")) {
-    const line = rawLine.trim();
-    if (!line || line.startsWith("#") || line.startsWith(";")) continue;
-
-    const separatorIndex = line.indexOf("=");
-    const entryKey = separatorIndex === -1 ? line : line.slice(0, separatorIndex).trim();
-    const value = separatorIndex === -1 ? "" : line.slice(separatorIndex + 1).trim();
+  for (const { key: entryKey, value } of npmConfigEntries(text)) {
     if (normalizeNpmConfigKey(entryKey) === normalizedKey) {
       return { present: true, value };
     }
   }
 
   return { present: false, value: "" };
+}
+
+function npmConfigEntries(text) {
+  const entries = [];
+  for (const rawLine of text.split("\n")) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith("#") || line.startsWith(";")) continue;
+
+    const separatorIndex = line.indexOf("=");
+    const key = separatorIndex === -1 ? line : line.slice(0, separatorIndex).trim();
+    const value = separatorIndex === -1 ? "" : line.slice(separatorIndex + 1).trim();
+    entries.push({ key, value });
+  }
+
+  return entries;
 }
 
 function normalizeNpmConfigKey(key) {
