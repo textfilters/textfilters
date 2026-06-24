@@ -1,0 +1,281 @@
+import { copyFileSync, cpSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
+import { execFileSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
+
+const sourceRepo = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
+const root = mkdtempSync(join(tmpdir(), "textfilters-contract-regression-"));
+const scriptPath = join(root, "scripts", "check-package-contract.mjs");
+let fixtureIndex = 0;
+
+mkdirSync(dirname(scriptPath), { recursive: true });
+copyFileSync(join(sourceRepo, "scripts", "check-package-contract.mjs"), scriptPath);
+cpSync(join(sourceRepo, "scripts", "package-contract"), join(root, "scripts", "package-contract"), {
+  recursive: true,
+});
+
+export function expectPass(name, mutator = () => {}) {
+  writeFixture(mutator);
+  const result = runGuard();
+  if (!result.ok) {
+    throw new Error(`${name} should pass:\n${result.output}`);
+  }
+}
+
+export function expectFail(name, mutator, expected) {
+  writeFixture(mutator);
+  const result = runGuard();
+  if (result.ok || !result.output.includes(expected)) {
+    throw new Error(`${name} should fail with ${expected}:\n${result.output}`);
+  }
+}
+
+function writeFixture(mutator) {
+  const directory = `pkg-${fixtureIndex}`;
+  fixtureIndex += 1;
+  const packageDir = join(root, directory);
+  mkdirSync(join(packageDir, ".github", "workflows"), { recursive: true });
+
+  const state = {
+    packageJson: packageManifest(),
+    releaseConfig: releasePleaseConfig(),
+    manifest: { ".": "1.2.3" },
+    packageLock: `${JSON.stringify(packageLock(), null, 2)}\n`,
+    checkWorkflow: checkWorkflow(),
+    releaseWorkflow: releaseWorkflow(),
+    files: {},
+  };
+
+  mutator(state);
+
+  writeFileSync(join(root, "package-contract.json"), JSON.stringify(contract(directory), null, 2));
+  writeFileSync(join(packageDir, "package.json"), JSON.stringify(state.packageJson, null, 2));
+  writeFileSync(join(packageDir, "README.md"), "# Fixture\n");
+  writeFileSync(join(packageDir, "LICENSE"), "MIT\n");
+  writeFileSync(join(packageDir, "package-lock.json"), state.packageLock);
+  writeFileSync(join(packageDir, "release-please-config.json"), JSON.stringify(state.releaseConfig, null, 2));
+  writeFileSync(join(packageDir, ".release-please-manifest.json"), JSON.stringify(state.manifest, null, 2));
+  writeFileSync(join(packageDir, ".github", "workflows", "check.yml"), state.checkWorkflow);
+  writeFileSync(join(packageDir, ".github", "workflows", "release-please.yml"), state.releaseWorkflow);
+  if (state.extraWorkflow) {
+    writeFileSync(join(packageDir, ".github", "workflows", "manual-publish.yml"), state.extraWorkflow);
+  }
+  for (const [path, content] of Object.entries(state.files)) {
+    const filePath = join(packageDir, path);
+    mkdirSync(dirname(filePath), { recursive: true });
+    writeFileSync(filePath, content);
+  }
+}
+
+function runGuard() {
+  try {
+    return {
+      ok: true,
+      output: execFileSync(process.execPath, [scriptPath], { encoding: "utf8" }),
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      output: `${error.stdout ?? ""}${error.stderr ?? ""}`,
+    };
+  }
+}
+
+function packageManifest() {
+  return {
+    name: "@textfilters/pkg",
+    version: "1.2.3",
+    type: "module",
+    license: "MIT",
+    sideEffects: false,
+    files: ["dist", "README.md", "LICENSE"],
+    scripts: {
+      lint: "prettier README.md docs examples package.json src tests --check",
+      test: "vitest run",
+      build: "tsc -p tsconfig.json",
+      prepack: "npm run build",
+      "smoke:dist":
+        "node --input-type=module --eval \"const mod = await import('./dist/index.js'); if (!mod) throw new Error('missing exports');\"",
+      "pack:dry-run": "npm pack --dry-run",
+      check: "npm run lint && npm test && npm run build && npm run smoke:dist && npm run pack:dry-run",
+    },
+    devDependencies: {
+      prettier: "^3.8.3",
+      typescript: "^6.0.3",
+      vitest: "^4.1.7",
+    },
+    engines: { node: ">=24" },
+    packageManager: "npm@11.16.0",
+    publishConfig: { registry: "https://npm.pkg.github.com" },
+  };
+}
+
+function releasePleaseConfig() {
+  return {
+    "include-component-in-tag": false,
+    packages: {
+      ".": {
+        "package-name": "@textfilters/pkg",
+        "release-type": "node",
+      },
+    },
+  };
+}
+
+function packageLock() {
+  return {
+    lockfileVersion: 3,
+    packages: {
+      "": {
+        name: "@textfilters/pkg",
+        version: "1.2.3",
+      },
+    },
+  };
+}
+
+function checkWorkflow() {
+  return `name: Check
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          registry-url: https://npm.pkg.github.com
+          scope: "@textfilters"
+      - name: Install dependencies
+        env:
+          NODE_AUTH_TOKEN: \${{ github.token }}
+        run: npm ci
+      - name: Run checks
+        run: npm run check
+`;
+}
+
+function releaseWorkflow() {
+  return `name: Release Please
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    outputs:
+      release_created: \${{ steps.release.outputs.release_created }}
+    steps:
+      - uses: googleapis/release-please-action@v5
+        id: release
+        with:
+          token: \${{ secrets.RELEASE_PLEASE_TOKEN }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+  publish:
+    needs: release-please
+    if: \${{ needs.release-please.outputs.release_created == 'true' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          registry-url: https://npm.pkg.github.com
+          scope: "@textfilters"
+      - name: Install dependencies
+        env:
+          NODE_AUTH_TOKEN: \${{ github.token }}
+        run: npm ci
+      - name: Run checks
+        run: npm run check
+      - name: Publish to GitHub Packages
+        env:
+          NODE_AUTH_TOKEN: \${{ github.token }}
+        run: npm publish --registry=https://npm.pkg.github.com
+`;
+}
+
+function contract(directory) {
+  return {
+    packagesRoot: ".",
+    packages: [{ directory, name: "@textfilters/pkg" }],
+    manifest: {
+      type: "module",
+      license: "MIT",
+      sideEffects: false,
+      engines: { node: ">=24" },
+      packageManager: "npm@11.16.0",
+      publishConfig: { registry: "https://npm.pkg.github.com" },
+      requiredFiles: ["dist", "README.md", "LICENSE"],
+      requiredScripts: {
+        build: "tsc -p tsconfig.json",
+        prepack: "npm run build",
+        "pack:dry-run": "npm pack --dry-run",
+      },
+      requiredScriptNames: ["lint", "test", "build", "smoke:dist", "pack:dry-run", "check"],
+      requiredLockfiles: ["package-lock.json"],
+      checkScriptMustInclude: ["npm run lint", "npm test", "npm run smoke:dist", "npm run pack:dry-run"],
+      buildMustRunBeforeDistSmoke: true,
+      commonDevDependencies: {
+        prettier: "^3.8.3",
+        typescript: "^6.0.3",
+        vitest: "^4.1.7",
+      },
+    },
+    checkWorkflow: {
+      path: ".github/workflows/check.yml",
+      name: "Check",
+      nodeVersion: "24",
+      registryUrl: "https://npm.pkg.github.com",
+      scope: "@textfilters",
+      checkoutAction: "actions/checkout@v6",
+      setupNodeAction: "actions/setup-node@v6",
+      installCommand: "npm ci",
+      checkCommand: "npm run check",
+    },
+    releaseWorkflow: {
+      path: ".github/workflows/release-please.yml",
+      name: "Release Please",
+      releaseAction: "googleapis/release-please-action@v5",
+      token: "${{ secrets.RELEASE_PLEASE_TOKEN }}",
+      configFile: "release-please-config.json",
+      manifestFile: ".release-please-manifest.json",
+      releaseStepId: "release",
+      releaseCreatedOutput: "release_created: ${{ steps.release.outputs.release_created }}",
+      publishNeeds: "release-please",
+      publishCondition: "${{ needs.release-please.outputs.release_created == 'true' }}",
+      publishCommand: "npm publish --registry=https://npm.pkg.github.com",
+    },
+    releasePleaseConfig: {
+      includeComponentInTag: false,
+      releaseType: "node",
+    },
+  };
+}

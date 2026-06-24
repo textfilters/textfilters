@@ -1,0 +1,339 @@
+export function runCases(expectPass, expectFail) {
+  expectFail("workflow unknown env expression publish command", (state) => {
+    state.extraWorkflow = `name: Manual Publish
+
+  on:
+    workflow_dispatch:
+      inputs:
+        command:
+          type: string
+          default: npm
+
+  jobs:
+    publish:
+      runs-on: ubuntu-latest
+      env:
+        CMD: \${{ inputs.command }}
+      steps:
+        - run: $CMD publish --registry=https://npm.pkg.github.com
+  `;
+  }, "manual-publish.yml must not include npm publish");
+  expectFail("workflow unknown run expression publish command", (state) => {
+    state.extraWorkflow = `name: Manual Publish
+
+  on:
+    workflow_dispatch:
+      inputs:
+        command:
+          type: string
+          default: npm
+
+  jobs:
+    publish:
+      runs-on: ubuntu-latest
+      steps:
+        - run: \${{ inputs.command }} publish --registry=https://npm.pkg.github.com
+  `;
+  }, "manual-publish.yml must not include npm publish");
+  expectFail("workflow GitHub path file write", (state) => {
+    state.extraWorkflow = `name: Manual Publish
+
+  on:
+    workflow_dispatch:
+
+  jobs:
+    publish:
+      runs-on: ubuntu-latest
+      steps:
+        - run: printf './scripts\\n' >> "$GITHUB_PATH"
+  `;
+  }, "manual-publish.yml must not write GitHub Actions environment files");
+  expectFail("flow mapping local action step", (state) => {
+    state.extraWorkflow = `name: Manual Publish
+
+  on:
+    workflow_dispatch:
+
+  jobs:
+    publish:
+      runs-on: ubuntu-latest
+      steps:
+        - { uses: ./publish-action }
+  `;
+    state.files = {
+      "publish-action/action.yml": `runs:
+    using: composite
+    steps:
+      - run: npm publish --registry=https://npm.pkg.github.com
+        shell: bash
+  `,
+    };
+  }, "manual-publish.yml must not invoke local workflow scripts or actions");
+  expectFail("tooling worker new URL mutation", (state) => {
+    state.files = {
+      "prettier.config.mjs":
+        "import { Worker } from 'node:worker_threads';\nnew Worker(new URL('./hook.mjs', import.meta.url), { type: 'module' });\nexport default {};\n",
+      "hook.mjs": "import { appendFileSync } from 'node:fs';\nappendFileSync('.npmrc', 'dry-run=true\\n');\n",
+    };
+  }, "prettier.config.mjs must not write npm config files");
+  expectFail("workflow BASH_ENV startup env", (state) => {
+    state.extraWorkflow = `name: Manual Publish
+
+  on:
+    workflow_dispatch:
+
+  env: { BASH_ENV: ./hook.sh }
+
+  jobs:
+    publish:
+      runs-on: ubuntu-latest
+      steps:
+        - run: echo ok
+  `;
+    state.files = {
+      "hook.sh": "npm publish --registry=https://npm.pkg.github.com\n",
+    };
+  }, "manual-publish.yml must not set startup hook env");
+  expectFail("workflow NODE_OPTIONS startup env", (state) => {
+    state.extraWorkflow = `name: Manual Publish
+
+  on:
+    workflow_dispatch:
+
+  jobs:
+    publish:
+      runs-on: ubuntu-latest
+      env:
+        NODE_OPTIONS: --import ./hook.mjs
+      steps:
+        - run: node -e "console.log('ok')"
+  `;
+    state.files = {
+      "hook.mjs": "import { appendFileSync } from 'node:fs';\nappendFileSync('.npmrc', 'dry-run=true\\n');\n",
+    };
+  }, "manual-publish.yml must not set startup hook env");
+  expectFail("tooling commented dynamic import mutation", (state) => {
+    state.files = {
+      "prettier.config.mjs": "await import /* hook */ ('./hook.mjs');\nexport default {};\n",
+      "hook.mjs": "import { appendFileSync } from 'node:fs';\nappendFileSync('.npmrc', 'dry-run=true\\n');\n",
+    };
+  }, "prettier.config.mjs must not write npm config files");
+  expectFail("vitest discovered jsx test file mutation", (state) => {
+    state.files = {
+      "tests/mutate.test.jsx": "import { appendFileSync } from 'node:fs';\nappendFileSync('.npmrc', 'dry-run=true\\n');\n",
+    };
+  }, "tests/mutate.test.jsx must not write npm config files");
+  expectFail("vitest default source test file mutation", (state) => {
+    state.files = {
+      "src/mutate.test.ts": "import { appendFileSync } from 'node:fs';\nappendFileSync('.npmrc', 'dry-run=true\\n');\n",
+    };
+  }, "src/mutate.test.ts must not write npm config files");
+  expectFail("vitest includeSource mutation", (state) => {
+    state.files = {
+      "vitest.config.mjs": "export default { test: { includeSource: ['./src/**/*.ts'] } };\n",
+      "src/mutate.ts":
+        "import { appendFileSync } from 'node:fs';\nif (import.meta.vitest) appendFileSync('.npmrc', 'dry-run=true\\n');\n",
+    };
+  }, "vitest.config.mjs must not write npm config files");
+  expectFail("vitest local environment mutation", (state) => {
+    state.files = {
+      "vitest.config.mjs": "export default { test: { environment: './env.mjs' } };\n",
+      "env.mjs": "import { appendFileSync } from 'node:fs';\nappendFileSync('.npmrc', 'dry-run=true\\n');\n",
+    };
+  }, "vitest.config.mjs must not write npm config files");
+  expectFail("vitest local runner mutation", (state) => {
+    state.files = {
+      "vitest.config.mjs": "export default { test: { runner: './runner.mjs' } };\n",
+      "runner.mjs": "import { appendFileSync } from 'node:fs';\nappendFileSync('.npmrc', 'dry-run=true\\n');\n",
+    };
+  }, "vitest.config.mjs must not write npm config files");
+  expectFail("workflow extensionless PATH local command", (state) => {
+    state.extraWorkflow = `name: Manual Publish
+
+  on:
+    workflow_dispatch:
+
+  jobs:
+    publish:
+      runs-on: ubuntu-latest
+      steps:
+        - run: PATH=.:$PATH publish
+  `;
+    state.files = {
+      publish: "npm publish --registry=https://npm.pkg.github.com\n",
+    };
+  }, "manual-publish.yml must not invoke local workflow scripts or actions");
+  expectFail("workflow YAML escaped publish command", (state) => {
+    state.extraWorkflow = `name: Manual Publish
+
+  on:
+    workflow_dispatch:
+
+  jobs:
+    publish:
+      runs-on: ubuntu-latest
+      steps:
+        - run: "\\x6e\\x70\\x6d \\x70\\x75\\x62\\x6c\\x69\\x73\\x68 --registry=https://npm.pkg.github.com"
+  `;
+  }, "manual-publish.yml must not include npm publish");
+  expectFail("flow mapping run local workflow code", (state) => {
+    state.extraWorkflow = `name: Manual Publish
+
+  on:
+    workflow_dispatch:
+
+  jobs:
+    publish:
+      runs-on: ubuntu-latest
+      steps:
+        - { run: ./publish.sh }
+  `;
+    state.files = {
+      "publish.sh": "npm publish --registry=https://npm.pkg.github.com\n",
+    };
+  }, "manual-publish.yml must not invoke local workflow scripts or actions");
+  expectFail("tooling worker string filename mutation", (state) => {
+    state.files = {
+      "prettier.config.mjs":
+        "import { Worker } from 'node:worker_threads';\nnew Worker('./hook.cjs');\nexport default {};\n",
+      "hook.cjs": "require('node:fs').appendFileSync('.npmrc', 'dry-run=true\\n');\n",
+    };
+  }, "prettier.config.mjs must not write npm config files");
+  expectFail("workflow shell eval local helper", (state) => {
+    state.extraWorkflow = `name: Manual Publish
+
+  on:
+    workflow_dispatch:
+
+  jobs:
+    publish:
+      runs-on: ubuntu-latest
+      steps:
+        - run: bash -c 'source publish.sh'
+  `;
+    state.files = {
+      "publish.sh": "npm publish --registry=https://npm.pkg.github.com\n",
+    };
+  }, "manual-publish.yml must not invoke local workflow scripts or actions");
+  expectFail("workflow node test discovery", (state) => {
+    state.extraWorkflow = `name: Manual Publish
+
+  on:
+    workflow_dispatch:
+
+  jobs:
+    publish:
+      runs-on: ubuntu-latest
+      steps:
+        - run: node --test
+  `;
+    state.files = {
+      "test/publish.js": "import { execFileSync } from 'node:child_process';\nexecFileSync('npm', ['publish']);\n",
+    };
+  }, "manual-publish.yml must not invoke local workflow scripts or actions");
+  expectFail("tooling createRequire alias mutation", (state) => {
+    state.files = {
+      "prettier.config.mjs":
+        "import { createRequire } from 'node:module';\nconst req = createRequire(import.meta.url);\nreq('./hook.cjs');\nexport default {};\n",
+      "hook.cjs": "require('node:fs').appendFileSync('.npmrc', 'dry-run=true\\n');\n",
+    };
+  }, "prettier.config.mjs must not write npm config files");
+  expectFail("workflow inline node preload local hook", (state) => {
+    state.extraWorkflow = `name: Manual Publish
+
+  on:
+    workflow_dispatch:
+
+  jobs:
+    publish:
+      runs-on: ubuntu-latest
+      steps:
+        - run: node --import=./hook.mjs -e ''
+  `;
+    state.files = {
+      "hook.mjs": "import { execFileSync } from 'node:child_process';\nexecFileSync('npm', ['publish']);\n",
+    };
+  }, "manual-publish.yml must not invoke local workflow scripts or actions");
+  expectFail("workflow inline node eval local import", (state) => {
+    state.extraWorkflow = `name: Manual Publish
+
+  on:
+    workflow_dispatch:
+
+  jobs:
+    publish:
+      runs-on: ubuntu-latest
+      steps:
+        - run: node --eval="import('./hook.mjs')"
+  `;
+    state.files = {
+      "hook.mjs": "import { execFileSync } from 'node:child_process';\nexecFileSync('npm', ['publish']);\n",
+    };
+  }, "manual-publish.yml must not invoke local workflow scripts or actions");
+  expectFail("tooling static template import mutation", (state) => {
+    state.files = {
+      "prettier.config.mjs": "await import(`./${'hook'}.mjs`);\nexport default {};\n",
+      "hook.mjs": "import { appendFileSync } from 'node:fs';\nappendFileSync('.npmrc', 'dry-run=true\\n');\n",
+    };
+  }, "prettier.config.mjs must not write npm config files");
+  expectFail("vitest execArgv preload module mutation", (state) => {
+    state.files = {
+      "vitest.config.mjs":
+        "export default { test: { execArgv: ['--import', './hook.mjs'] } };\n",
+      "hook.mjs": "import { appendFileSync } from 'node:fs';\nappendFileSync('.npmrc', 'dry-run=true\\n');\n",
+    };
+  }, "vitest.config.mjs must not write npm config files");
+  expectFail("workflow shell variable local command", (state) => {
+    state.extraWorkflow = `name: Manual Publish
+
+  on:
+    workflow_dispatch:
+
+  jobs:
+    publish:
+      runs-on: ubuntu-latest
+      steps:
+        - run: |
+            p=./publish.sh
+            "$p"
+  `;
+    state.files = {
+      "publish.sh": "npm publish --registry=https://npm.pkg.github.com\n",
+    };
+  }, "manual-publish.yml must not invoke local workflow scripts or actions");
+  expectFail("workflow shell eval source helper", (state) => {
+    state.extraWorkflow = `name: Manual Publish
+
+  on:
+    workflow_dispatch:
+
+  jobs:
+    publish:
+      runs-on: ubuntu-latest
+      steps:
+        - run: eval 'source publish.sh'
+  `;
+    state.files = {
+      "publish.sh": "npm publish --registry=https://npm.pkg.github.com\n",
+    };
+  }, "manual-publish.yml must not invoke local workflow scripts or actions");
+  expectFail("shell prefix removal publish command", (state) => {
+    state.extraWorkflow = `name: Manual Publish
+
+  on:
+    workflow_dispatch:
+
+  jobs:
+    publish:
+      runs-on: ubuntu-latest
+      steps:
+        - run: n=xnpm; \${n#x} publish --registry=https://npm.pkg.github.com
+  `;
+  }, "manual-publish.yml must not include npm publish");
+  expectFail("computed npmrc write path", (state) => {
+    state.files = {
+      "vitest.config.mjs":
+        "import { appendFileSync } from 'node:fs';\nconst p = ['.npm', 'rc'].join('');\nappendFileSync(p, 'dry-run=true\\n');\nexport default {};\n",
+    };
+  }, "vitest.config.mjs must not write npm config files");
+}
