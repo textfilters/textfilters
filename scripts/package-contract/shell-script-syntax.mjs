@@ -1,7 +1,7 @@
 import { isShellBoundaryToken, isShellInputRedirectionToken, isShellOutputRedirectionToken, isShellRedirectionToken } from "./javascript-string-scanner.mjs";
 import { interpreterFileArgumentToken, isBareInterpreterScriptToken, isFileArgumentInterpreterToken, isLocalPathToken, shellWordValue } from "./local-workflow-scanner.mjs";
 import { isSuccessfulExitCommand } from "./package-json-policy.mjs";
-import { hasUnsupportedShellParameterExpansion, shellTokens, textUsesNonShellInterpreterEval } from "./shell-publish-counter.mjs";
+import { hasUnsupportedShellParameterExpansion, recordShellVariable, resolveShellVariables, shellTokens, textUsesNonShellInterpreterEval } from "./shell-publish-counter.mjs";
 import { scriptMutatesPackageManifest, scriptUsesChildProcessExecution, scriptUsesNpmExec, scriptUsesXargs } from "./tooling-mutations.mjs";
 import { fail } from "./workflow-assertions.mjs";
 import { shellContinuationText, shellScanTexts, workflowRunCommandTexts } from "./yaml-workflow-parser.mjs";
@@ -258,15 +258,21 @@ export function workflowRunCommandsWriteGeneratedTempScripts(workflow) {
 export function shellTextWritesAndExecutesGeneratedTempScript(text) {
   const generatedScriptPaths = new Set();
   const lines = shellContinuationText(shellCommentText(text)).split("\n");
+  const shellVariables = new Map();
 
   for (const line of lines) {
     const tokens = shellTokens(line).map((token) => shellWordValue(token));
     for (let index = 0; index < tokens.length; index += 1) {
-      if (isShellOutputRedirectionToken(tokens[index]) && isGeneratedTempScriptPathToken(tokens[index + 1] ?? "")) {
-        generatedScriptPaths.add(tokens[index + 1]);
+      recordShellVariable(tokens[index], shellVariables);
+      const token = resolveShellVariables(tokens[index], shellVariables);
+      if (isShellOutputRedirectionToken(token)) {
+        const scriptToken = resolveShellVariables(tokens[index + 1] ?? "", shellVariables);
+        if (isGeneratedTempScriptPathToken(scriptToken)) {
+          generatedScriptPaths.add(scriptToken);
+        }
       }
-      if (isTeeCommandToken(tokens[index])) {
-        collectGeneratedTempScriptTeeTargets(tokens, index + 1, generatedScriptPaths);
+      if (isTeeCommandToken(token)) {
+        collectGeneratedTempScriptTeeTargets(tokens, index + 1, generatedScriptPaths, shellVariables);
       }
     }
   }
@@ -276,17 +282,18 @@ export function shellTextWritesAndExecutesGeneratedTempScript(text) {
   return lines.some((line) => {
     const tokens = shellTokens(line).map((token) => shellWordValue(token));
     return tokens.some((token, index) => {
-      if (generatedScriptPaths.has(token) && shellTokenStartsSimpleCommand(tokens, index)) return true;
-      if (shellSourceCommandRunsGeneratedTempScript(tokens, index, generatedScriptPaths)) return true;
+      const resolvedToken = resolveShellVariables(token, shellVariables);
+      if (generatedScriptPaths.has(resolvedToken) && shellTokenStartsSimpleCommand(tokens, index)) return true;
+      if (shellSourceCommandRunsGeneratedTempScript(tokens, index, generatedScriptPaths, shellVariables)) return true;
       if (!isFileArgumentInterpreterToken(token)) return false;
-      if (interpreterReadsGeneratedTempScriptFromStdin(tokens, index + 1, generatedScriptPaths)) return true;
+      if (interpreterReadsGeneratedTempScriptFromStdin(tokens, index + 1, generatedScriptPaths, shellVariables)) return true;
       const scriptToken = interpreterFileArgumentToken(tokens, index + 1);
-      return generatedScriptPaths.has(scriptToken);
+      return generatedScriptPaths.has(resolveShellVariables(scriptToken, shellVariables));
     });
   });
 }
 
-export function shellSourceCommandRunsGeneratedTempScript(tokens, index, generatedScriptPaths) {
+export function shellSourceCommandRunsGeneratedTempScript(tokens, index, generatedScriptPaths, shellVariables = new Map()) {
   if (tokens[index] !== "." && tokens[index] !== "source") return false;
 
   for (let tokenIndex = index + 1; tokenIndex < tokens.length; tokenIndex += 1) {
@@ -296,18 +303,18 @@ export function shellSourceCommandRunsGeneratedTempScript(tokens, index, generat
       tokenIndex += 1;
       continue;
     }
-    return generatedScriptPaths.has(token);
+    return generatedScriptPaths.has(resolveShellVariables(token, shellVariables));
   }
 
   return false;
 }
 
-export function interpreterReadsGeneratedTempScriptFromStdin(tokens, startIndex, generatedScriptPaths) {
+export function interpreterReadsGeneratedTempScriptFromStdin(tokens, startIndex, generatedScriptPaths, shellVariables = new Map()) {
   for (let index = startIndex; index < tokens.length; index += 1) {
     const token = tokens[index];
     if (isShellBoundaryToken(token)) return false;
     if (isShellInputRedirectionToken(token)) {
-      return generatedScriptPaths.has(tokens[index + 1] ?? "");
+      return generatedScriptPaths.has(resolveShellVariables(tokens[index + 1] ?? "", shellVariables));
     }
     if (isShellRedirectionToken(token)) {
       index += 1;
@@ -322,9 +329,9 @@ export function isGeneratedTempScriptPathToken(token) {
   return /^(?:\/tmp\/|\$RUNNER_TEMP\/|\$\{RUNNER_TEMP\}\/)[A-Za-z0-9_.-]+$/u.test(token);
 }
 
-export function collectGeneratedTempScriptTeeTargets(tokens, startIndex, generatedScriptPaths) {
+export function collectGeneratedTempScriptTeeTargets(tokens, startIndex, generatedScriptPaths, shellVariables = new Map()) {
   for (let index = startIndex; index < tokens.length; index += 1) {
-    const token = tokens[index];
+    const token = resolveShellVariables(tokens[index], shellVariables);
     if (isShellBoundaryToken(token)) break;
     if (isShellRedirectionToken(token)) {
       index += 1;

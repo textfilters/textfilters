@@ -1,7 +1,7 @@
 import { countIndent, relativePackagePath } from "./local-workflow-scanner.mjs";
 import { BLOCKED_AUDITED_NPM_ENV_KEYS, BLOCKED_NPM_CONFIG_ENV_KEYS, TRUSTED_GITHUB_RUNNER, contract, failures } from "./state.mjs";
 import { getStepChildBlock, isYamlBlockHeader, normalizedYamlLine, stepBaseIndent, yamlKey, yamlValue } from "./workflow-action-config.mjs";
-import { blockEntriesAtIndent, hasEnvKey, hasEnvLine, hasKeyAtIndent, hasStepEnvKey, jobDefaultsShell, jobDefaultsWorkingDirectory, stepInlineEnvHasKey, stepRunCommand, stepTopLevelValue, topLevelChildKeys, workflowDefaultsShell, workflowDefaultsWorkingDirectory } from "./yaml-inline-queries.mjs";
+import { blockEntriesAtIndent, hasEnvKey, hasEnvLine, hasKeyAtIndent, hasStepEnvKey, jobDefaultsShell, jobDefaultsWorkingDirectory, stepInlineEnvHasKey, stepRunCommand, stepTopLevelKeyCount, stepTopLevelValue, topLevelChildKeys, workflowDefaultsShell, workflowDefaultsWorkingDirectory } from "./yaml-inline-queries.mjs";
 import { blockHasChildLines, countNpmPublishCommands, extractNestedBlocks, extractStepBlocks, hasLineAtIndent, hasTopLevelStepKey, hasTopLevelStepLine, jobTopLevelEntry, jobTopLevelValue } from "./yaml-workflow-parser.mjs";
 import { join } from "node:path";
 
@@ -128,10 +128,28 @@ export function expectJobPermissions(label, path, jobBlock, jobName, expectedPer
 
 export function expectPublishGate(label, path, publishJob, publishStep) {
   const condition = `if: ${contract.releaseWorkflow.publishCondition}`;
+  const jobConditionCount = blockTopLevelKeyCount(publishJob, "if:", 4);
+  const stepConditionCount = stepTopLevelKeyCount(publishStep, "if:");
   const jobCondition = jobTopLevelValue(publishJob, "if:", 4);
+  const stepCondition = stepTopLevelValue(publishStep, "if:");
+
+  if (jobConditionCount > 1) {
+    fail(label, `${relativePackagePath(path)} publish job must not repeat if`);
+  }
+  if (stepConditionCount > 1) {
+    fail(label, `${relativePackagePath(path)} publish step must not repeat if`);
+  }
 
   if (jobCondition && jobCondition !== contract.releaseWorkflow.publishCondition) {
     fail(label, `${relativePackagePath(path)} publish job if must be ${contract.releaseWorkflow.publishCondition}`);
+    return;
+  }
+  if (stepCondition && stepCondition !== contract.releaseWorkflow.publishCondition) {
+    fail(label, `${relativePackagePath(path)} publish step if must be ${contract.releaseWorkflow.publishCondition}`);
+    return;
+  }
+  if (jobCondition && stepCondition) {
+    fail(label, `${relativePackagePath(path)} publish gate must be defined only once`);
     return;
   }
   if (jobCondition === contract.releaseWorkflow.publishCondition || hasTopLevelStepLine(publishStep, condition)) {
@@ -139,6 +157,14 @@ export function expectPublishGate(label, path, publishJob, publishStep) {
   }
 
   fail(label, `${relativePackagePath(path)} publish job or publish step must include ${condition}`);
+}
+
+export function blockTopLevelKeyCount(block, key, indent) {
+  return block
+    .split("\n")
+    .filter((line) => countIndent(line) === indent)
+    .map((line) => normalizedYamlLine(line))
+    .filter((line) => yamlKey(line) === key).length;
 }
 
 export function expectEnvAvailable(label, path, jobBlock, stepBlock, envLine) {
@@ -169,6 +195,12 @@ export function expectEnvAvailable(label, path, jobBlock, stepBlock, envLine) {
 export function expectNoEnvKey(label, path, workflow, jobBlock, stepBlock, envName) {
   if (hasEnvKey(workflow, envName, 0) || hasEnvKey(jobBlock, envName, 4) || hasStepEnvKey(stepBlock, envName)) {
     fail(label, `${relativePackagePath(path)} publish step must not set ${envName}`);
+  }
+}
+
+export function expectNoStepEnvKey(label, path, stepBlock, stepName, envName) {
+  if (hasStepEnvKey(stepBlock, envName)) {
+    fail(label, `${relativePackagePath(path)} ${stepName} step must not set ${envName}`);
   }
 }
 

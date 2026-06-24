@@ -201,6 +201,7 @@ export function shellSegmentInvokesPathResolvedLocalCode(tokens, state) {
   const shellVariables = new Map(state.shellVariables);
   let commandSeen = false;
   let envPrefix = false;
+  let exportPrefix = false;
   let sawShellCommand = false;
 
   for (let index = 0; index < tokens.length; index += 1) {
@@ -217,6 +218,15 @@ export function shellSegmentInvokesPathResolvedLocalCode(tokens, state) {
       }
       shellVariables.set(assignment.name, value);
       continue;
+    }
+    if (!commandSeen && token === "export") {
+      exportPrefix = true;
+      continue;
+    }
+    if (exportPrefix) {
+      if (token === "--" || token.startsWith("-")) continue;
+      commandSeen = true;
+      sawShellCommand = true;
     }
     if (!commandSeen && token === "env") {
       envPrefix = true;

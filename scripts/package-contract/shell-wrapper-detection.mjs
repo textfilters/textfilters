@@ -28,6 +28,33 @@ export function recordPrintfShellVariable(tokens, index, shellVariables, resolve
   }
 }
 
+export function recordReadShellVariable(tokens, index, shellVariables, resolveShellVariables, shellCommandBasename) {
+  if (shellCommandBasename(resolveShellVariables(shellWordValue(tokens[index]), shellVariables)) !== "read") return;
+
+  const names = [];
+  for (let argumentIndex = index + 1; argumentIndex < tokens.length; argumentIndex += 1) {
+    const token = resolveShellVariables(shellWordValue(tokens[argumentIndex]), shellVariables);
+    if (isShellBoundaryToken(token)) return;
+    if (token === "<<<" || (token === "<<" && shellWordValue(tokens[argumentIndex + 1] ?? "") === "<")) {
+      const valueIndex = token === "<<<" ? argumentIndex + 1 : argumentIndex + 2;
+      const variableName = names.at(-1);
+      if (variableName) {
+        shellVariables.set(variableName, resolveShellVariables(shellWordValue(tokens[valueIndex] ?? ""), shellVariables));
+      }
+      return;
+    }
+    if (isShellRedirectionToken(token)) {
+      argumentIndex += 1;
+      continue;
+    }
+    if (token === "--") continue;
+    if (token.startsWith("-")) continue;
+    if (/^[A-Za-z_][A-Za-z0-9_]*$/u.test(token)) {
+      names.push(token);
+    }
+  }
+}
+
 export function countGitShellAliasPublishCommands(
   tokens,
   index,

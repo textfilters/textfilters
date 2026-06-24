@@ -199,10 +199,30 @@ export function localJavaScriptStringVariables(text) {
     );
     if (joinedSpecifier) {
       variables.set(match[1], joinedSpecifier);
+      continue;
+    }
+
+    const resolvedSpecifier = localJavaScriptRequireResolveSpecifier(initializerText);
+    if (resolvedSpecifier) {
+      variables.set(match[1], resolvedSpecifier);
     }
   }
 
   return variables;
+}
+
+export function localJavaScriptRequireResolveSpecifier(text) {
+  const call = /^\s*require\s*\.\s*resolve\s*\(\s*/u.exec(text);
+  if (!call) return "";
+
+  const string = readJavaScriptStaticStringAt(text, call[0].length);
+  if (string.closed && isRelativeLocalDependencySpecifier(string.value)) {
+    return string.value;
+  }
+
+  return javascriptJoinedStringTexts(text.slice(call[0].length, call[0].length + 240)).find((specifier) =>
+    isRelativeLocalDependencySpecifier(specifier),
+  ) ?? "";
 }
 
 export function textHasExecutedConfigLocalPathKey(text) {

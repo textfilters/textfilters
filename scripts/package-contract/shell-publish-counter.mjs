@@ -1,8 +1,9 @@
 import { countJavaScriptEmbeddedPublishCommands, countJavaScriptStringPublishCommands, isNpmCommandToken, isNpmPublishSubcommandToken, isNpxCommandToken, isPackagePublishCommandToken, isPotentialNpmPublishSubcommandToken, isPotentialPackagePublishCommandToken, isShellBoundaryToken, isShellRedirectionToken } from "./javascript-string-scanner.mjs";
 import { envSplitStringCommandText, isEnvCommandToken } from "./local-script-execution.mjs";
 import { interpreterFileOptionConsumesValue, isFileArgumentInterpreterToken, shellWordValue } from "./local-workflow-scanner.mjs";
-import { countGitShellAliasPublishCommands, recordPrintfShellVariable } from "./shell-wrapper-detection.mjs";
+import { countGitShellAliasPublishCommands, recordPrintfShellVariable, recordReadShellVariable } from "./shell-wrapper-detection.mjs";
 import { shellCommentText } from "./shell-script-syntax.mjs";
+import { UNKNOWN_GITHUB_ACTIONS_EXPRESSION } from "./state.mjs";
 import { shellContinuationText, shellScanTexts } from "./yaml-workflow-parser.mjs";
 import { join } from "node:path";
 
@@ -69,6 +70,11 @@ export function countNpmPublishCommandsInLine(
     recordPackagePublishCommandVariable(resolvedWord, packagePublishCommandVariables);
     recordNpmPublishSubcommandVariable(resolvedWord, publishSubcommandVariables);
     recordPrintfShellVariable(tokens, index, shellVariables, resolveShellVariables, shellCommandBasename);
+    recordReadShellVariable(tokens, index, shellVariables, resolveShellVariables, shellCommandBasename);
+    if (resolvedWord.includes(UNKNOWN_GITHUB_ACTIONS_EXPRESSION) && shellTokenStartsCommand(tokens, index)) {
+      publishCommandCount += 1;
+      continue;
+    }
     const functionDefinition = recordNpmFunctionWrapper(
       tokens,
       index,
