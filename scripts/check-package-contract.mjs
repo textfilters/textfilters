@@ -121,6 +121,7 @@ const EXECUTED_TOOLING_CONFIG_FILES = [
   ".prettierrc.json5",
   ".prettierrc.mjs",
   ".prettierrc.mts",
+  ".prettierrc.toml",
   ".prettierrc.ts",
   ".prettierrc.yaml",
   ".prettierrc.yml",
@@ -143,6 +144,12 @@ const EXECUTED_TOOLING_CONFIG_FILES = [
   "vitest.config.mjs",
   "vitest.config.mts",
   "vitest.config.ts",
+  "vitest.workspace.cjs",
+  "vitest.workspace.cts",
+  "vitest.workspace.js",
+  "vitest.workspace.mjs",
+  "vitest.workspace.mts",
+  "vitest.workspace.ts",
 ];
 
 for (const pkgSpec of contract.packages) {
@@ -2440,15 +2447,44 @@ function localScriptDependencySpecifiers(text) {
   for (const match of text.matchAll(callPattern)) {
     specifiers.push(decodeJavaScriptString(match[2]));
   }
-  if (textHasExecutedConfigLocalPathKey(text)) {
+  specifiers.push(...localJavaScriptVariableDependencySpecifiers(text));
+  if (textHasExecutedConfigLocalPathKey(text) || textHasLocalConfigPathList(text)) {
     specifiers.push(...localConfigDependencySpecifiers(text));
   }
 
   return [...new Set(specifiers)];
 }
 
+function localJavaScriptVariableDependencySpecifiers(text) {
+  const variables = new Map();
+  const assignmentPattern = /\b(?:const|let|var)\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*=\s*/gu;
+
+  for (const match of text.matchAll(assignmentPattern)) {
+    const string = readJavaScriptStringConcatAt(text, match.index + match[0].length);
+    if (string.closed && isLocalConfigDependencySpecifier(string.value)) {
+      variables.set(match[1], string.value);
+    }
+  }
+  if (variables.size === 0) return [];
+
+  const specifiers = [];
+  const variableCallPattern = /\b(?:import|require)\s*\(\s*([A-Za-z_$][A-Za-z0-9_$]*)\s*\)/gu;
+  for (const match of text.matchAll(variableCallPattern)) {
+    const specifier = variables.get(match[1]);
+    if (specifier) {
+      specifiers.push(specifier);
+    }
+  }
+
+  return specifiers;
+}
+
 function textHasExecutedConfigLocalPathKey(text) {
   return [...EXECUTED_CONFIG_LOCAL_PATH_KEYS].some((key) => new RegExp(`\\b${key}\\b`, "u").test(text));
+}
+
+function textHasLocalConfigPathList(text) {
+  return /\bdefineWorkspace\s*\(|^\s*export\s+default\s*\[/mu.test(text);
 }
 
 function localConfigDependencySpecifiers(text) {
@@ -3382,7 +3418,8 @@ function hasNpmPublishCommandMarker(text) {
   return (
     markerPattern.test(text) ||
     (text.includes("$'") && markerPattern.test(decodeShellAnsiCStrings(text))) ||
-    (text.includes("\\") && markerPattern.test(decodeShellBackslashEscapesForMarker(text)))
+    (text.includes("\\") && markerPattern.test(decodeShellBackslashEscapesForMarker(text))) ||
+    ((text.includes("\"") || text.includes("'")) && markerPattern.test(decodeShellQuoteFragmentsForMarker(text)))
   );
 }
 
@@ -3416,6 +3453,37 @@ function decodeShellBackslashEscapesForMarker(text) {
     if (char === quote) {
       quote = "";
       decoded += char;
+      continue;
+    }
+    if (char === "\\" && quote !== "'") {
+      decoded += text[index + 1] ?? "";
+      index += 1;
+      continue;
+    }
+    decoded += char;
+  }
+
+  return decoded;
+}
+
+function decodeShellQuoteFragmentsForMarker(text) {
+  let decoded = "";
+  let quote = "";
+
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+    if (char === "$" && text[index + 1] === "'" && quote === "") {
+      const ansiString = readBashAnsiCString(text, index + 2);
+      decoded += ansiString.value;
+      index = ansiString.endIndex;
+      continue;
+    }
+    if ((char === "'" || char === '"') && quote === "") {
+      quote = char;
+      continue;
+    }
+    if (char === quote) {
+      quote = "";
       continue;
     }
     if (char === "\\" && quote !== "'") {
@@ -5769,6 +5837,7 @@ function shellLineInvokesLocalCode(line, state = { localPathLookup: false, shell
   }
   return tokens.some((token, index) => {
     if (isShellBoundaryToken(token) || isShellRedirectionToken(token)) return false;
+    if (shellSourceCommandInvokesLocalFile(tokens, index)) return true;
     if (isLocalPathToken(token)) return true;
     if (interpreterInvokesLocalModule(tokens, index)) return true;
     const scriptToken = interpreterFileArgumentToken(tokens, index + 1);
@@ -5778,6 +5847,22 @@ function shellLineInvokesLocalCode(line, state = { localPathLookup: false, shell
       (isLocalPathToken(scriptToken) || isBareInterpreterScriptToken(scriptToken))
     );
   });
+}
+
+function shellSourceCommandInvokesLocalFile(tokens, index) {
+  if (tokens[index] !== "source" && tokens[index] !== ".") return false;
+
+  for (let tokenIndex = index + 1; tokenIndex < tokens.length; tokenIndex += 1) {
+    const token = tokens[tokenIndex];
+    if (isShellBoundaryToken(token)) return false;
+    if (isShellRedirectionToken(token)) {
+      tokenIndex += 1;
+      continue;
+    }
+    return isLocalPathToken(token) || isBareInterpreterScriptToken(token);
+  }
+
+  return false;
 }
 
 function shellLineInvokesPathResolvedLocalCode(tokens, state = { localPathLookup: false, shellVariables: new Map() }) {

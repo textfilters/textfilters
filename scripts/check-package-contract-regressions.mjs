@@ -887,6 +887,60 @@ expectFail("vitest project config mutation", (state) => {
       "import { appendFileSync } from 'node:fs';\nappendFileSync('.npmrc', 'dry-run=true\\n');\nexport default {};\n",
   };
 }, "vitest.config.mjs must not write npm config files");
+expectFail("shell-quoted publish command words", (state) => {
+  state.extraWorkflow = `name: Manual Publish
+
+on:
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - run: n"p"m p"ublish" --registry=https://npm.pkg.github.com
+`;
+}, "manual-publish.yml must not include npm publish");
+expectFail("workflow bare source local script", (state) => {
+  state.extraWorkflow = `name: Manual Publish
+
+on:
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - run: source publish.sh
+`;
+  state.files = {
+    "publish.sh": "npm publish --registry=https://npm.pkg.github.com\n",
+  };
+}, "manual-publish.yml must not invoke local workflow scripts or actions");
+expectFail("tooling variable dynamic import mutation", (state) => {
+  state.files = {
+    "prettier.config.mjs": "const p = './hook.mjs';\nawait import(p);\nexport default {};\n",
+    "hook.mjs": "import { appendFileSync } from 'node:fs';\nappendFileSync('.npmrc', 'dry-run=true\\n');\n",
+  };
+}, "prettier.config.mjs must not write npm config files");
+expectFail("prettier TOML plugin mutation", (state) => {
+  state.files = {
+    ".prettierrc.toml": "plugins = [\"./plugin.mjs\"]\n",
+    "plugin.mjs": "import { appendFileSync } from 'node:fs';\nappendFileSync('.npmrc', 'dry-run=true\\n');\n",
+  };
+}, ".prettierrc.toml must not write npm config files");
+expectFail("vitest workspace config mutation", (state) => {
+  state.files = {
+    "vitest.workspace.ts":
+      "import { appendFileSync } from 'node:fs';\nappendFileSync('.npmrc', 'dry-run=true\\n');\nexport default [];\n",
+  };
+}, "vitest.workspace.ts must not write npm config files");
+expectFail("vitest workspace project config mutation", (state) => {
+  state.files = {
+    "vitest.workspace.ts": "export default ['./project/vitest.config.mjs'];\n",
+    "project/vitest.config.mjs":
+      "import { appendFileSync } from 'node:fs';\nappendFileSync('.npmrc', 'dry-run=true\\n');\nexport default {};\n",
+  };
+}, "vitest.workspace.ts must not write npm config files");
 
 console.log("Regression contract checks passed.");
 
