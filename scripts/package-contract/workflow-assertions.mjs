@@ -46,8 +46,13 @@ export function expectStepInputsOnly(label, path, stepBlock, allowedInputKeys) {
   const withBlock = getStepChildBlock(stepBlock, "with:");
   const inputIndent = stepBaseIndent(stepBlock) + 4;
   const inputKeys = blockEntriesAtIndent(withBlock, inputIndent).map((entry) => yamlKey(entry));
+  const seenInputKeys = new Set();
 
   for (const inputKey of inputKeys) {
+    if (seenInputKeys.has(inputKey)) {
+      fail(label, `${relativePackagePath(path)} step with block must not repeat ${inputKey.slice(0, -1)}`);
+    }
+    seenInputKeys.add(inputKey);
     if (!allowedInputKeys.includes(inputKey)) {
       fail(label, `${relativePackagePath(path)} step with block must not include ${inputKey.slice(0, -1)}`);
     }

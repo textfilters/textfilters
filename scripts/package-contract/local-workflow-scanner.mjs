@@ -450,7 +450,7 @@ export function interpreterFileOptionConsumesValue(token) {
     "--import",
     "--loader",
     "--experimental-loader",
-  ].includes(token);
+  ].includes(token) || /^-[A-Za-z]*[ceEpr][A-Za-z]*$/u.test(token);
 }
 
 export function isFileArgumentInterpreterToken(token) {

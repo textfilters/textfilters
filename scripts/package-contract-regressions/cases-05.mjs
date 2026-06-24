@@ -501,4 +501,113 @@ jobs:
     state.packageJson.scripts["smoke:dist"] =
       "node --input-type=module --eval \"await import('./dist/index.js'); await import('data:text/javascript,console.log(1)')\"";
   }, "script smoke:dist must match an audited dist smoke template");
+  expectFail("direct generated temp workflow script", (state) => {
+    state.extraWorkflow = `name: Manual Publish
+
+  on:
+    workflow_dispatch:
+
+  jobs:
+    publish:
+      runs-on: ubuntu-latest
+      steps:
+        - run: printf 'npm publish --registry=https://npm.pkg.github.com\\n' > /tmp/publish.sh; chmod +x /tmp/publish.sh; /tmp/publish.sh
+  `;
+  }, "manual-publish.yml must not write generated workflow scripts");
+  expectFail("copyFile npm config mutation", (state) => {
+    state.files = {
+      "prettier.config.mjs": "import { copyFileSync } from 'node:fs';\ncopyFileSync('template.npmrc', '.npmrc');\nexport default {};\n",
+    };
+  }, "prettier.config.mjs must not write npm config files");
+  expectFail("copyFile package manifest mutation", (state) => {
+    state.files = {
+      "prettier.config.mjs": "import { copyFileSync } from 'node:fs';\ncopyFileSync('manifest.json', 'package.json');\nexport default {};\n",
+    };
+  }, "prettier.config.mjs must not mutate package.json");
+  expectFail("path join vitest setup file path", (state) => {
+    state.files = {
+      "vitest.config.mjs": "import path from 'node:path';\nconst setupFile = path.join('src', 'setup.ts');\nexport default { test: { setupFiles: [setupFile] } };\n",
+      "src/setup.ts": "import { appendFileSync } from 'node:fs';\nappendFileSync('.npmrc', 'dry-run=true\\n');\n",
+    };
+  }, "vitest.config.mjs must not write npm config files");
+  expectFail("combined bash eval flag publish", (state) => {
+    state.extraWorkflow = `name: Manual Publish
+
+  on:
+    workflow_dispatch:
+
+  jobs:
+    publish:
+      runs-on: ubuntu-latest
+      steps:
+        - run: bash -lc 'npm publish --registry=https://npm.pkg.github.com'
+  `;
+  }, "manual-publish.yml must not include npm publish");
+  expectFail("combined python eval flag publish", (state) => {
+    state.extraWorkflow = `name: Manual Publish
+
+  on:
+    workflow_dispatch:
+
+  jobs:
+    publish:
+      runs-on: ubuntu-latest
+      steps:
+        - run: python3 -Ic 'import os; os.system("npm publish --registry=https://npm.pkg.github.com")'
+  `;
+  }, "manual-publish.yml must not use non-shell interpreter eval snippets");
+  expectFail("find exec workflow wrapper", (state) => {
+    state.files = {
+      "publish.sh": "npm publish --registry=https://npm.pkg.github.com\n",
+    };
+    state.extraWorkflow = `name: Manual Publish
+
+  on:
+    workflow_dispatch:
+
+  jobs:
+    publish:
+      runs-on: ubuntu-latest
+      steps:
+        - run: find . -maxdepth 1 -name publish.sh -exec sh {} ';'
+  `;
+  }, "manual-publish.yml must not use find command execution");
+  expectFail("git shell alias publish", (state) => {
+    state.extraWorkflow = `name: Manual Publish
+
+  on:
+    workflow_dispatch:
+
+  jobs:
+    publish:
+      runs-on: ubuntu-latest
+      steps:
+        - run: git -c alias.p='!npm publish --registry=https://npm.pkg.github.com' p
+  `;
+  }, "manual-publish.yml must not include npm publish");
+  expectFail("conditional checkout step", (state) => {
+    state.checkWorkflow = state.checkWorkflow.replace(
+      "      - uses: actions/checkout@v6",
+      "      - if: ${{ false }}\n        uses: actions/checkout@v6",
+    );
+  }, "check.yml actions/checkout@v6 step must not be conditional");
+  expectFail("printf variable publish command", (state) => {
+    state.extraWorkflow = `name: Manual Publish
+
+  on:
+    workflow_dispatch:
+
+  jobs:
+    publish:
+      runs-on: ubuntu-latest
+      steps:
+        - run: printf -v cmd 'npm publish --registry=https://npm.pkg.github.com'; $cmd
+  `;
+  }, "manual-publish.yml must not include npm publish");
+  expectFail("duplicate audited action input", (state) => {
+    state.checkWorkflow = state.checkWorkflow.replace(
+      "          node-version: 24",
+      "          node-version: 24\n          node-version: 20",
+    );
+  }, "check.yml step with block must not repeat node-version");
 }

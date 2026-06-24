@@ -1,6 +1,7 @@
 import { countJavaScriptEmbeddedPublishCommands, countJavaScriptStringPublishCommands, isNpmCommandToken, isNpmPublishSubcommandToken, isNpxCommandToken, isPackagePublishCommandToken, isPotentialNpmPublishSubcommandToken, isPotentialPackagePublishCommandToken, isShellBoundaryToken, isShellRedirectionToken } from "./javascript-string-scanner.mjs";
 import { envSplitStringCommandText, isEnvCommandToken } from "./local-script-execution.mjs";
 import { interpreterFileOptionConsumesValue, isFileArgumentInterpreterToken, shellWordValue } from "./local-workflow-scanner.mjs";
+import { countGitShellAliasPublishCommands, recordPrintfShellVariable } from "./shell-wrapper-detection.mjs";
 import { shellCommentText } from "./shell-script-syntax.mjs";
 import { shellContinuationText, shellScanTexts } from "./yaml-workflow-parser.mjs";
 import { join } from "node:path";
@@ -67,6 +68,7 @@ export function countNpmPublishCommandsInLine(
     }
     recordPackagePublishCommandVariable(resolvedWord, packagePublishCommandVariables);
     recordNpmPublishSubcommandVariable(resolvedWord, publishSubcommandVariables);
+    recordPrintfShellVariable(tokens, index, shellVariables, resolveShellVariables, shellCommandBasename);
     const functionDefinition = recordNpmFunctionWrapper(
       tokens,
       index,
@@ -82,6 +84,14 @@ export function countNpmPublishCommandsInLine(
     publishCommandCount += countEnvSplitStringPublishCommands(tokens, index, shellVariables);
     publishCommandCount += countEvalWrappedPublishCommands(tokens, index, shellVariables);
     publishCommandCount += countInterpreterWrappedPublishCommands(tokens, index, shellVariables);
+    publishCommandCount += countGitShellAliasPublishCommands(
+      tokens,
+      index,
+      shellVariables,
+      resolveShellVariables,
+      shellCommandBasename,
+      countNpmPublishCommandsInShellText,
+    );
     const mayBePackagePublishCommand =
       isPackagePublishCommandToken(resolvedWord, packagePublishCommandVariables) ||
       isPotentialPackagePublishCommandToken(tokens[index], resolvedWord, shellVariables);
@@ -773,13 +783,13 @@ export function isShellInterpreterCommand(command) {
 export function isInterpreterEvalOption(command, option) {
   const basename = command.replace(/\\/gu, "/").split("/").pop() ?? "";
   if (basename === "node") {
-    return option === "-e" || option === "--eval" || option === "-p" || option === "--print";
+    return option === "-e" || option === "--eval" || option === "-p" || option === "--print" || /^-[A-Za-z]*[ep][A-Za-z]*$/u.test(option);
   }
   if (basename === "bash" || basename === "sh" || basename === "python" || basename === "python3") {
-    return option === "-c";
+    return option === "-c" || /^-[A-Za-z]*c[A-Za-z]*$/u.test(option);
   }
   if (basename === "perl" || basename === "ruby") {
-    return option === "-e";
+    return option === "-e" || /^-[A-Za-z]*e[A-Za-z]*$/u.test(option);
   }
   if (basename === "php") {
     return option === "-r";

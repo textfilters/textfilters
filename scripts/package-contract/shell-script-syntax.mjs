@@ -276,6 +276,7 @@ export function shellTextWritesAndExecutesGeneratedTempScript(text) {
   return lines.some((line) => {
     const tokens = shellTokens(line).map((token) => shellWordValue(token));
     return tokens.some((token, index) => {
+      if (generatedScriptPaths.has(token) && shellTokenStartsSimpleCommand(tokens, index)) return true;
       if (!isFileArgumentInterpreterToken(token)) return false;
       const scriptToken = interpreterFileArgumentToken(tokens, index + 1);
       return generatedScriptPaths.has(scriptToken);
@@ -304,6 +305,28 @@ export function collectGeneratedTempScriptTeeTargets(tokens, startIndex, generat
 
 export function isTeeCommandToken(token) {
   return /(?:^|\/)tee$/u.test(token.replace(/\\/gu, "/"));
+}
+
+export function shellTokenStartsSimpleCommand(tokens, index) {
+  let startIndex = 0;
+  for (let currentIndex = index - 1; currentIndex >= 0; currentIndex -= 1) {
+    if (isShellBoundaryToken(tokens[currentIndex])) {
+      startIndex = currentIndex + 1;
+      break;
+    }
+  }
+
+  for (let currentIndex = startIndex; currentIndex < index; currentIndex += 1) {
+    const token = tokens[currentIndex];
+    if (isShellRedirectionToken(token)) {
+      currentIndex += 1;
+      continue;
+    }
+    if (/^[A-Za-z_][A-Za-z0-9_]*=/u.test(token)) continue;
+    return false;
+  }
+
+  return true;
 }
 
 export function textUsesShellGlobs(text) {

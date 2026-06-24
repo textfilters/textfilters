@@ -4,7 +4,7 @@ import { expectAbsentPrivate, expectAuditedPackageScriptTemplates, expectBuildBe
 import { textUsesAwkSystemExecution, textUsesNonShellInterpreterEval } from "./shell-publish-counter.mjs";
 import { expectNoExitBeforeScriptCommands, expectNoUnsupportedPackageScriptSyntax, hasShellAliasDefinition, hasShellCommandSubstitution, hasShellFunctionDefinition, hasShellProcessSubstitution, textFeedsShellInterpreterOnStdin, workflowRunCommandsUseShellGlobs, workflowRunCommandsUseUnsupportedShellParameterExpansion, workflowRunCommandsWriteGeneratedTempScripts, workflowUsesUnsupportedRunShell } from "./shell-script-syntax.mjs";
 import { BLOCKED_NPM_CONFIG_ENV_KEYS, contract } from "./state.mjs";
-import { expectAuditableNpmCiLockfile, expectNoDependencyInstallLifecycleScripts, expectNoExecutedPackageToolingMutations, expectNoLocalDependencySpecs, expectNoNpmBinaryShadowing, expectNoPublishEnvMutationInScripts, expectNoPublishLifecycleScripts, expectNoWorkspaces, expectSafeNpmConfig, npmCiLockfilePath, scriptMutatesPackageManifest, scriptUsesChildProcessExecution, scriptUsesNpmExec, scriptUsesXargs, scriptWritesGitHubActionsEnvironmentFile } from "./tooling-mutations.mjs";
+import { expectAuditableNpmCiLockfile, expectNoDependencyInstallLifecycleScripts, expectNoExecutedPackageToolingMutations, expectNoLocalDependencySpecs, expectNoNpmBinaryShadowing, expectNoPublishEnvMutationInScripts, expectNoPublishLifecycleScripts, expectNoWorkspaces, expectSafeNpmConfig, npmCiLockfilePath, scriptMutatesPackageManifest, scriptUsesChildProcessExecution, scriptUsesFindExec, scriptUsesNpmExec, scriptUsesXargs, scriptWritesGitHubActionsEnvironmentFile } from "./tooling-mutations.mjs";
 import { workflowHasPackageWritePermission, workflowUsesPublishAction, workflowUsesReleasePleaseAction } from "./workflow-action-config.mjs";
 import { expectBlock, expectBlockLine, expectBlockingJob, expectBlockingStep, expectEffectivePermissions, expectEnvAvailable, expectEventKeys, expectExactSteps, expectJobBlock, expectJobBlockContainingRun, expectJobLine, expectJobPermissions, expectJobRunner, expectNoEnvKey, expectNoNpmConfigEnvOverrides, expectNoStepChildBlock, expectNoYamlAnchorsOrAliases, expectPackageRootStep, expectPublishGate, expectPushBranchesOnly, expectSingleActionText, expectSingleJobBlockContainingRun, expectSingleListEntry, expectSinglePublishCommandText, expectSingleStepWithUses, expectStepInputsOnly, expectStepLine, expectStepOrder, expectStepWithInput, expectStepWithRun, expectStepWithoutInput, expectUnfilteredEvent, expectWorkflowJobs, expectWorkflowName, fail, getOptionalBlock } from "./workflow-assertions.mjs";
 import { stepTopLevelKeyCount, textHasBlockedNpmConfigEnvKey, textHasBlockedWorkflowStartupEnvKey } from "./yaml-inline-queries.mjs";
@@ -165,10 +165,12 @@ export function checkWorkflow(label, workflowPath) {
   expectSingleListEntry(label, workflowPath, branchesBlock, "- main", 6);
   expectEffectivePermissions(label, workflowPath, workflow, checkJob, ["contents: read", "packages: read"]);
   expectNoStepChildBlock(label, workflowPath, checkoutStep, "with:");
+  expectBlockingStep(label, workflowPath, checkoutStep, contract.checkWorkflow.checkoutAction);
   expectBlockingStep(label, workflowPath, setupNodeStep, contract.checkWorkflow.setupNodeAction);
   expectStepWithInput(label, workflowPath, setupNodeStep, "node-version", contract.checkWorkflow.nodeVersion);
   expectStepWithInput(label, workflowPath, setupNodeStep, "registry-url", contract.checkWorkflow.registryUrl);
   expectStepWithInput(label, workflowPath, setupNodeStep, "scope", `"${contract.checkWorkflow.scope}"`);
+  expectStepInputsOnly(label, workflowPath, setupNodeStep, ["node-version:", "registry-url:", "scope:"]);
   expectEnvAvailable(label, workflowPath, checkJob, installStep, "NODE_AUTH_TOKEN: ${{ github.token }}");
   expectNoNpmConfigEnvOverrides(
     label,
@@ -311,10 +313,12 @@ export function checkReleaseWorkflow(label, workflowPath) {
   expectPublishGate(label, workflowPath, publishJob, publishStep);
   expectJobPermissions(label, workflowPath, publishJob, "publish", ["contents: read", "packages: write"]);
   expectNoStepChildBlock(label, workflowPath, checkoutStep, "with:");
+  expectBlockingStep(label, workflowPath, checkoutStep, contract.checkWorkflow.checkoutAction);
   expectBlockingStep(label, workflowPath, setupNodeStep, contract.checkWorkflow.setupNodeAction);
   expectStepWithInput(label, workflowPath, setupNodeStep, "node-version", contract.checkWorkflow.nodeVersion);
   expectStepWithInput(label, workflowPath, setupNodeStep, "registry-url", contract.checkWorkflow.registryUrl);
   expectStepWithInput(label, workflowPath, setupNodeStep, "scope", `"${contract.checkWorkflow.scope}"`);
+  expectStepInputsOnly(label, workflowPath, setupNodeStep, ["node-version:", "registry-url:", "scope:"]);
   expectEnvAvailable(label, workflowPath, publishJob, installStep, "NODE_AUTH_TOKEN: ${{ github.token }}");
   expectEnvAvailable(label, workflowPath, publishJob, publishStep, "NODE_AUTH_TOKEN: ${{ github.token }}");
   for (const envName of BLOCKED_NPM_CONFIG_ENV_KEYS) {
@@ -524,6 +528,9 @@ export function expectNoUnsupportedWorkflowCommands(label, path, workflow) {
   }
   if (scriptUsesXargs(workflow)) {
     fail(label, `${relativePackagePath(path)} must not use xargs command execution`);
+  }
+  if (scriptUsesFindExec(workflow)) {
+    fail(label, `${relativePackagePath(path)} must not use find command execution`);
   }
   if (scriptMutatesPackageManifest(workflow)) {
     fail(label, `${relativePackagePath(path)} must not mutate package.json`);

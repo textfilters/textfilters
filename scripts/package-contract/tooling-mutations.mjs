@@ -164,6 +164,7 @@ export function scriptWritesNpmConfigFile(script) {
     npmConfigWriteApiPattern.test(script) ||
     scriptWritesTargetFileThroughJavaScriptLiteral(script, isNpmConfigPathToken) ||
     scriptWritesTargetFileThroughJavaScriptVariable(script, isNpmConfigPathToken) ||
+    scriptCopiesTargetFileThroughJavaScriptArgument(script, isNpmConfigPathToken) ||
     scriptComputesTargetPathNearWriteOperation(script, isNpmConfigPathToken) ||
     scriptMentionsTargetPathWithWriteOperation(script, isNpmConfigPathToken)
   ) {
@@ -227,6 +228,19 @@ export function scriptUsesXargs(script) {
           const word = shellWordValue(token);
           recordShellVariable(word, shellVariables);
           return commandBasename(resolveShellVariables(word, shellVariables)) === "xargs";
+        }),
+      ),
+  );
+}
+
+export function scriptUsesFindExec(script) {
+  return shellScanTexts(script).some((commandText) =>
+    shellContinuationText(shellCommentText(commandText))
+      .split("\n")
+      .some((line) =>
+        shellTokens(line).some((token) => {
+          const word = commandBasename(shellWordValue(token));
+          return word === "find" && /\s-exec(?:dir)?\s/u.test(` ${line} `);
         }),
       ),
   );
@@ -319,6 +333,7 @@ export function scriptWritesPackageManifestFile(script) {
     packageWriteApiPattern.test(script) ||
     scriptWritesTargetFileThroughJavaScriptLiteral(script, isPackageManifestPathToken) ||
     scriptWritesTargetFileThroughJavaScriptVariable(script, isPackageManifestPathToken) ||
+    scriptCopiesTargetFileThroughJavaScriptArgument(script, isPackageManifestPathToken) ||
     scriptComputesTargetPathNearWriteOperation(script, isPackageManifestPathToken) ||
     scriptMentionsTargetPathWithWriteOperation(script, isPackageManifestPathToken)
   ) {
@@ -374,6 +389,18 @@ export function scriptWritesTargetFileThroughJavaScriptVariable(script, isTarget
   return false;
 }
 
+export function scriptCopiesTargetFileThroughJavaScriptArgument(script, isTargetPathToken) {
+  const copyCallPattern = /\bcopyFile(?:Sync)?\s*\([\s\S]{0,160}?,\s*/gu;
+  for (const match of script.matchAll(copyCallPattern)) {
+    const target = readJavaScriptStaticStringAt(script, match.index + match[0].length);
+    if (target.closed && isTargetPathToken(target.value)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 export function scriptComputesTargetPathNearWriteOperation(script, isTargetPathToken) {
   if (!scriptUsesJavaScriptWriteApi(script)) return false;
 
@@ -386,7 +413,7 @@ export function scriptUsesJavaScriptWriteApi(script) {
 
 export function scriptMentionsTargetPathWithWriteOperation(script, isTargetPathToken) {
   if (
-    !/\b(?:append(?:File(?:Sync)?)?|copy|cp(?:Sync)?|create(?:WriteStream)?|link(?:Sync)?|open(?:Sync)?|rename|replace|symlink(?:Sync)?|touch|truncate|write(?:File(?:Sync)?)?)(?:\b|_)/u.test(script)
+    !/\b(?:append(?:File(?:Sync)?)?|copy(?:File(?:Sync)?)?|cp(?:Sync)?|create(?:WriteStream)?|link(?:Sync)?|open(?:Sync)?|rename|replace|symlink(?:Sync)?|touch|truncate|write(?:File(?:Sync)?)?)(?:\b|_)/u.test(script)
   ) {
     return false;
   }

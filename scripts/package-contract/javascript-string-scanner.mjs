@@ -59,6 +59,19 @@ export function javascriptJoinedStringTexts(text) {
   return values;
 }
 
+export function javascriptPathJoinStringTexts(text) {
+  const values = [];
+  const joinPattern = /\b(?:path\s*\.\s*)?join\s*\(\s*([\s\S]{0,240}?)\)/gu;
+  for (const match of text.matchAll(joinPattern)) {
+    const parts = javascriptStringTexts(match[1]);
+    if (parts.length > 0) {
+      values.push(parts.join("/"));
+    }
+  }
+
+  return values;
+}
+
 export function javascriptStaticTemplateTexts(text) {
   const strings = [];
   for (let index = 0; index < text.length; index += 1) {
