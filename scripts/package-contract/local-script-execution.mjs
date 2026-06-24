@@ -388,12 +388,17 @@ export function localScriptDependencyPaths(scriptText, baseDir, packageDir) {
 }
 
 export function localScriptDependencyPathsForSpecifier(specifier, baseDir, packageDir) {
+  const specifierBaseDir = isPackageRootRelativeSpecifier(specifier) ? packageDir : baseDir;
   if (isLocalGlobSpecifier(specifier)) {
-    return expandLocalGlobSpecifier(specifier, baseDir, packageDir);
+    return expandLocalGlobSpecifier(specifier, specifierBaseDir, packageDir);
   }
 
-  const dependencyPath = existingLocalScriptPath(resolve(baseDir, specifier));
+  const dependencyPath = existingLocalScriptPath(resolve(specifierBaseDir, specifier));
   return dependencyPath && isPathInsidePackageDir(dependencyPath, packageDir) ? [dependencyPath] : [];
+}
+
+export function isPackageRootRelativeSpecifier(specifier) {
+  return !specifier.startsWith("./") && !specifier.startsWith("../") && !specifier.startsWith("/");
 }
 
 export function isLocalGlobSpecifier(specifier) {

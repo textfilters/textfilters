@@ -336,4 +336,71 @@ export function runCases(expectPass, expectFail) {
         "import { appendFileSync } from 'node:fs';\nconst p = ['.npm', 'rc'].join('');\nappendFileSync(p, 'dry-run=true\\n');\nexport default {};\n",
     };
   }, "vitest.config.mjs must not write npm config files");
+  expectFail("unsupported shell substring expansion publish command", (state) => {
+    state.extraWorkflow = `name: Manual Publish
+
+  on:
+    workflow_dispatch:
+
+  jobs:
+    publish:
+      runs-on: ubuntu-latest
+      steps:
+        - run: cmd=npmpublish; \${cmd:0:3} \${cmd:3} --registry=https://npm.pkg.github.com
+  `;
+  }, "manual-publish.yml must not use unsupported shell parameter expansion");
+  expectFail("awk system publish wrapper", (state) => {
+    state.extraWorkflow = `name: Manual Publish
+
+  on:
+    workflow_dispatch:
+
+  jobs:
+    publish:
+      runs-on: ubuntu-latest
+      steps:
+        - run: awk 'BEGIN{system("npm publish --registry=https://npm.pkg.github.com")}'
+  `;
+  }, "manual-publish.yml must not use awk command execution");
+  expectFail("workflow python run shell publish", (state) => {
+    state.extraWorkflow = `name: Manual Publish
+
+  on:
+    workflow_dispatch:
+
+  jobs:
+    publish:
+      runs-on: ubuntu-latest
+      steps:
+        - shell: python
+          run: |
+            import os
+            os.system('npm publish --registry=https://npm.pkg.github.com')
+  `;
+  }, "manual-publish.yml must not use non-shell run shells");
+  expectFail("env wrapped shell stdin publish", (state) => {
+    state.extraWorkflow = `name: Manual Publish
+
+  on:
+    workflow_dispatch:
+
+  jobs:
+    publish:
+      runs-on: ubuntu-latest
+      steps:
+        - run: printf 'npm publish --registry=https://npm.pkg.github.com' | env sh
+  `;
+  }, "manual-publish.yml must not feed scripts to shell interpreters on stdin");
+  expectFail("vitest root relative setup file mutation", (state) => {
+    state.files = {
+      "vitest.config.mjs": "export default { test: { setupFiles: ['src/setup.ts'] } };\n",
+      "src/setup.ts": "import { appendFileSync } from 'node:fs';\nappendFileSync('.npmrc', 'dry-run=true\\n');\n",
+    };
+  }, "vitest.config.mjs must not write npm config files");
+  expectFail("escaped static import mutation", (state) => {
+    state.files = {
+      "prettier.config.mjs": "import '\\x2e/hook.mjs';\nexport default {};\n",
+      "hook.mjs": "import { appendFileSync } from 'node:fs';\nappendFileSync('.npmrc', 'dry-run=true\\n');\n",
+    };
+  }, "prettier.config.mjs must not write npm config files");
 }

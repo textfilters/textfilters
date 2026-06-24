@@ -380,6 +380,21 @@ export function resolveShellVariables(word, shellVariables) {
   return resolved;
 }
 
+export function hasUnsupportedShellParameterExpansion(text) {
+  const parameterPattern = /\$\{([A-Za-z_][A-Za-z0-9_]*)([^}]*)\}/gu;
+  for (const match of text.matchAll(parameterPattern)) {
+    if (!isSupportedShellParameterExpansionSuffix(match[2])) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+export function isSupportedShellParameterExpansionSuffix(suffix) {
+  return suffix === "" || /^(?::?[-+=?]|##?|%%?)/u.test(suffix);
+}
+
 export function resolveShellParameterExpansion(match, name, operator, fallback, shellVariables) {
   const hasValue = shellVariables.has(name);
   const value = hasValue ? shellVariables.get(name) : "";
@@ -656,6 +671,40 @@ export function countInterpreterWrappedPublishCommands(tokens, index, shellVaria
 
 export function textUsesNonShellInterpreterEval(text) {
   return shellScanTexts(text).some((commandText) => shellTextUsesNonShellInterpreterEval(commandText));
+}
+
+export function textUsesAwkSystemExecution(text) {
+  return shellScanTexts(text).some((commandText) => shellTextUsesAwkSystemExecution(commandText));
+}
+
+export function shellTextUsesAwkSystemExecution(text) {
+  return shellContinuationText(shellCommentText(text))
+    .split("\n")
+    .some((line) => {
+      const tokens = shellTokens(line);
+      for (let index = 0; index < tokens.length; index += 1) {
+        const command = shellCommandBasename(shellWordValue(tokens[index]));
+        if (!["awk", "gawk", "mawk", "nawk"].includes(command)) continue;
+
+        for (let argumentIndex = index + 1; argumentIndex < tokens.length; argumentIndex += 1) {
+          const token = shellWordValue(tokens[argumentIndex]);
+          if (isShellBoundaryToken(token)) break;
+          if (isShellRedirectionToken(token)) {
+            argumentIndex += 1;
+            continue;
+          }
+          if (/\bsystem\s*\(/u.test(token)) {
+            return true;
+          }
+        }
+      }
+
+      return false;
+    });
+}
+
+export function shellCommandBasename(command) {
+  return command.replace(/\\/gu, "/").split("/").pop() ?? "";
 }
 
 export function shellTextUsesNonShellInterpreterEval(text) {

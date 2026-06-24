@@ -1,8 +1,8 @@
 import { expectNoPublishInScripts } from "./local-script-execution.mjs";
 import { hasLocalWorkflowExecution, relativePackagePath } from "./local-workflow-scanner.mjs";
 import { expectAbsentPrivate, expectAuditedPackageScriptTemplates, expectBuildBeforeDistSmoke, expectCheckScriptOnlyAuditedCommands, expectDelegatedScriptWork, expectEqual, expectNoPackageFileExclusions, expectOnlyJsonObjectKeys, expectOnlyPackageConfig, expectReleasePleaseConfigKeys, expectScriptCommand, expectScriptCommandOrder, expectSemver, readJson, readText } from "./package-json-policy.mjs";
-import { textUsesNonShellInterpreterEval } from "./shell-publish-counter.mjs";
-import { expectNoExitBeforeScriptCommands, expectNoUnsupportedPackageScriptSyntax, hasShellAliasDefinition, hasShellCommandSubstitution, hasShellFunctionDefinition, hasShellProcessSubstitution, textFeedsShellInterpreterOnStdin, workflowRunCommandsUseShellGlobs } from "./shell-script-syntax.mjs";
+import { textUsesAwkSystemExecution, textUsesNonShellInterpreterEval } from "./shell-publish-counter.mjs";
+import { expectNoExitBeforeScriptCommands, expectNoUnsupportedPackageScriptSyntax, hasShellAliasDefinition, hasShellCommandSubstitution, hasShellFunctionDefinition, hasShellProcessSubstitution, textFeedsShellInterpreterOnStdin, workflowRunCommandsUseShellGlobs, workflowRunCommandsUseUnsupportedShellParameterExpansion, workflowUsesUnsupportedRunShell } from "./shell-script-syntax.mjs";
 import { BLOCKED_NPM_CONFIG_ENV_KEYS, contract } from "./state.mjs";
 import { expectAuditableNpmCiLockfile, expectNoDependencyInstallLifecycleScripts, expectNoExecutedPackageToolingMutations, expectNoLocalDependencySpecs, expectNoNpmBinaryShadowing, expectNoPublishEnvMutationInScripts, expectNoPublishLifecycleScripts, expectNoWorkspaces, expectSafeNpmConfig, npmCiLockfilePath, scriptMutatesPackageManifest, scriptUsesChildProcessExecution, scriptUsesNpmExec, scriptUsesXargs, scriptWritesGitHubActionsEnvironmentFile } from "./tooling-mutations.mjs";
 import { workflowHasPackageWritePermission, workflowUsesPublishAction, workflowUsesReleasePleaseAction } from "./workflow-action-config.mjs";
@@ -495,8 +495,17 @@ export function expectNoUnsupportedWorkflowCommands(label, path, workflow) {
   if (workflowRunCommandsUseShellGlobs(workflow)) {
     fail(label, `${relativePackagePath(path)} must not use shell globs in run commands`);
   }
+  if (workflowRunCommandsUseUnsupportedShellParameterExpansion(workflow)) {
+    fail(label, `${relativePackagePath(path)} must not use unsupported shell parameter expansion`);
+  }
+  if (workflowUsesUnsupportedRunShell(workflow)) {
+    fail(label, `${relativePackagePath(path)} must not use non-shell run shells`);
+  }
   if (scriptUsesChildProcessExecution(workflow)) {
     fail(label, `${relativePackagePath(path)} must not use child_process command execution`);
+  }
+  if (textUsesAwkSystemExecution(workflow)) {
+    fail(label, `${relativePackagePath(path)} must not use awk command execution`);
   }
   if (textUsesNonShellInterpreterEval(workflow)) {
     fail(label, `${relativePackagePath(path)} must not use non-shell interpreter eval snippets`);

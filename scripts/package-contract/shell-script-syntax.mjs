@@ -1,7 +1,7 @@
 import { isShellBoundaryToken, isShellInputRedirectionToken, isShellRedirectionToken } from "./javascript-string-scanner.mjs";
 import { isBareInterpreterScriptToken, isFileArgumentInterpreterToken, isLocalPathToken, shellWordValue } from "./local-workflow-scanner.mjs";
 import { isSuccessfulExitCommand } from "./package-json-policy.mjs";
-import { shellTokens, textUsesNonShellInterpreterEval } from "./shell-publish-counter.mjs";
+import { hasUnsupportedShellParameterExpansion, shellTokens, textUsesNonShellInterpreterEval } from "./shell-publish-counter.mjs";
 import { scriptMutatesPackageManifest, scriptUsesChildProcessExecution, scriptUsesNpmExec, scriptUsesXargs } from "./tooling-mutations.mjs";
 import { fail } from "./workflow-assertions.mjs";
 import { shellContinuationText, shellScanTexts, workflowRunCommandTexts } from "./yaml-workflow-parser.mjs";
@@ -331,7 +331,7 @@ export function shellTextFeedsShellInterpreterOnStdin(text) {
     .some((line) => {
       if (
         /(?:^|[;&]\s*)(?:bash|bun|deno|node|perl|php|python|python3|ruby|sh|tsx)\b[^;&|]*(?:<<<|<<)/u.test(line) ||
-        /\|\s*(?:bash|bun|deno|node|perl|php|python|python3|ruby|sh|tsx)\b/u.test(line)
+        shellPipelineFeedsInterpreter(line)
       ) {
         return true;
       }
@@ -346,6 +346,33 @@ export function shellTextFeedsShellInterpreterOnStdin(text) {
 
       return false;
     });
+}
+
+export function shellPipelineFeedsInterpreter(line) {
+  return /\|\s*(?:env\s+(?:(?:--|-[A-Za-z]+|[A-Za-z_][A-Za-z0-9_]*=[^;&|\s]+)\s+)*)?(?:[/A-Za-z0-9_.-]+\/)?(?:bash|bun|deno|node|perl|php|python|python3|ruby|sh|tsx)\b/u.test(line);
+}
+
+export function workflowRunCommandsUseUnsupportedShellParameterExpansion(workflow) {
+  return workflowRunCommandTexts(workflow.split("\n")).some((commandText) =>
+    hasUnsupportedShellParameterExpansion(commandText),
+  );
+}
+
+export function workflowUsesUnsupportedRunShell(workflow) {
+  return workflow.split("\n").some((line) => {
+    const blockShell = /^\s*(?:-\s*)?shell:\s*(.+)$/u.exec(line);
+    if (blockShell) {
+      return !isSupportedWorkflowRunShell(blockShell[1]);
+    }
+
+    const inlineShell = /[{,]\s*shell\s*:\s*([^,}]+)/u.exec(line);
+    return inlineShell ? !isSupportedWorkflowRunShell(inlineShell[1]) : false;
+  });
+}
+
+export function isSupportedWorkflowRunShell(value) {
+  const shell = value.trim().replace(/^["']|["']$/gu, "").split(/\s+/u)[0];
+  return shell === "" || shell === "bash" || shell === "sh";
 }
 
 export function interpreterReadsLocalFileFromStdin(tokens, startIndex) {

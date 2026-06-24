@@ -7,7 +7,7 @@ import { join } from "node:path";
 export function localScriptDependencySpecifiers(text) {
   const specifiers = [];
   const callPattern =
-    /\b(?:import|require)\s*(?:\/\*[\s\S]*?\*\/\s*)*\(\s*(?:\/\*[\s\S]*?\*\/\s*)*(["'`])(\.[^"'`$]+)\1/gu;
+    /\b(?:import|require)\s*(?:\/\*[\s\S]*?\*\/\s*)*\(\s*(?:\/\*[\s\S]*?\*\/\s*)*(["'`])([^"'`$]+)\1/gu;
   const shellSourcePattern =
     /^\s*(?:\.|source)\s+((?:\.{1,2}\/|[A-Za-z0-9_.-]+\/)[^\s;&|]+|[A-Za-z0-9_.-]+\.(?:bash|sh))\b/u;
 
@@ -17,7 +17,8 @@ export function localScriptDependencySpecifiers(text) {
     if (shellSource) specifiers.push(shellSource[1]);
   }
   for (const match of text.matchAll(callPattern)) {
-    specifiers.push(decodeJavaScriptString(match[2]));
+    const specifier = decodeJavaScriptString(match[2]);
+    if (isRelativeLocalDependencySpecifier(specifier)) specifiers.push(specifier);
   }
   specifiers.push(...localJavaScriptStaticTemplateCallSpecifiers(text));
   specifiers.push(...localJavaScriptCreateRequireDependencySpecifiers(text));
@@ -54,7 +55,7 @@ export function localJavaScriptStaticTemplateCallSpecifiers(text) {
     /\b(?:import|require)\s*(?:\/\*[\s\S]*?\*\/\s*)*\(\s*(?:\/\*[\s\S]*?\*\/\s*)*`([^`]+)`/gu;
   for (const match of text.matchAll(templateCallPattern)) {
     const specifier = staticJavaScriptTemplateValue(match[1]);
-    if (specifier && isLocalConfigDependencySpecifier(specifier)) {
+    if (specifier && isRelativeLocalDependencySpecifier(specifier)) {
       specifiers.push(specifier);
     }
   }
@@ -69,13 +70,14 @@ export function localJavaScriptCreateRequireDependencySpecifiers(text) {
 
   const variables = localJavaScriptStringVariables(text);
   const aliasPattern = new RegExp(
-    `\\b(?:${[...aliases].map((alias) => alias.replace(/[\\^$.*+?()[\]{}|]/gu, "\\$&")).join("|")})\\s*\\(\\s*(?:\\/\\*[\\s\\S]*?\\*\\/\\s*)*(?:(["'\`])(\\.[^"'\`$]+)\\1|([A-Za-z_$][A-Za-z0-9_$]*))`,
+    `\\b(?:${[...aliases].map((alias) => alias.replace(/[\\^$.*+?()[\]{}|]/gu, "\\$&")).join("|")})\\s*\\(\\s*(?:\\/\\*[\\s\\S]*?\\*\\/\\s*)*(?:(["'\`])([^"'\`$]+)\\1|([A-Za-z_$][A-Za-z0-9_$]*))`,
     "gu",
   );
 
   for (const match of text.matchAll(aliasPattern)) {
     if (match[2]) {
-      specifiers.push(decodeJavaScriptString(match[2]));
+      const specifier = decodeJavaScriptString(match[2]);
+      if (isRelativeLocalDependencySpecifier(specifier)) specifiers.push(specifier);
       continue;
     }
     const specifier = variables.get(match[3]);
@@ -101,9 +103,10 @@ export function localJavaScriptCreateRequireAliases(text) {
 export function localJavaScriptNewUrlDependencySpecifiers(text) {
   const specifiers = [];
   const directNewUrlPattern =
-    /\bnew\s+URL\s*\(\s*(?:\/\*[\s\S]*?\*\/\s*)*(["'`])(\.[^"'`$]+)\1\s*,\s*(?:\/\*[\s\S]*?\*\/\s*)*import\.meta\.url\s*\)/gu;
+    /\bnew\s+URL\s*\(\s*(?:\/\*[\s\S]*?\*\/\s*)*(["'`])([^"'`$]+)\1\s*,\s*(?:\/\*[\s\S]*?\*\/\s*)*import\.meta\.url\s*\)/gu;
   for (const match of text.matchAll(directNewUrlPattern)) {
-    specifiers.push(decodeJavaScriptString(match[2]));
+    const specifier = decodeJavaScriptString(match[2]);
+    if (isRelativeLocalDependencySpecifier(specifier)) specifiers.push(specifier);
   }
 
   const variables = localJavaScriptStringVariables(text);
@@ -124,9 +127,10 @@ export function localJavaScriptNewUrlDependencySpecifiers(text) {
 export function localJavaScriptWorkerDependencySpecifiers(text) {
   const specifiers = [];
   const directWorkerPattern =
-    /\bnew\s+Worker\s*\(\s*(?:\/\*[\s\S]*?\*\/\s*)*(["'`])(\.[^"'`$]+)\1/gu;
+    /\bnew\s+Worker\s*\(\s*(?:\/\*[\s\S]*?\*\/\s*)*(["'`])([^"'`$]+)\1/gu;
   for (const match of text.matchAll(directWorkerPattern)) {
-    specifiers.push(decodeJavaScriptString(match[2]));
+    const specifier = decodeJavaScriptString(match[2]);
+    if (isRelativeLocalDependencySpecifier(specifier)) specifiers.push(specifier);
   }
 
   const variables = localJavaScriptStringVariables(text);
@@ -150,7 +154,7 @@ export function localJavaScriptStringVariables(text) {
 
   for (const match of text.matchAll(assignmentPattern)) {
     const string = readJavaScriptStringConcatAt(text, match.index + match[0].length);
-    if (string.closed && isLocalConfigDependencySpecifier(string.value)) {
+    if (string.closed && isRelativeLocalDependencySpecifier(string.value)) {
       variables.set(match[1], string.value);
     }
   }
@@ -236,7 +240,20 @@ export function localConfigValueSpecifiers(value) {
 }
 
 export function isLocalConfigDependencySpecifier(specifier) {
+  return isRelativeLocalDependencySpecifier(specifier) || isPackageRootLocalConfigSpecifier(specifier);
+}
+
+export function isRelativeLocalDependencySpecifier(specifier) {
   return specifier.startsWith("./") || specifier.startsWith("../");
+}
+
+export function isPackageRootLocalConfigSpecifier(specifier) {
+  return (
+    !specifier.startsWith("/") &&
+    !specifier.startsWith("@") &&
+    !/^[A-Za-z][A-Za-z0-9+.-]*:/u.test(specifier) &&
+    /(?:^|\/)[A-Za-z0-9_.-]+\.(?:[cm]?[jt]sx?|json|ya?ml|toml|sh)$/u.test(specifier)
+  );
 }
 
 export function localStaticImportExportSpecifiers(text) {
@@ -271,9 +288,15 @@ export function localStaticImportExportSpecifiers(text) {
 }
 
 export function staticImportExportLocalSpecifier(statement) {
-  const fromMatch = /\bfrom\s*(?:\/\*[\s\S]*?\*\/\s*)*(["'`])(\.[^"'`$]+)\1/u.exec(statement);
-  if (fromMatch) return decodeJavaScriptString(fromMatch[2]);
+  const fromMatch = /\bfrom\s*(?:\/\*[\s\S]*?\*\/\s*)*(["'`])([^"'`$]+)\1/u.exec(statement);
+  if (fromMatch) {
+    const specifier = decodeJavaScriptString(fromMatch[2]);
+    return isRelativeLocalDependencySpecifier(specifier) ? specifier : "";
+  }
 
-  const sideEffectImport = /^\s*import\s*(?:\/\*[\s\S]*?\*\/\s*)*(["'`])(\.[^"'`$]+)\1/u.exec(statement);
-  return sideEffectImport ? decodeJavaScriptString(sideEffectImport[2]) : "";
+  const sideEffectImport = /^\s*import\s*(?:\/\*[\s\S]*?\*\/\s*)*(["'`])([^"'`$]+)\1/u.exec(statement);
+  if (!sideEffectImport) return "";
+
+  const specifier = decodeJavaScriptString(sideEffectImport[2]);
+  return isRelativeLocalDependencySpecifier(specifier) ? specifier : "";
 }
