@@ -1080,6 +1080,46 @@ expectFail("vitest discovered jsx test file mutation", (state) => {
     "tests/mutate.test.jsx": "import { appendFileSync } from 'node:fs';\nappendFileSync('.npmrc', 'dry-run=true\\n');\n",
   };
 }, "tests/mutate.test.jsx must not write npm config files");
+expectFail("vitest default source test file mutation", (state) => {
+  state.files = {
+    "src/mutate.test.ts": "import { appendFileSync } from 'node:fs';\nappendFileSync('.npmrc', 'dry-run=true\\n');\n",
+  };
+}, "src/mutate.test.ts must not write npm config files");
+expectFail("vitest includeSource mutation", (state) => {
+  state.files = {
+    "vitest.config.mjs": "export default { test: { includeSource: ['./src/**/*.ts'] } };\n",
+    "src/mutate.ts":
+      "import { appendFileSync } from 'node:fs';\nif (import.meta.vitest) appendFileSync('.npmrc', 'dry-run=true\\n');\n",
+  };
+}, "vitest.config.mjs must not write npm config files");
+expectFail("vitest local environment mutation", (state) => {
+  state.files = {
+    "vitest.config.mjs": "export default { test: { environment: './env.mjs' } };\n",
+    "env.mjs": "import { appendFileSync } from 'node:fs';\nappendFileSync('.npmrc', 'dry-run=true\\n');\n",
+  };
+}, "vitest.config.mjs must not write npm config files");
+expectFail("vitest local runner mutation", (state) => {
+  state.files = {
+    "vitest.config.mjs": "export default { test: { runner: './runner.mjs' } };\n",
+    "runner.mjs": "import { appendFileSync } from 'node:fs';\nappendFileSync('.npmrc', 'dry-run=true\\n');\n",
+  };
+}, "vitest.config.mjs must not write npm config files");
+expectFail("workflow extensionless PATH local command", (state) => {
+  state.extraWorkflow = `name: Manual Publish
+
+on:
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - run: PATH=.:$PATH publish
+`;
+  state.files = {
+    publish: "npm publish --registry=https://npm.pkg.github.com\n",
+  };
+}, "manual-publish.yml must not invoke local workflow scripts or actions");
 
 console.log("Regression contract checks passed.");
 

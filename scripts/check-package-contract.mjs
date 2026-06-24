@@ -31,11 +31,14 @@ const CHILD_PROCESS_EXECUTION_METHOD_PATTERN = new RegExp(
   "u",
 );
 const EXECUTED_CONFIG_LOCAL_PATH_KEYS = new Set([
+  "environment",
   "globalSetup",
   "include",
+  "includeSource",
   "plugins",
   "projects",
   "reporters",
+  "runner",
   "setupFiles",
 ]);
 const NOOP_SCRIPT_COMMANDS = new Set(["true", ":"]);
@@ -115,11 +118,15 @@ const PROFANITY_DIST_SMOKE_SCRIPT =
   "npm run build && tsc --ignoreConfig --noEmit --target ES2024 --module NodeNext --moduleResolution NodeNext --strict --skipLibCheck tests/dist-public-api-smoke.ts && node tests/dist-public-api-smoke.mjs";
 const EXECUTED_TOOLING_SCRIPT_EXTENSIONS = new Set([
   ".cjs",
+  ".cjsx",
   ".cts",
+  ".ctsx",
   ".js",
   ".jsx",
   ".mjs",
+  ".mjsx",
   ".mts",
+  ".mtsx",
   ".sh",
   ".ts",
   ".tsx",
@@ -2660,7 +2667,21 @@ function executedPackageToolingScriptPaths(packageDir) {
   }
 
   collectExecutedToolingScriptPaths(join(packageDir, "tests"), scriptPaths);
+  collectVitestDefaultTestScriptPaths(packageDir, scriptPaths);
   return [...scriptPaths].filter((scriptPath) => isPathInsidePackageDir(scriptPath, packageDir));
+}
+
+function collectVitestDefaultTestScriptPaths(packageDir, scriptPaths) {
+  for (const scriptPath of listPackageScriptFiles(packageDir)) {
+    if (isVitestDefaultTestFilePath(scriptPath)) {
+      scriptPaths.add(scriptPath);
+    }
+  }
+}
+
+function isVitestDefaultTestFilePath(path) {
+  const fileName = path.replace(/\\/gu, "/").split("/").pop() ?? "";
+  return /\.(?:test|spec)\.(?:[cm]?[jt]sx?)$/u.test(fileName);
 }
 
 function collectExecutedToolingScriptPaths(directory, scriptPaths) {
@@ -5968,6 +5989,7 @@ function shellSegmentInvokesPathResolvedLocalCode(tokens, state) {
   const shellVariables = new Map(state.shellVariables);
   let commandSeen = false;
   let envPrefix = false;
+  let sawShellCommand = false;
 
   for (let index = 0; index < tokens.length; index += 1) {
     const token = tokens[index];
@@ -5986,23 +6008,32 @@ function shellSegmentInvokesPathResolvedLocalCode(tokens, state) {
     }
     if (!commandSeen && token === "env") {
       envPrefix = true;
-      commandSeen = true;
+      sawShellCommand = true;
       continue;
     }
     if (envPrefix && (token === "--" || token.startsWith("-"))) {
       continue;
     }
-    if (localPathLookup && isBareLocalScriptToken(resolveShellVariables(token, shellVariables))) {
+    if (
+      localPathLookup &&
+      !commandSeen &&
+      isBarePathLookupCommandToken(resolveShellVariables(token, shellVariables))
+    ) {
       return true;
     }
     commandSeen = true;
+    sawShellCommand = true;
   }
 
-  if (!commandSeen) {
+  if (!sawShellCommand) {
     state.localPathLookup = localPathLookup;
     state.shellVariables = shellVariables;
   }
   return false;
+}
+
+function isBarePathLookupCommandToken(token) {
+  return /^[A-Za-z0-9_.-]+$/u.test(token) && !token.startsWith("-");
 }
 
 function pathValueEnablesLocalLookup(value) {
