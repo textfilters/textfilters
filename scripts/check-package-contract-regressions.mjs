@@ -1120,6 +1120,119 @@ jobs:
     publish: "npm publish --registry=https://npm.pkg.github.com\n",
   };
 }, "manual-publish.yml must not invoke local workflow scripts or actions");
+expectFail("workflow YAML escaped publish command", (state) => {
+  state.extraWorkflow = `name: Manual Publish
+
+on:
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - run: "\\x6e\\x70\\x6d \\x70\\x75\\x62\\x6c\\x69\\x73\\x68 --registry=https://npm.pkg.github.com"
+`;
+}, "manual-publish.yml must not include npm publish");
+expectFail("flow mapping run local workflow code", (state) => {
+  state.extraWorkflow = `name: Manual Publish
+
+on:
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - { run: ./publish.sh }
+`;
+  state.files = {
+    "publish.sh": "npm publish --registry=https://npm.pkg.github.com\n",
+  };
+}, "manual-publish.yml must not invoke local workflow scripts or actions");
+expectFail("tooling worker string filename mutation", (state) => {
+  state.files = {
+    "prettier.config.mjs":
+      "import { Worker } from 'node:worker_threads';\nnew Worker('./hook.cjs');\nexport default {};\n",
+    "hook.cjs": "require('node:fs').appendFileSync('.npmrc', 'dry-run=true\\n');\n",
+  };
+}, "prettier.config.mjs must not write npm config files");
+expectFail("workflow shell eval local helper", (state) => {
+  state.extraWorkflow = `name: Manual Publish
+
+on:
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - run: bash -c 'source publish.sh'
+`;
+  state.files = {
+    "publish.sh": "npm publish --registry=https://npm.pkg.github.com\n",
+  };
+}, "manual-publish.yml must not invoke local workflow scripts or actions");
+expectFail("workflow node test discovery", (state) => {
+  state.extraWorkflow = `name: Manual Publish
+
+on:
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - run: node --test
+`;
+  state.files = {
+    "test/publish.js": "import { execFileSync } from 'node:child_process';\nexecFileSync('npm', ['publish']);\n",
+  };
+}, "manual-publish.yml must not invoke local workflow scripts or actions");
+expectFail("tooling createRequire alias mutation", (state) => {
+  state.files = {
+    "prettier.config.mjs":
+      "import { createRequire } from 'node:module';\nconst req = createRequire(import.meta.url);\nreq('./hook.cjs');\nexport default {};\n",
+    "hook.cjs": "require('node:fs').appendFileSync('.npmrc', 'dry-run=true\\n');\n",
+  };
+}, "prettier.config.mjs must not write npm config files");
+expectFail("workflow inline node preload local hook", (state) => {
+  state.extraWorkflow = `name: Manual Publish
+
+on:
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - run: node --import=./hook.mjs -e ''
+`;
+  state.files = {
+    "hook.mjs": "import { execFileSync } from 'node:child_process';\nexecFileSync('npm', ['publish']);\n",
+  };
+}, "manual-publish.yml must not invoke local workflow scripts or actions");
+expectFail("workflow inline node eval local import", (state) => {
+  state.extraWorkflow = `name: Manual Publish
+
+on:
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - run: node --eval="import('./hook.mjs')"
+`;
+  state.files = {
+    "hook.mjs": "import { execFileSync } from 'node:child_process';\nexecFileSync('npm', ['publish']);\n",
+  };
+}, "manual-publish.yml must not invoke local workflow scripts or actions");
+expectFail("tooling static template import mutation", (state) => {
+  state.files = {
+    "prettier.config.mjs": "await import(`./${'hook'}.mjs`);\nexport default {};\n",
+    "hook.mjs": "import { appendFileSync } from 'node:fs';\nappendFileSync('.npmrc', 'dry-run=true\\n');\n",
+  };
+}, "prettier.config.mjs must not write npm config files");
 
 console.log("Regression contract checks passed.");
 
