@@ -1,11 +1,11 @@
 /**
- * @textfilters — набор бенчмарков
+ * @textfilters benchmark suite
  *
- * Запуск: npm run benchmark
+ * Run with: npm run benchmark
  *
- * Выводит iterations / totalMs / avgMs / opsPerSec для каждого кейса.
- * Абсолютные цифры зависят от машины — используй их только для сравнения
- * «до/после» на одном и том же железе.
+ * Prints iterations / totalMs / avgMs / opsPerSec for each case.
+ * Absolute numbers are machine-dependent; use them for before/after
+ * comparisons on the same hardware.
  */
 
 import { performance } from "node:perf_hooks";
@@ -14,20 +14,21 @@ import { createUrlFilter } from "@textfilters/url";
 import { createEmailFilter } from "@textfilters/email";
 import { createPhoneFilter } from "@textfilters/phone";
 import {
-  createProfanityFilter,
   compileProfanityDictionary,
+  createProfanityFilterFromCompiledDictionary,
+  createProfanityFilterFromDictionary,
   russianProfanityDictionary,
 } from "@textfilters/profanity";
 import { createSpamFilter } from "@textfilters/spam";
 
 // ---------------------------------------------------------------------------
-// Вспомогательные функции
+// Helpers
 // ---------------------------------------------------------------------------
 
-const ITERATIONS = 10_000;
+const ITERATIONS = 1_000;
+const SETUP_ITERATIONS = 100;
 
 function bench(label, fn, iterations = ITERATIONS) {
-  // Прогрев — чтобы JIT успел скомпилировать функцию до замера
   for (let i = 0; i < Math.min(100, iterations); i++) fn();
 
   const start = performance.now();
@@ -54,7 +55,7 @@ function printResults(suiteName, results) {
 }
 
 // ---------------------------------------------------------------------------
-// Тестовые строки
+// Test inputs
 // ---------------------------------------------------------------------------
 
 const SHORT_CLEAN = "Hello world";
@@ -82,7 +83,7 @@ const LONG_PROFANE_MATCH_LATE =
   "Обычный текст без нарушений. ".repeat(55) + "вот тебе хуй и пизда";
 
 // ---------------------------------------------------------------------------
-// core — пайплайн
+// core pipeline
 // ---------------------------------------------------------------------------
 
 {
@@ -119,7 +120,7 @@ const LONG_PROFANE_MATCH_LATE =
   const fCustomMask = createUrlFilter({ maskChar: "█" });
 
   const results = [
-    bench("url · createUrlFilter()", () => createUrlFilter()),
+    bench("url · createUrlFilter()", () => createUrlFilter(), SETUP_ITERATIONS),
     bench("url · censor · short clean", () => f.censor(SHORT_CLEAN)),
     bench("url · censor · long clean", () => f.censor(LONG_CLEAN)),
     bench("url · censor · short match", () => f.censor(SHORT_URL)),
@@ -141,7 +142,7 @@ const LONG_PROFANE_MATCH_LATE =
   const fCustomMask = createEmailFilter({ maskChar: "▪" });
 
   const results = [
-    bench("email · createEmailFilter()", () => createEmailFilter()),
+    bench("email · createEmailFilter()", () => createEmailFilter(), SETUP_ITERATIONS),
     bench("email · censor · short clean", () => f.censor(SHORT_CLEAN)),
     bench("email · censor · long clean", () => f.censor(LONG_CLEAN)),
     bench("email · censor · short match", () => f.censor(SHORT_EMAIL)),
@@ -163,7 +164,7 @@ const LONG_PROFANE_MATCH_LATE =
   const fCustomMask = createPhoneFilter({ maskChar: "•" });
 
   const results = [
-    bench("phone · createPhoneFilter()", () => createPhoneFilter()),
+    bench("phone · createPhoneFilter()", () => createPhoneFilter(), SETUP_ITERATIONS),
     bench("phone · censor · short clean", () => f.censor(SHORT_CLEAN)),
     bench("phone · censor · long clean", () => f.censor(LONG_CLEAN)),
     bench("phone · censor · short match", () => f.censor(SHORT_PHONE)),
@@ -182,18 +183,21 @@ const LONG_PROFANE_MATCH_LATE =
 
 {
   const compiled = compileProfanityDictionary(russianProfanityDictionary);
-  const f = createProfanityFilter({ dictionary: russianProfanityDictionary });
-  const fCompiled = createProfanityFilter({ compiledDictionary: compiled });
+  const f = createProfanityFilterFromDictionary(russianProfanityDictionary);
+  const fCompiled = createProfanityFilterFromCompiledDictionary(compiled);
 
   const results = [
     bench("profanity · compileProfanityDictionary()", () =>
       compileProfanityDictionary(russianProfanityDictionary),
+      SETUP_ITERATIONS,
     ),
-    bench("profanity · createProfanityFilter() fresh dict", () =>
-      createProfanityFilter({ dictionary: russianProfanityDictionary }),
+    bench("profanity · create from fresh dictionary", () =>
+      createProfanityFilterFromDictionary(russianProfanityDictionary),
+      SETUP_ITERATIONS,
     ),
-    bench("profanity · createProfanityFilter() compiled dict reuse", () =>
-      createProfanityFilter({ compiledDictionary: compiled }),
+    bench("profanity · create from compiled dictionary", () =>
+      createProfanityFilterFromCompiledDictionary(compiled),
+      SETUP_ITERATIONS,
     ),
     bench("profanity · check · short clean", () => f.check(SHORT_PROFANE)),
     bench("profanity · check · short match", () => f.check(SHORT_PROFANE_MATCH)),
@@ -219,8 +223,7 @@ const LONG_PROFANE_MATCH_LATE =
 }
 
 // ---------------------------------------------------------------------------
-// spam — каждый кейс создаёт свой фильтр с явным nowMs,
-// чтобы не зависеть от реального времени
+// spam: every case creates its own guard and uses explicit nowMs values
 // ---------------------------------------------------------------------------
 
 {
@@ -230,7 +233,7 @@ const LONG_PROFANE_MATCH_LATE =
   const nextT = (gap = 2000) => (t += gap);
 
   const results = [
-    bench("spam · createSpamFilter()", () => createSpamFilter()),
+    bench("spam · createSpamFilter()", () => createSpamFilter(), SETUP_ITERATIONS),
     bench(
       "spam · check · allowed · short",
       () => {
@@ -262,7 +265,11 @@ const LONG_PROFANE_MATCH_LATE =
     bench(
       "spam · check · burst block",
       () => {
-        const sf = createSpamFilter({ burstMaxMessages: 3, burstWindowMs: 10_000 });
+        const sf = createSpamFilter({
+          minIntervalMs: 0,
+          burstMaxMessages: 3,
+          burstWindowMs: 10_000,
+        });
         const base = nextT(10_000);
         sf.check({ actorKey: "u1", text: "a", nowMs: base });
         sf.check({ actorKey: "u1", text: "b", nowMs: base + 100 });
@@ -274,7 +281,11 @@ const LONG_PROFANE_MATCH_LATE =
     bench(
       "spam · check · many messages · same actor",
       () => {
-        const sf = createSpamFilter({ minIntervalMs: 0 });
+        const sf = createSpamFilter({
+          minIntervalMs: 0,
+          burstMaxMessages: 100,
+          burstWindowMs: 10_000,
+        });
         for (let i = 0; i < 50; i++) {
           sf.check({ actorKey: "u1", text: `msg ${i}`, nowMs: nextT(100) });
         }
@@ -287,7 +298,7 @@ const LONG_PROFANE_MATCH_LATE =
 }
 
 // ---------------------------------------------------------------------------
-// комбинированный пайплайн — url + email + phone + profanity вместе
+// combined pipeline: url + email + phone + profanity
 // ---------------------------------------------------------------------------
 
 {
@@ -296,7 +307,7 @@ const LONG_PROFANE_MATCH_LATE =
     .use(createUrlFilter())
     .use(createEmailFilter())
     .use(createPhoneFilter())
-    .use(createProfanityFilter({ compiledDictionary: compiled }));
+    .use(createProfanityFilterFromCompiledDictionary(compiled));
 
   const COMBINED_CLEAN = "Привет, как дела? Всё хорошо.";
   const COMBINED_MATCH =

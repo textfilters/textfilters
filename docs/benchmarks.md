@@ -1,94 +1,100 @@
-# Бенчмарки
+# Benchmarks
 
-## Обзор
+## Overview
 
-Набор бенчмарков измеряет производительность каждого пакета `@textfilters/*`
-на реалистичных входных данных. Предназначен для сравнения **до/после на одной
-и той же машине** — абсолютные цифры зависят от окружения и сами по себе
-ничего не значат.
+The benchmark suite measures the runtime cost of the current `@textfilters/*`
+package set on representative inputs. Use it for **before/after comparisons on
+the same machine**. Absolute numbers depend on hardware, OS scheduling, Node.js
+version, and local load.
 
-## Запуск
+## Setup
+
+Packages are published on GitHub Packages, so npm must use the GitHub Packages
+registry for the `@textfilters` scope and must be authenticated before install.
+This repository commits the scope registry in `.npmrc`; provide authentication
+with your normal GitHub Packages npm setup, for example a user-level npm token
+or `NODE_AUTH_TOKEN`.
 
 ```sh
 npm install
 npm run benchmark
 ```
 
-Сборка не нужна. Runner использует только встроенные модули Node.js
-(`node:perf_hooks`) и публичные экспорты пакетов.
+No build step is required. The runner uses Node.js built-in modules and public
+package exports only.
 
-## Формат вывода
+## Output Format
 
-Каждая строка содержит четыре колонки:
+Each row contains four measurements:
 
-| Колонка | Значение |
+| Column | Meaning |
 |---|---|
-| `iter` | Количество итераций |
-| `total ms` | Общее время выполнения всех итераций |
-| `avg ms` | Среднее время одной итерации |
-| `ops/sec` | Примерное количество операций в секунду |
+| `iter` | Iteration count |
+| `total ms` | Total elapsed time for all iterations |
+| `avg ms` | Average time per iteration |
+| `ops/sec` | Approximate operations per second |
 
-## Покрытие
+## Coverage
 
-### `core` — пайплайн
+### `core` pipeline
 
-| Кейс | Что измеряет |
+| Case | Measures |
 |---|---|
-| single filter · short/long clean | Накладные расходы `censor()` без совпадений |
-| single filter · short/long match | Стоимость детекта URL и маскировки |
-| multi filter · short/long | Накладные расходы при двух цензорах в цепочке |
+| single filter · short/long clean | `censor()` overhead with no match |
+| single filter · short/long match | URL detection and masking cost |
+| multi filter · short/long | Chained censor overhead |
 
-### `url` / `email` / `phone`
+### `url`, `email`, and `phone`
 
-Каждый фильтр проверяется в четырёх сценариях плюс один с кастомным `maskChar`:
+Each censor runs these scenarios plus one custom `maskChar` case:
 
-- **short no-match** — базовая стоимость на короткой чистой строке
-- **long no-match** — базовая стоимость на длинной чистой строке (~2 КБ)
-- **short positive-match** — детект и маскировка на короткой строке
-- **long text with match late** — совпадение в конце строки ~2 КБ
-- **custom maskChar** — проверка, что опция `maskChar` не даёт заметных накладных расходов
+- **short no-match**: baseline cost on short clean text
+- **long no-match**: baseline cost on long clean text, about 2 KB
+- **short positive-match**: detection and masking on short text
+- **long text with match late**: match near the end of long text
+- **custom maskChar**: option overhead for a non-default mask character
 
 ### `profanity`
 
-| Кейс | Что измеряет |
+| Case | Measures |
 |---|---|
-| `compileProfanityDictionary()` | Стоимость однократной компиляции словаря |
-| `createProfanityFilter()` fresh dict | Создание фильтра из сырого словаря |
-| `createProfanityFilter()` compiled dict reuse | Создание фильтра из уже скомпилированного словаря |
-| `check()` short/long clean | Детект без совпадений |
-| `check()` short/long match | Детект с совпадением |
-| `censor()` short/long | Детект + маскировка |
-| `analyze()` short/match/long | Полный анализ с возвратом результата |
-| compiled reuse · `censor()` | `censor()` при повторном использовании скомпилированного словаря |
+| `compileProfanityDictionary()` | One-time dictionary compilation cost |
+| `createProfanityFilterFromDictionary()` | Filter creation from a raw dictionary |
+| `createProfanityFilterFromCompiledDictionary()` | Filter creation from a reused compiled dictionary |
+| `check()` short/long clean | No-match detection |
+| `check()` short/long match | Positive-match detection |
+| `censor()` short/long | Detection plus masking |
+| `analyze()` short/match/long | Full analysis result creation |
+| compiled reuse · `censor()` | Runtime censoring with a reused compiled dictionary |
 
 ### `spam`
 
-Спам-фильтр хранит состояние, поэтому каждый кейс создаёт свой экземпляр
-с явным `nowMs`, чтобы не зависеть от реального времени.
+The spam guard is stateful, so every benchmark case creates its own guard and
+uses explicit `nowMs` values instead of wall-clock time.
 
-| Кейс | Что измеряет |
+| Case | Measures |
 |---|---|
-| `createSpamFilter()` | Стоимость создания экземпляра |
-| check · allowed | Счастливый путь: сообщение проходит все проверки |
-| check · tooFast block | Ранний выход при нарушении интервала |
-| check · duplicate block | Детект дубликата в пределах окна |
-| check · burst block | Срабатывание порога burst-счётчика |
-| many messages · same actor | Рост состояния и pruning под нагрузкой |
+| `createSpamFilter()` | Guard creation cost |
+| check · allowed | Happy path through all checks |
+| check · tooFast block | Early exit on interval violation |
+| check · duplicate block | Duplicate detection within the duplicate window |
+| check · burst block | Burst threshold rejection |
+| many messages · same actor | Actor state growth and pruning pressure |
 
-### Комбинированный пайплайн
+### Combined Pipeline
 
-`url + email + phone + profanity` в одном `TextPipeline`:
+`url + email + phone + profanity` in one `TextPipeline`:
 
-- короткий чистый текст
-- длинный чистый текст
-- короткий текст со всеми типами совпадений
-- длинный текст с совпадениями в конце
+- short clean text
+- long clean text
+- short text with all match types
+- long text with matches near the end
 
-## Интерпретация результатов
+## Interpreting Results
 
-- Сравнивай запуски **на одной машине** до и после изменения.
-- Регрессия значима только если воспроизводится в нескольких запусках подряд.
-- `ops/sec` вычисляется из `avg ms` — для точных сравнений предпочитай `avg ms`.
-- `profanity · compileProfanityDictionary()` ожидаемо медленный — он выполняется
-  один раз при старте, результат нужно переиспользовать через
-  `createProfanityFilter({ compiledDictionary })`.
+- Compare runs on the same machine before and after a change.
+- Treat a regression as meaningful only when it repeats across several runs.
+- `ops/sec` is derived from `avg ms`; prefer `avg ms` for precise comparisons.
+- `profanity · compileProfanityDictionary()` is expected to be slower than
+  runtime calls because it is a setup operation. Reuse the compiled result with
+  `createProfanityFilterFromCompiledDictionary()` when measuring hot paths.
