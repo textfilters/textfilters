@@ -1,5 +1,6 @@
 import {
   maskCodePointRangesPreservingLength,
+  normalizeTextInput,
   type TextCodePointRange,
 } from "@textfilters/core";
 
@@ -36,8 +37,7 @@ export function createUrlFilter(config: UrlFilterConfig = {}): UrlFilter {
   return {
     name: URL_FILTER_NAME,
     censor(text) {
-      if (text === null || text === undefined) return "";
-      const source = String(text);
+      const source = normalizeTextInput(text);
       if (!source) return source;
       const meta = createMeta(source);
       const ranges = collectRanges(meta, tldSet, tldSkeletonSet);

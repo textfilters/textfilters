@@ -1,5 +1,3 @@
-import type { TextCensor } from "@textfilters/core";
-
 // Keep public API types in a dependency-light module so the entrypoint can
 // re-export them without exposing parser internals.
 export interface UrlFilterConfig {
@@ -9,6 +7,7 @@ export interface UrlFilterConfig {
 
 export const URL_FILTER_NAME = "url";
 
-export type UrlFilter = TextCensor & {
+export interface UrlFilter {
   readonly name: typeof URL_FILTER_NAME;
-};
+  censor(text: unknown): string;
+}

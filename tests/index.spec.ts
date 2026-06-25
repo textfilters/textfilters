@@ -19,9 +19,14 @@ describe("compatibility behavior", () => {
     );
   });
 
-  it("normalizes nullish input to an empty string", () => {
+  it("normalizes empty and non-string public input through core", () => {
+    expect(filter.censor("")).toBe("");
     expect(filter.censor(null)).toBe("");
     expect(filter.censor(undefined)).toBe("");
+    expect(filter.censor(12345)).toBe("12345");
+    expect(filter.censor({ toString: () => "https://example.com" })).toBe(
+      mask("https://example.com"),
+    );
   });
 
   it("censors explicit scheme URLs and keeps surrounding text", () => {

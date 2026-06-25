@@ -44,7 +44,7 @@
     "check": "npm run lint && npm test && npm run build && npm run smoke:dist && npm run pack:dry-run"
   },
   "dependencies": {
-    "@textfilters/core": "^0.3.0"
+    "@textfilters/core": "^0.3.1"
   },
   "devDependencies": {
     "prettier": "^3.8.3",
