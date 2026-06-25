@@ -11,12 +11,13 @@ version, and local load.
 
 Packages are published on GitHub Packages, so npm must use the GitHub Packages
 registry for the `@textfilters` scope and must be authenticated before install.
-This repository commits the scope registry and `NODE_AUTH_TOKEN` interpolation
-in `.npmrc`; export a token with `read:packages` access or configure the same
-auth token in your user-level npm config before installing dependencies.
+This repository commits the scope registry in `.npmrc`, matching the package
+repositories. Keep authentication outside the project file so user-level npm
+config and CI-generated auth are not overridden.
 
 ```sh
 export NODE_AUTH_TOKEN=<github-token-with-read-packages>
+npm config set //npm.pkg.github.com/:_authToken "$NODE_AUTH_TOKEN" --location=user
 npm install
 npm run benchmark
 ```
