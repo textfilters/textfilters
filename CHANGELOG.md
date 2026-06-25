@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.13.4](https://github.com/textfilters/profanity/compare/v0.13.3...v0.13.4) (2026-06-25)
+
+
+### Bug Fixes
+
+* use shared public input normalization ([e6c194e](https://github.com/textfilters/profanity/commit/e6c194e67438c8a5455c826af7d86bd69644078d))
+* validate language dictionaries before compile ([54d5173](https://github.com/textfilters/profanity/commit/54d5173457d8c55de25b82e4e36007db97095423)), closes [#122](https://github.com/textfilters/profanity/issues/122)
+
 ## [0.13.3](https://github.com/textfilters/profanity/compare/v0.13.2...v0.13.3) (2026-06-22)
 
 
