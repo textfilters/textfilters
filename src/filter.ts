@@ -25,6 +25,7 @@ import {
   PROFANITY_MATCH_MODE,
   textRangesForMode,
 } from "./matches/ranges.js";
+import { normalizeTextInput } from "@textfilters/core";
 import { normalizeForMatchSameLen } from "./normalization/text.js";
 import { collectLooseRanges } from "./ranges/loose.js";
 import { collectStrictRanges } from "./ranges/strict.js";
@@ -169,9 +170,11 @@ function createFilter(state: FilterState): ProfanityFilter {
   return {
     name: PROFANITY_FILTER_NAME,
     analyze: (text, options) =>
-      collectProfanityMatches(state, String(text), options),
-    check: (text, options) => hasProfanity(state, String(text), options),
-    censor: (text, options) => censorText(state, String(text), options),
+      collectProfanityMatches(state, normalizeTextInput(text), options),
+    check: (text, options) =>
+      hasProfanity(state, normalizeTextInput(text), options),
+    censor: (text, options) =>
+      censorText(state, normalizeTextInput(text), options),
     setStrict: (list) => {
       state.strictTerms = runtimeLiteralTerms(list);
       state.strictBasePatterns = undefined;

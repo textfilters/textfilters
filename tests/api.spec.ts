@@ -873,4 +873,17 @@ describe("public API", () => {
       expect(filter.censor(input)).toBe(input);
     }
   });
+
+  it("normalizes empty and non-string public input through core", () => {
+    const objectInput = { toString: () => "блядь" };
+
+    expect(filter.censor(null as unknown as string)).toBe("");
+    expect(filter.censor(undefined as unknown as string)).toBe("");
+    expect(filter.censor(12345 as unknown as string)).toBe("12345");
+    expect(filter.censor(objectInput as unknown as string)).toBe("*****");
+    expect(filter.check(objectInput as unknown as string)).toBe(true);
+    expect(
+      filter.analyze(objectInput as unknown as string).length,
+    ).toBeGreaterThan(0);
+  });
 });
