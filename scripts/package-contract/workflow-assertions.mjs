@@ -1,7 +1,7 @@
 import { countIndent, relativePackagePath } from "./local-workflow-scanner.mjs";
 import { BLOCKED_AUDITED_NPM_ENV_KEYS, BLOCKED_NPM_CONFIG_ENV_KEYS, TRUSTED_GITHUB_RUNNER, contract, failures } from "./state.mjs";
 import { getStepChildBlock, isYamlBlockHeader, normalizedYamlLine, stepBaseIndent, yamlKey, yamlValue } from "./workflow-action-config.mjs";
-import { blockEntriesAtIndent, hasEnvKey, hasEnvLine, hasKeyAtIndent, hasStepEnvKey, jobDefaultsShell, jobDefaultsWorkingDirectory, stepInlineEnvHasKey, stepRunCommand, stepTopLevelKeyCount, stepTopLevelValue, topLevelChildKeys, workflowDefaultsShell, workflowDefaultsWorkingDirectory } from "./yaml-inline-queries.mjs";
+import { blockEntriesAtIndent, hasEnvKey, hasEnvLine, hasKeyAtIndent, hasStepEnvKey, inlineMappingKeys, jobDefaultsShell, jobDefaultsWorkingDirectory, stepInlineEnvHasKey, stepRunCommand, stepTopLevelKeyCount, stepTopLevelValue, topLevelChildKeys, topLevelValue, workflowDefaultsShell, workflowDefaultsWorkingDirectory } from "./yaml-inline-queries.mjs";
 import { blockHasChildLines, countNpmPublishCommands, extractNestedBlocks, extractStepBlocks, hasLineAtIndent, hasTopLevelStepKey, hasTopLevelStepLine, jobTopLevelEntry, jobTopLevelValue } from "./yaml-workflow-parser.mjs";
 import { join } from "node:path";
 
@@ -172,6 +172,15 @@ export function expectEnvAvailable(label, path, jobBlock, stepBlock, envLine) {
   const stepEnvIndent = stepBaseIndent(stepBlock) + 4;
   const envName = envLine.slice(0, envLine.indexOf(":") + 1);
 
+  if (stepEnvKeyCount(stepBlock, envName) > 1) {
+    fail(label, `${relativePackagePath(path)} step env must not repeat ${envName.slice(0, -1)}`);
+    return;
+  }
+  if (jobEnvKeyCount(jobBlock, envName) > 1) {
+    fail(label, `${relativePackagePath(path)} job env must not repeat ${envName.slice(0, -1)}`);
+    return;
+  }
+
   if (stepInlineEnvHasKey(stepBlock, envName)) {
     fail(label, `${relativePackagePath(path)} step must not override ${envName} incorrectly`);
     return;
@@ -190,6 +199,34 @@ export function expectEnvAvailable(label, path, jobBlock, stepBlock, envLine) {
   }
 
   fail(label, `${relativePackagePath(path)} step must have ${envLine} available`);
+}
+
+export function stepEnvKeyCount(stepBlock, envName) {
+  const envBlock = getStepChildBlock(stepBlock, "env:");
+  return (
+    blockEnvKeyCount(envBlock, envName, stepBaseIndent(stepBlock) + 4) +
+    inlineEnvKeyCount(stepTopLevelValue(stepBlock, "env:"), envName)
+  );
+}
+
+export function jobEnvKeyCount(jobBlock, envName) {
+  const envBlock = getOptionalBlock(jobBlock, "env:", 4);
+  return blockEnvKeyCount(envBlock, envName, 6) + inlineEnvKeyCount(topLevelValue(jobBlock, "env:", 4), envName);
+}
+
+export function blockEnvKeyCount(block, envName, indent) {
+  const expectedKey = normalizedEnvEntryKey(envName);
+  return blockEntriesAtIndent(block, indent).filter((entry) => normalizedEnvEntryKey(yamlKey(entry)) === expectedKey)
+    .length;
+}
+
+export function inlineEnvKeyCount(value, envName) {
+  const expectedKey = normalizedEnvEntryKey(envName);
+  return inlineMappingKeys(value).filter((key) => normalizedEnvEntryKey(key) === expectedKey).length;
+}
+
+export function normalizedEnvEntryKey(key) {
+  return key.replace(/:$/u, "");
 }
 
 export function expectNoEnvKey(label, path, workflow, jobBlock, stepBlock, envName) {
@@ -298,6 +335,10 @@ export function expectBlockingJob(label, path, jobBlock, jobName, allowedConditi
 }
 
 export function expectJobRunner(label, path, jobBlock, jobName) {
+  const runnerCount = blockTopLevelKeyCount(jobBlock, "runs-on:", 4);
+  if (runnerCount > 1) {
+    fail(label, `${relativePackagePath(path)} ${jobName} job must not repeat runs-on`);
+  }
   const runner = jobTopLevelValue(jobBlock, "runs-on:", 4);
   if (!runner) {
     fail(label, `${relativePackagePath(path)} ${jobName} job must include runs-on`);
@@ -397,6 +438,9 @@ export function expectPackageRootStep(label, path, workflow, jobBlock, stepBlock
   }
 
   const workingDirectory = stepTopLevelValue(stepBlock, "working-directory:");
+  if (stepTopLevelKeyCount(stepBlock, "working-directory:") > 1) {
+    fail(label, `${relativePackagePath(path)} ${runCommand} step must not repeat working-directory`);
+  }
   if (workingDirectory && workingDirectory !== ".") {
     fail(label, `${relativePackagePath(path)} ${runCommand} step must run at the package root`);
   }

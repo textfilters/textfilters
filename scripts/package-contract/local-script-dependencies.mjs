@@ -125,13 +125,37 @@ export function localJavaScriptCreateRequireDependencySpecifiers(text) {
 
 export function localJavaScriptCreateRequireAliases(text) {
   const aliases = new Set();
-  const aliasPattern =
-    /\b(?:const|let|var)\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*=\s*createRequire\s*\(\s*import\.meta\.url\s*\)/gu;
+  const createRequireNames = [...localJavaScriptCreateRequireNames(text)]
+    .map((name) => name.replace(/[\^$.*+?()[\]{}|]/gu, "\\$&"))
+    .join("|");
+  const aliasPattern = new RegExp(
+    `\\b(?:const|let|var)\\s+([A-Za-z_$][A-Za-z0-9_$]*)\\s*=\\s*(?:${createRequireNames})\\s*\\(\\s*import\\.meta\\.url\\s*\\)`,
+    "gu",
+  );
   for (const match of text.matchAll(aliasPattern)) {
     aliases.add(match[1]);
   }
 
   return aliases;
+}
+
+export function localJavaScriptCreateRequireNames(text) {
+  const names = new Set(["createRequire"]);
+  const moduleImportPattern =
+    /\bimport\s*\{([\s\S]*?)\}\s*from\s*(["'])(?:node:)?module\2/gu;
+  const moduleRequirePattern =
+    /\b(?:const|let|var)\s*\{([\s\S]*?)\}\s*=\s*require\s*\(\s*(["'])(?:node:)?module\2\s*\)/gu;
+
+  for (const match of [...text.matchAll(moduleImportPattern), ...text.matchAll(moduleRequirePattern)]) {
+    for (const specifier of match[1].split(",")) {
+      const alias = /^createRequire(?:\s+as\s+|\s*:\s*)?([A-Za-z_$][A-Za-z0-9_$]*)?$/u.exec(
+        specifier.trim(),
+      );
+      if (alias) names.add(alias[1] ?? "createRequire");
+    }
+  }
+
+  return names;
 }
 
 export function localJavaScriptNewUrlDependencySpecifiers(text) {

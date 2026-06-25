@@ -329,9 +329,7 @@ export function javascriptImportSpecifiers(scriptText) {
 
   for (const match of scriptText.matchAll(importPattern)) {
     const specifier = readJavaScriptStaticStringAt(scriptText, match.index + match[0].length);
-    if (specifier.closed) {
-      specifiers.push(specifier.value);
-    }
+    specifiers.push(specifier.closed ? specifier.value : "<dynamic import>");
   }
 
   return specifiers;

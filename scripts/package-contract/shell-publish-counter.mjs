@@ -367,15 +367,16 @@ export function recordNpmPublishSubcommandVariable(word, publishSubcommandVariab
 }
 
 export function shellVariableAssignment(word) {
-  const assignment = /^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/u.exec(word);
-  return assignment ? { name: assignment[1], value: assignment[2] } : null;
+  const assignment = /^([A-Za-z_][A-Za-z0-9_]*)(\+?=)(.*)$/u.exec(word);
+  return assignment ? { name: assignment[1], value: assignment[3], append: assignment[2] === "+=" } : null;
 }
 
 export function recordShellVariable(word, shellVariables) {
   const assignment = shellVariableAssignment(word);
   if (!assignment) return;
 
-  shellVariables.set(assignment.name, resolveShellVariables(assignment.value, shellVariables));
+  const value = resolveShellVariables(assignment.value, shellVariables);
+  shellVariables.set(assignment.name, assignment.append ? `${shellVariables.get(assignment.name) ?? ""}${value}` : value);
 }
 
 export function resolveShellVariables(word, shellVariables) {
