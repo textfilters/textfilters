@@ -41,6 +41,15 @@ checks, tests, a TypeScript build, a package-specific dist smoke command, and
 `npm pack --dry-run`. Every package also keeps `prepack: npm run build`, so
 direct package packing remains build-backed outside `check`.
 
+Package source layout is intentionally similar across repositories where that
+does not force behavior changes. New package work should keep `src/index.ts` as
+the root public export, keep scanners/parsers/range collectors internal unless a
+public API explicitly requires them, expose isolated factories and stable public
+types from the root, and use package-specific modules for config, normalization,
+matching, range collection, dictionaries, or actor state as needed. See
+[package layout](docs/package-layout.md) for the preferred layout and alignment
+rules.
+
 For ecosystem compatibility checks, authenticate npm for GitHub Packages, then
 install the current published package set together with its compatible core line
 in a clean temporary project and run a basic pipeline smoke:
