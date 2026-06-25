@@ -91,7 +91,7 @@ const builtInRuleDefinitionToRule = (
         ...(definition.loose === undefined ? {} : { loose: definition.loose }),
       };
 
-const loosenInternalRuleSource = (
+export const loosenInternalRuleSource = (
   source: string,
   options: InternalProfanityRuleLooseOptions = {},
 ): string => {

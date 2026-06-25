@@ -16,6 +16,10 @@ import {
   type ProfanityLanguageDictionary,
 } from "./languages/profanity.js";
 import {
+  validateProfanityLanguageDictionary,
+  type ProfanityLanguageDictionaryValidationIssue,
+} from "./languages/validation.js";
+import {
   type CollectedProfanityRange,
   matchRangesForMode,
   PROFANITY_MATCH_MODE,
@@ -89,6 +93,8 @@ export const createProfanityFilter = (
 export const compileProfanityDictionary = (
   dictionary: ProfanityLanguageDictionary,
 ): CompiledProfanityDictionary => {
+  assertValidProfanityLanguageDictionary(dictionary);
+
   const state = compileDictionaryState(dictionary);
   const compiled: CompiledProfanityDictionary = {
     language: dictionary.language,
@@ -129,6 +135,35 @@ export const createProfanityFilterFromCompiledDictionary = (
 
   return createFilter(createStateFromCompiledDictionary(compiledState));
 };
+
+function assertValidProfanityLanguageDictionary(
+  dictionary: ProfanityLanguageDictionary,
+): void {
+  const issues = validateProfanityLanguageDictionary(dictionary);
+
+  if (issues.length === 0) {
+    return;
+  }
+
+  throw new TypeError(
+    `Invalid profanity language dictionary: ${formatValidationIssues(issues)}`,
+  );
+}
+
+function formatValidationIssues(
+  issues: readonly ProfanityLanguageDictionaryValidationIssue[],
+): string {
+  const formatted = issues
+    .slice(0, 3)
+    .map(({ path, code, message }) => `${path} ${code}: ${message}`);
+  const remaining = issues.length - formatted.length;
+
+  return remaining > 0
+    ? `${formatted.join("; ")}; and ${remaining} more issue${
+        remaining === 1 ? "" : "s"
+      }`
+    : formatted.join("; ");
+}
 
 function createFilter(state: FilterState): ProfanityFilter {
   return {

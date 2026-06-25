@@ -2,6 +2,7 @@ import type {
   ProfanityLanguageDictionary,
   ProfanityLanguageLooseMatchOptions,
   ProfanityLanguageRuleDefinition,
+  ProfanityLanguageRuleMatch,
   ProfanityLanguageRuleSource,
 } from "../../profanity.js";
 import type { ProfanityCategory, ProfanitySeverity } from "../../../types.js";
@@ -90,11 +91,22 @@ export const russianRule = ({
   category,
   severity,
   source,
-  match: {
-    ...(match === "strict" || match === "strict-loose" ? { strict: {} } : {}),
-    ...(match === "loose" || match === "strict-loose" ? { loose } : {}),
-  },
+  match: russianRuleMatch(match, loose),
 });
+
+const russianRuleMatch = (
+  match: RussianRuleMatch,
+  loose: ProfanityLanguageLooseMatchOptions,
+): ProfanityLanguageRuleMatch => {
+  switch (match) {
+    case "strict":
+      return { strict: {} };
+    case "loose":
+      return { loose };
+    case "strict-loose":
+      return { strict: {}, loose };
+  }
+};
 
 export const token = (source: string): string =>
   String.raw`(?<!\p{L})${source}(?!\p{L})`;

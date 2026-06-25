@@ -1,31 +1,45 @@
 import type { InternalProfanityRuleDefinition } from "../matchers/internal-rules.js";
-import type { ProfanityTaxonomyMetadata } from "../types.js";
+import type { ProfanityCategory, ProfanitySeverity } from "../types.js";
 
 export interface ProfanityLanguageDictionary {
   readonly language: string;
   readonly rules: readonly ProfanityLanguageRuleDefinition[];
 }
 
-export interface ProfanityLanguageRuleDefinition extends ProfanityTaxonomyMetadata {
-  readonly id?: string;
+export interface ProfanityLanguageRuleDefinition {
+  readonly id: string;
+  readonly category: ProfanityCategory;
+  readonly severity: ProfanitySeverity;
   readonly source: ProfanityLanguageRuleSource;
   readonly match: ProfanityLanguageRuleMatch;
 }
 
 export type ProfanityLanguageRuleSource = string | readonly string[];
 
-export interface ProfanityLanguageRuleMatch {
-  readonly strict?: ProfanityLanguageStrictMatchOptions;
-  readonly loose?: ProfanityLanguageLooseMatchOptions;
-}
+export type ProfanityLanguageRuleMatch =
+  | {
+      readonly strict: ProfanityLanguageStrictMatchOptions;
+      readonly loose?: ProfanityLanguageLooseMatchOptions;
+    }
+  | {
+      readonly strict?: ProfanityLanguageStrictMatchOptions;
+      readonly loose: ProfanityLanguageLooseMatchOptions;
+    };
 
 export type ProfanityLanguageStrictMatchOptions = Record<string, never>;
 
-export interface ProfanityLanguageLooseMatchOptions {
-  readonly stretch?: boolean;
-  readonly hyphenTail?: boolean;
-  readonly hyphenTailMin?: number;
-}
+export type ProfanityLanguageLooseMatchOptions = {
+  readonly stretch?: true;
+} & (
+  | {
+      readonly hyphenTail: true;
+      readonly hyphenTailMin?: number;
+    }
+  | {
+      readonly hyphenTail?: undefined;
+      readonly hyphenTailMin?: undefined;
+    }
+);
 
 export type ProfanityLanguageMatchMode = "strict" | "loose";
 
@@ -41,10 +55,10 @@ export const dictionaryRulesForMode = (
     }
 
     const definition: InternalProfanityRuleDefinition = {
-      ...(rule.id === undefined ? {} : { id: rule.id }),
+      id: rule.id,
       source: languageRuleSourcePattern(rule.source),
-      ...(rule.category === undefined ? {} : { category: rule.category }),
-      ...(rule.severity === undefined ? {} : { severity: rule.severity }),
+      category: rule.category,
+      severity: rule.severity,
       ...(mode === "loose"
         ? looseOptions(match as ProfanityLanguageLooseMatchOptions)
         : {}),
@@ -59,15 +73,18 @@ export const languageRuleSourcePattern = (
 
 const looseOptions = (
   match: ProfanityLanguageLooseMatchOptions,
-): { readonly loose?: ProfanityLanguageLooseMatchOptions } =>
-  match.stretch === true || match.hyphenTail === true
-    ? {
-        loose: {
-          ...(match.stretch === true ? { stretch: true } : {}),
-          ...(match.hyphenTail === true ? { hyphenTail: true } : {}),
-          ...(match.hyphenTail === true && match.hyphenTailMin !== undefined
-            ? { hyphenTailMin: match.hyphenTailMin }
-            : {}),
-        },
-      }
-    : {};
+): { readonly loose?: ProfanityLanguageLooseMatchOptions } => {
+  if (match.hyphenTail === true) {
+    return {
+      loose: {
+        ...(match.stretch === true ? { stretch: true } : {}),
+        hyphenTail: true,
+        ...(match.hyphenTailMin !== undefined
+          ? { hyphenTailMin: match.hyphenTailMin }
+          : {}),
+      },
+    };
+  }
+
+  return match.stretch === true ? { loose: { stretch: true } } : {};
+};

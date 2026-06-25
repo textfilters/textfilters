@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  compileProfanityDictionary,
+  createProfanityFilterFromDictionary,
   validateProfanityLanguageDictionary,
   type ProfanityLanguageDictionary,
   type ProfanityLanguageDictionaryValidationIssue,
@@ -251,6 +253,145 @@ describe("language dictionary validation", () => {
       { path: "rules[1].source[1]", code: "source_not_trimmed" },
       { path: "rules[2].source", code: "invalid_source_pattern" },
     ]);
+  });
+
+  it("rejects invalid dictionaries before compiling filters", () => {
+    const invalidPatternDictionary = {
+      language: "zz",
+      rules: [
+        {
+          id: "zz.vulgar.valid",
+          category: "VULGAR",
+          severity: "low",
+          source: "qwr",
+          match: {
+            strict: {},
+          },
+        },
+        {
+          id: "zz.vulgar.invalid",
+          category: "VULGAR",
+          severity: "low",
+          source: "(",
+          match: {
+            strict: {},
+          },
+        },
+      ],
+    } as const satisfies ProfanityLanguageDictionary;
+
+    expect(() => compileProfanityDictionary(invalidPatternDictionary)).toThrow(
+      "Invalid profanity language dictionary: rules[1].source invalid_source_pattern",
+    );
+    expect(() =>
+      createProfanityFilterFromDictionary(invalidPatternDictionary),
+    ).toThrow(
+      "Invalid profanity language dictionary: rules[1].source invalid_source_pattern",
+    );
+  });
+
+  it("rejects unsupported dictionary shapes before compilation", () => {
+    const unsupportedShape = {
+      language: "zz",
+      rules: [
+        {
+          id: "zz.vulgar.qwr",
+          category: "VULGAR",
+          severity: "low",
+          source: "qwr",
+          match: {
+            fuzzy: {},
+          },
+        },
+      ],
+    } as unknown as ProfanityLanguageDictionary;
+
+    expect(() => compileProfanityDictionary(unsupportedShape)).toThrow(
+      "Invalid profanity language dictionary: rules[0].match.fuzzy unsupported_match_key",
+    );
+  });
+
+  it("treats undefined match modes as absent", () => {
+    const dictionary = {
+      language: "zz",
+      rules: [
+        {
+          id: "zz.vulgar.loose",
+          category: "VULGAR",
+          severity: "low",
+          source: "qwr",
+          match: {
+            strict: undefined,
+            loose: {},
+          },
+        },
+        {
+          id: "zz.vulgar.strict",
+          category: "VULGAR",
+          severity: "low",
+          source: "vnn",
+          match: {
+            strict: {},
+            loose: undefined,
+          },
+        },
+      ],
+    } as unknown as ProfanityLanguageDictionary;
+
+    expect(validateProfanityLanguageDictionary(dictionary)).toEqual([]);
+    expect(createProfanityFilterFromDictionary(dictionary).check("qwr")).toBe(
+      true,
+    );
+  });
+
+  it("treats undefined loose option values as absent", () => {
+    const dictionary = {
+      language: "zz",
+      rules: [
+        {
+          id: "zz.vulgar.loose",
+          category: "VULGAR",
+          severity: "low",
+          source: "qwr",
+          match: {
+            loose: {
+              stretch: undefined,
+              hyphenTail: undefined,
+              hyphenTailMin: undefined,
+            },
+          },
+        },
+      ],
+    } as unknown as ProfanityLanguageDictionary;
+
+    expect(validateProfanityLanguageDictionary(dictionary)).toEqual([]);
+    expect(createProfanityFilterFromDictionary(dictionary).check("qwr")).toBe(
+      true,
+    );
+  });
+
+  it("rejects sources that fail after loose matching expansion", () => {
+    const dictionary = {
+      language: "zz",
+      rules: [
+        {
+          id: "zz.vulgar.named.group",
+          category: "VULGAR",
+          severity: "low",
+          source: "(?<term>qwr)",
+          match: {
+            loose: {},
+          },
+        },
+      ],
+    } as const satisfies ProfanityLanguageDictionary;
+
+    expect(
+      issueSummary(validateProfanityLanguageDictionary(dictionary)),
+    ).toEqual([{ path: "rules[0].source", code: "invalid_source_pattern" }]);
+    expect(() => compileProfanityDictionary(dictionary)).toThrow(
+      "Invalid profanity language dictionary: rules[0].source invalid_source_pattern",
+    );
   });
 
   it("returns shape issues instead of throwing for malformed inputs", () => {

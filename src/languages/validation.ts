@@ -1,4 +1,5 @@
 import type { ProfanityCategory, ProfanitySeverity } from "../types.js";
+import { loosenInternalRuleSource } from "../matchers/internal-rules.js";
 import { languageRuleSourcePattern } from "./profanity.js";
 
 export type ProfanityLanguageDictionaryValidationIssueCode =
@@ -439,8 +440,8 @@ const validateRuleMatch = (
     return;
   }
 
-  const hasStrict = "strict" in rule.match;
-  const hasLoose = "loose" in rule.match;
+  const hasStrict = rule.match.strict !== undefined;
+  const hasLoose = rule.match.loose !== undefined;
 
   for (const key of Object.keys(rule.match)) {
     if (!ALLOWED_MATCH_KEYS.has(key)) {
@@ -470,6 +471,7 @@ const validateRuleMatch = (
 
   if (hasLoose) {
     validateLooseMatch(rule.match.loose, `${path}.match.loose`, issues);
+    validateLooseSourcePattern(rule, path, rule.match.loose, issues);
   }
 };
 
@@ -528,6 +530,10 @@ const validateLooseMatch = (
       continue;
     }
 
+    if (value === undefined) {
+      continue;
+    }
+
     if ((key === "stretch" || key === "hyphenTail") && value !== true) {
       issues.push(
         issue(
@@ -566,6 +572,67 @@ const validateLooseMatch = (
       ),
     );
   }
+};
+
+const validateLooseSourcePattern = (
+  rule: Record<string, unknown>,
+  path: string,
+  loose: unknown,
+  issues: ProfanityLanguageDictionaryValidationIssue[],
+): void => {
+  if (!isRuleSource(rule.source) || !isValidLooseMatch(loose)) {
+    return;
+  }
+
+  const sourcePattern = languageRuleSourcePattern(rule.source);
+
+  try {
+    new RegExp(sourcePattern, "u");
+    new RegExp(loosenInternalRuleSource(sourcePattern, loose), "u");
+  } catch {
+    issues.push(
+      issue(
+        `${path}.source`,
+        "invalid_source_pattern",
+        "Rule source must compile after loose matching expansion.",
+      ),
+    );
+  }
+};
+
+const isValidLooseMatch = (
+  loose: unknown,
+): loose is {
+  readonly stretch?: boolean;
+  readonly hyphenTail?: boolean;
+  readonly hyphenTailMin?: number;
+} => {
+  if (!isRecord(loose)) {
+    return false;
+  }
+
+  for (const [key, value] of Object.entries(loose)) {
+    if (!ALLOWED_LOOSE_MATCH_OPTION_KEYS.has(key)) {
+      return false;
+    }
+
+    if (value === undefined) {
+      continue;
+    }
+
+    if ((key === "stretch" || key === "hyphenTail") && value !== true) {
+      return false;
+    }
+
+    if (
+      key === "hyphenTailMin" &&
+      (typeof value !== "number" || !Number.isInteger(value) || value < 1)
+    ) {
+      return false;
+    }
+  }
+
+  return loose.hyphenTailMin === undefined || loose.hyphenTail === true;
 };
 
 const validateGeneratedMetadata = (

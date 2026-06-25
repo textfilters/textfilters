@@ -11,8 +11,10 @@ import {
   type ProfanityCategory,
   profanityFilter,
   type ProfanityLanguageDictionary,
+  type ProfanityLanguageLooseMatchOptions,
   type ProfanityLanguageDictionaryValidationIssue,
   type ProfanityLanguageRuleDefinition,
+  type ProfanityLanguageRuleMatch,
   type ProfanityLanguageRuleSource,
   type ProfanityMatchMode,
   type ProfanityMatchOptions,
@@ -58,17 +60,40 @@ describe("public API", () => {
       readonly rules: readonly ProfanityLanguageRuleDefinition[];
     }>();
     expectTypeOf<ProfanityLanguageRuleDefinition>().toMatchTypeOf<{
-      readonly id?: string;
+      readonly id: string;
+      readonly category: ProfanityCategory;
+      readonly severity: ProfanitySeverity;
       readonly source: ProfanityLanguageRuleSource;
-      readonly match: {
-        readonly strict?: Record<string, never>;
-        readonly loose?: {
-          readonly stretch?: boolean;
-          readonly hyphenTail?: boolean;
-          readonly hyphenTailMin?: number;
-        };
-      };
+      readonly match: ProfanityLanguageRuleMatch;
     }>();
+    expectTypeOf<ProfanityLanguageRuleMatch>().toEqualTypeOf<
+      | {
+          readonly strict: Record<string, never>;
+          readonly loose?: ProfanityLanguageLooseMatchOptions;
+        }
+      | {
+          readonly strict?: Record<string, never>;
+          readonly loose: ProfanityLanguageLooseMatchOptions;
+        }
+    >();
+    expectTypeOf<{}>().not.toMatchTypeOf<ProfanityLanguageRuleMatch>();
+    expectTypeOf<{
+      readonly stretch: true;
+    }>().toMatchTypeOf<ProfanityLanguageLooseMatchOptions>();
+    expectTypeOf<{
+      readonly hyphenTail: true;
+      readonly hyphenTailMin: number;
+    }>().toMatchTypeOf<ProfanityLanguageLooseMatchOptions>();
+    expectTypeOf<{
+      readonly stretch: false;
+    }>().not.toMatchTypeOf<ProfanityLanguageLooseMatchOptions>();
+    expectTypeOf<{
+      readonly hyphenTailMin: number;
+    }>().not.toMatchTypeOf<ProfanityLanguageLooseMatchOptions>();
+    expectTypeOf<{
+      readonly stretch: true;
+      readonly hyphenTailMin: number;
+    }>().not.toMatchTypeOf<ProfanityLanguageLooseMatchOptions>();
     expectTypeOf<string>().toExtend<ProfanityLanguageRuleSource>();
     expectTypeOf<readonly string[]>().toExtend<ProfanityLanguageRuleSource>();
     expect(russianProfanityDictionary.language).toBe("ru");
@@ -409,14 +434,14 @@ describe("public API", () => {
           match: { strict: {} },
         },
         {
-          id: "zz.obscene.separator-prefix",
+          id: "zz.obscene.separator.prefix",
           source: String.raw`[^\p{L}\p{N}]*Ьаd`,
           category: "OBSCENE_MAT",
           severity: "high",
           match: { strict: {} },
         },
         {
-          id: "zz.obscene.digit-prefix",
+          id: "zz.obscene.digit.prefix",
           source: String.raw`[^\p{L}]*Ьаd`,
           category: "OBSCENE_MAT",
           severity: "high",
