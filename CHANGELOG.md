@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.4](https://github.com/textfilters/url/compare/v0.1.3...v0.1.4) (2026-06-25)
+
+
+### Bug Fixes
+
+* use shared public input normalization ([bb0e9df](https://github.com/textfilters/url/commit/bb0e9df008f13b59f661e7b60b01498203a43b69))
+
 ## [0.1.3](https://github.com/textfilters/url/compare/v0.1.2...v0.1.3) (2026-06-21)
 
 
