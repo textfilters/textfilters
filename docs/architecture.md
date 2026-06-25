@@ -74,12 +74,14 @@ morphology without exposing arbitrary user regex semantics.
 
 Russian family files may be JSON source dictionaries or package-internal
 TypeScript dictionaries built with `src/languages/ru/profanity/authoring.ts`.
-That helper is not a public language-pack DSL. It only removes repeated
+Those helpers are not a public language-pack DSL. They only remove repeated
 built-in Russian boilerplate such as `language: "ru"`, strict-and-loose match
 objects, common suffix fragments, token boundaries, and reviewed neutral-context
-guards. The assembled dictionary still exports the same public
-`ProfanityLanguageDictionary` shape, and `order.json` remains the explicit
-source of matcher order.
+guards. `russianProfileDictionary()` is the single profile assembly helper:
+family files are the source of truth for rule content, `order.json` is the
+source of truth for dictionary order, and the helper verifies duplicate ids,
+duplicate order entries, missing order entries, and omitted family rules before
+exporting the same public `ProfanityLanguageDictionary` shape.
 
 Reviewed loose rules may also opt into `hyphenTail` metadata from the source
 dictionary. That keeps language-specific compound trimming decisions in data

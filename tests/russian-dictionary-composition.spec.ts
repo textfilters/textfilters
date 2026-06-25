@@ -5,7 +5,12 @@ import {
   RUSSIAN_PROFANITY_DICTIONARY,
   RUSSIAN_PROFANITY_FAMILY_DICTIONARIES,
 } from "../src/languages/ru";
-import { patternTailViews } from "../src/languages/ru/profanity/authoring";
+import {
+  patternTailViews,
+  russianFamilyDictionary,
+  russianProfileDictionary,
+  russianRule,
+} from "../src/languages/ru/profanity/authoring";
 import russianProfanityRuleOrder from "../src/languages/ru/profanity/order.json" with { type: "json" };
 
 describe("Russian dictionary composition", () => {
@@ -33,6 +38,81 @@ describe("Russian dictionary composition", () => {
     for (const dictionary of RUSSIAN_PROFANITY_FAMILY_DICTIONARIES) {
       expect(validateProfanityLanguageDictionary(dictionary)).toEqual([]);
     }
+  });
+
+  it("assembles Russian family dictionaries from explicit rule order", () => {
+    const first = russianRule({
+      id: "ru.test.first",
+      category: "VULGAR",
+      severity: "low",
+      source: "first",
+      match: "strict",
+    });
+    const second = russianRule({
+      id: "ru.test.second",
+      category: "OBSCENE_MAT",
+      severity: "medium",
+      source: "second",
+      match: "loose",
+    });
+
+    expect(
+      russianProfileDictionary(
+        [russianFamilyDictionary([first]), russianFamilyDictionary([second])],
+        ["ru.test.second", "ru.test.first"],
+      ).rules,
+    ).toEqual([second, first]);
+  });
+
+  it("rejects duplicate Russian family rule ids", () => {
+    const rule = russianRule({
+      id: "ru.test.duplicate",
+      category: "VULGAR",
+      severity: "low",
+      source: "duplicate",
+    });
+
+    expect(() =>
+      russianProfileDictionary(
+        [russianFamilyDictionary([rule]), russianFamilyDictionary([rule])],
+        ["ru.test.duplicate"],
+      ),
+    ).toThrow("Duplicate Russian profanity rule id: ru.test.duplicate");
+  });
+
+  it("rejects duplicate Russian rule order ids", () => {
+    const rule = russianRule({
+      id: "ru.test.ordered",
+      category: "VULGAR",
+      severity: "low",
+      source: "ordered",
+    });
+
+    expect(() =>
+      russianProfileDictionary(
+        [russianFamilyDictionary([rule])],
+        ["ru.test.ordered", "ru.test.ordered"],
+      ),
+    ).toThrow("Duplicate Russian profanity rule order id: ru.test.ordered");
+  });
+
+  it("rejects Russian rule order ids without family rules", () => {
+    expect(() => russianProfileDictionary([], ["ru.test.missing"])).toThrow(
+      "Missing Russian profanity rule id: ru.test.missing",
+    );
+  });
+
+  it("rejects Russian rule order that omits family rules", () => {
+    const rule = russianRule({
+      id: "ru.test.omitted",
+      category: "VULGAR",
+      severity: "low",
+      source: "omitted",
+    });
+
+    expect(() =>
+      russianProfileDictionary([russianFamilyDictionary([rule])], []),
+    ).toThrow("Russian profanity rule order does not include every rule.");
   });
 
   it("keeps representative Russian dictionary metadata stable", () => {

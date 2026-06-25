@@ -30,6 +30,54 @@ export const russianFamilyDictionary = (
   rules,
 });
 
+export const russianProfileDictionary = (
+  familyDictionaries: readonly ProfanityLanguageDictionary[],
+  ruleOrder: readonly string[],
+): ProfanityLanguageDictionary => {
+  const rulesById = new Map<string, ProfanityLanguageRuleDefinition>();
+
+  for (const dictionary of familyDictionaries) {
+    for (const rule of dictionary.rules) {
+      if (rule.id === undefined) {
+        throw new Error("Russian profanity family rule is missing an id.");
+      }
+
+      if (rulesById.has(rule.id)) {
+        throw new Error(`Duplicate Russian profanity rule id: ${rule.id}`);
+      }
+
+      rulesById.set(rule.id, rule);
+    }
+  }
+
+  const orderedIds = new Set<string>();
+  const rules = ruleOrder.map((ruleId) => {
+    if (orderedIds.has(ruleId)) {
+      throw new Error(`Duplicate Russian profanity rule order id: ${ruleId}`);
+    }
+
+    orderedIds.add(ruleId);
+
+    const rule = rulesById.get(ruleId);
+    if (rule === undefined) {
+      throw new Error(`Missing Russian profanity rule id: ${ruleId}`);
+    }
+
+    return rule;
+  });
+
+  if (rules.length !== rulesById.size) {
+    throw new Error(
+      "Russian profanity rule order does not include every rule.",
+    );
+  }
+
+  return {
+    language: "ru",
+    rules,
+  };
+};
+
 export const russianRule = ({
   id,
   category,

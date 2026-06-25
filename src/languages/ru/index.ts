@@ -16,8 +16,8 @@ import zalupaProfanity from "./profanity/zalupa.js";
 import {
   dictionaryRulesForMode,
   type ProfanityLanguageDictionary,
-  type ProfanityLanguageRuleDefinition,
 } from "../profanity.js";
+import { russianProfileDictionary } from "./profanity/authoring.js";
 
 export const RUSSIAN_PROFANITY_FAMILY_DICTIONARIES = [
   blyaProfanity as ProfanityLanguageDictionary,
@@ -36,53 +36,11 @@ export const RUSSIAN_PROFANITY_FAMILY_DICTIONARIES = [
   zalupaProfanity,
 ] as const;
 
-const RUSSIAN_PROFANITY_RULES_BY_ID = new Map<
-  string,
-  ProfanityLanguageRuleDefinition
->();
-
-for (const dictionary of RUSSIAN_PROFANITY_FAMILY_DICTIONARIES) {
-  for (const rule of dictionary.rules) {
-    if (rule.id === undefined) {
-      throw new Error("Russian profanity family rule is missing an id.");
-    }
-
-    if (RUSSIAN_PROFANITY_RULES_BY_ID.has(rule.id)) {
-      throw new Error(`Duplicate Russian profanity rule id: ${rule.id}`);
-    }
-
-    RUSSIAN_PROFANITY_RULES_BY_ID.set(rule.id, rule);
-  }
-}
-
-const RUSSIAN_PROFANITY_RULE_ORDER =
-  russianProfanityRuleOrder as readonly string[];
-const RUSSIAN_PROFANITY_RULE_ORDER_IDS = new Set<string>();
-
-const RUSSIAN_PROFANITY_RULES = RUSSIAN_PROFANITY_RULE_ORDER.map((ruleId) => {
-  if (RUSSIAN_PROFANITY_RULE_ORDER_IDS.has(ruleId)) {
-    throw new Error(`Duplicate Russian profanity rule order id: ${ruleId}`);
-  }
-
-  RUSSIAN_PROFANITY_RULE_ORDER_IDS.add(ruleId);
-
-  const rule = RUSSIAN_PROFANITY_RULES_BY_ID.get(ruleId);
-
-  if (rule === undefined) {
-    throw new Error(`Missing Russian profanity rule id: ${ruleId}`);
-  }
-
-  return rule;
-});
-
-if (RUSSIAN_PROFANITY_RULES.length !== RUSSIAN_PROFANITY_RULES_BY_ID.size) {
-  throw new Error("Russian profanity rule order does not include every rule.");
-}
-
-export const RUSSIAN_PROFANITY_DICTIONARY = {
-  language: "ru",
-  rules: RUSSIAN_PROFANITY_RULES,
-} as const satisfies ProfanityLanguageDictionary;
+export const RUSSIAN_PROFANITY_DICTIONARY: ProfanityLanguageDictionary =
+  russianProfileDictionary(
+    RUSSIAN_PROFANITY_FAMILY_DICTIONARIES,
+    russianProfanityRuleOrder as readonly string[],
+  );
 
 export const russianProfanityDictionary = RUSSIAN_PROFANITY_DICTIONARY;
 
