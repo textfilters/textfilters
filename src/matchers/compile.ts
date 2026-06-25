@@ -24,6 +24,10 @@ export interface CompilePatternSource extends ProfanityTaxonomyMetadata {
   readonly trimHyphenTailMin?: number;
 }
 
+interface CompiledPatternSource extends CompilePatternSource {
+  readonly scanSource: string;
+}
+
 const GLOBAL_UNICODE_FLAGS = "giu";
 const ANCHORED_UNICODE_FLAGS = "iu";
 
@@ -37,6 +41,7 @@ export const compilePatternDefinitions = (
     // know whether a pattern came from strict token matching or global search.
     .map((definition) => ({
       source: wholeToken ? `^(?:${definition.source})$` : definition.source,
+      scanSource: definition.source,
       trimHyphenTail: definition.trimHyphenTail ?? options.trimHyphenTail,
       trimHyphenTailMin:
         definition.trimHyphenTailMin ?? options.trimHyphenTailMin,
@@ -55,7 +60,7 @@ export const patternMatches = (
 };
 
 const compilePattern = (
-  definition: CompilePatternSource,
+  definition: CompiledPatternSource,
   wholeToken: boolean,
 ): CompiledPattern | null => {
   try {
@@ -64,7 +69,7 @@ const compilePattern = (
         definition.source,
         wholeToken ? ANCHORED_UNICODE_FLAGS : GLOBAL_UNICODE_FLAGS,
       ),
-      ...scanGuardsForSource(definition.source),
+      ...scanGuardsForSource(definition.scanSource),
       trimHyphenTail: definition.trimHyphenTail,
       trimHyphenTailMin: definition.trimHyphenTailMin,
       ...ruleIdentityMetadata(definition),

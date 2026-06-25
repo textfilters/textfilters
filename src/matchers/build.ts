@@ -20,25 +20,67 @@ export interface MatcherTerms {
 
 export interface StrictPatternSet {
   readonly token: CompiledPattern[];
+  readonly tokenIndex: TokenPatternIndex;
   readonly symbolToken: CompiledPattern[];
   readonly symbolLengths: readonly number[];
   readonly phrase: CompiledPattern[];
 }
 
+export interface IndexedTokenPattern {
+  readonly order: number;
+  readonly pattern: CompiledPattern;
+}
+
+export interface TokenPatternIndex {
+  readonly fallback: readonly IndexedTokenPattern[];
+  readonly byFirstChar: ReadonlyMap<string, readonly IndexedTokenPattern[]>;
+}
+
 // Internal built-in rules and runtime literals stay separate until this final
 // build step so addStrict/addLoose can append literals without downgrading the
 // bundled rule corpus into literal strings.
-export const buildStrictPatterns = (terms: MatcherTerms): StrictPatternSet => ({
-  token: [
+export const buildStrictPatterns = (terms: MatcherTerms): StrictPatternSet => {
+  const token = [
     ...compileStrictInternalRulePatterns(terms.internal),
     ...compileStrictLiteralPatterns(terms.literals, true),
-  ],
-  symbolToken: compileStrictSymbolLiteralPatterns(terms.literals),
-  symbolLengths: strictSymbolLiteralLengths(terms.literals),
-  // Phrase patterns are only for runtime literals with punctuation, such as
-  // `foo.bar` or `a?`; built-in strict rules stay token-oriented.
-  phrase: compileStrictPhraseLiteralPatterns(terms.literals),
-});
+  ];
+
+  return {
+    token,
+    tokenIndex: buildTokenPatternIndex(token),
+    symbolToken: compileStrictSymbolLiteralPatterns(terms.literals),
+    symbolLengths: strictSymbolLiteralLengths(terms.literals),
+    // Phrase patterns are only for runtime literals with punctuation, such as
+    // `foo.bar` or `a?`; built-in strict rules stay token-oriented.
+    phrase: compileStrictPhraseLiteralPatterns(terms.literals),
+  };
+};
+
+export const buildTokenPatternIndex = (
+  patterns: readonly CompiledPattern[],
+): TokenPatternIndex => {
+  const fallback: IndexedTokenPattern[] = [];
+  const byFirstChar = new Map<string, IndexedTokenPattern[]>();
+
+  patterns.forEach((pattern, order) => {
+    const indexed = { order, pattern };
+    if (pattern.scanFirstChars === undefined) {
+      fallback.push(indexed);
+      return;
+    }
+
+    for (const char of new Set(pattern.scanFirstChars)) {
+      const bucket = byFirstChar.get(char);
+      if (bucket === undefined) {
+        byFirstChar.set(char, [indexed]);
+      } else {
+        bucket.push(indexed);
+      }
+    }
+  });
+
+  return { fallback, byFirstChar };
+};
 
 export const buildLoosePatterns = (terms: MatcherTerms): CompiledPattern[] => [
   ...compileLooseInternalRulePatterns(terms.internal),

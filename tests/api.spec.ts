@@ -390,6 +390,47 @@ describe("public API", () => {
     expect(loose.check("ok")).toBe(false);
   });
 
+  it("keeps indexed strict token lookup compatible with custom regexp rules", () => {
+    const strict = createProfanityFilterFromDictionary({
+      language: "zz",
+      rules: [
+        {
+          id: "zz.obscene.alternative",
+          source: "fоо|Ьаr",
+          category: "OBSCENE_MAT",
+          severity: "high",
+          match: { strict: {} },
+        },
+        {
+          id: "zz.obscene.casefold",
+          source: "kнuу",
+          category: "OBSCENE_MAT",
+          severity: "high",
+          match: { strict: {} },
+        },
+        {
+          id: "zz.obscene.separator-prefix",
+          source: String.raw`[^\p{L}\p{N}]*Ьаd`,
+          category: "OBSCENE_MAT",
+          severity: "high",
+          match: { strict: {} },
+        },
+        {
+          id: "zz.obscene.digit-prefix",
+          source: String.raw`[^\p{L}]*Ьаd`,
+          category: "OBSCENE_MAT",
+          severity: "high",
+          match: { strict: {} },
+        },
+      ],
+    });
+
+    expect(strict.check("bar")).toBe(true);
+    expect(strict.check("Khuy")).toBe(true);
+    expect(strict.check("-bad")).toBe(true);
+    expect(strict.check("1bad")).toBe(true);
+  });
+
   it("exposes taxonomy metadata on public object-backed match output", () => {
     const strict = createProfanityFilter(
       [{ source: "абв", category: "STRONG_INSULT", severity: "medium" }],

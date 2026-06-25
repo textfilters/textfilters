@@ -4,6 +4,7 @@ import type { CollectedProfanityRange } from "../matches/ranges.js";
 import { nextCodePointEnd } from "../normalization/text.js";
 import {
   containsWordChar,
+  SPLIT_TOKEN_CHAR_RE,
   WHITESPACE_RE,
   WORD_CHAR_RE,
   WORD_RE,
@@ -30,7 +31,7 @@ const collectWordRanges = (
   // Strict terms must own the whole word token; embedded prefixes are rejected by
   // boundaryCheckedRange before they become mask ranges.
   for (const match of normalized.matchAll(WORD_RE)) {
-    const pattern = findMatchingTokenPattern(patterns.token, match[0]);
+    const pattern = findMatchingIndexedTokenPattern(patterns, match[0]);
     if (pattern === null) {
       continue;
     }
@@ -62,7 +63,7 @@ const collectSymbolRanges = (
         if (rangeEnd > end) {
           continue;
         }
-        const pattern = findMatchingTokenPattern(
+        const pattern = findMatchingPatternInList(
           patterns.symbolToken,
           normalized.slice(rangeStart, rangeEnd),
         );
@@ -92,7 +93,60 @@ const collectPhraseRanges = (
     }
   });
 
-const findMatchingTokenPattern = (
+const findMatchingIndexedTokenPattern = (
+  patterns: StrictPatternSet,
+  value: string,
+): CompiledPattern | null => {
+  const candidates = [...patterns.tokenIndex.fallback];
+  const seenOrders = new Set(candidates.map((candidate) => candidate.order));
+
+  for (const char of tokenIndexLookupChars(value)) {
+    const bucket = patterns.tokenIndex.byFirstChar.get(char);
+    if (bucket === undefined) continue;
+
+    for (const candidate of bucket) {
+      if (seenOrders.has(candidate.order)) continue;
+      seenOrders.add(candidate.order);
+      candidates.push(candidate);
+    }
+  }
+
+  candidates.sort((left, right) => left.order - right.order);
+
+  for (const candidate of candidates) {
+    if (patternMatches(candidate.pattern, value)) return candidate.pattern;
+  }
+
+  return null;
+};
+
+const tokenIndexLookupChars = (value: string): Set<string> => {
+  const chars = new Set<string>();
+  const firstEnd = nextCodePointEnd(value, 0);
+  const first = value.slice(0, firstEnd);
+
+  addTokenIndexLookupChar(chars, first);
+
+  if (!SPLIT_TOKEN_CHAR_RE.test(first)) {
+    return chars;
+  }
+
+  for (let position = firstEnd; position < value.length; ) {
+    const end = nextCodePointEnd(value, position);
+    addTokenIndexLookupChar(chars, value.slice(position, end));
+    position = end;
+  }
+
+  return chars;
+};
+
+const addTokenIndexLookupChar = (chars: Set<string>, char: string): void => {
+  chars.add(char);
+  chars.add(char.toLowerCase());
+  chars.add(char.toUpperCase());
+};
+
+const findMatchingPatternInList = (
   patterns: readonly CompiledPattern[],
   value: string,
 ): CompiledPattern | null => {

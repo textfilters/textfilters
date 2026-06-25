@@ -1,4 +1,5 @@
 import {
+  buildTokenPatternIndex,
   buildLoosePatterns,
   buildStrictPatterns,
   type MatcherTerms,
@@ -195,6 +196,7 @@ function createState(
         : runtimeLiteralTerms(looseTerms),
     strictPatterns: {
       token: [],
+      tokenIndex: buildTokenPatternIndex([]),
       symbolToken: [],
       symbolLengths: [],
       phrase: [],
@@ -249,8 +251,10 @@ function cloneMatcherTerms(terms: MatcherTerms): MatcherTerms {
 }
 
 function cloneStrictPatternSet(patterns: StrictPatternSet): StrictPatternSet {
+  const token = [...patterns.token];
   return {
-    token: [...patterns.token],
+    token,
+    tokenIndex: buildTokenPatternIndex(token),
     symbolToken: [...patterns.symbolToken],
     symbolLengths: [...patterns.symbolLengths],
     phrase: [...patterns.phrase],
@@ -283,11 +287,14 @@ function appendStrictLiteralPatterns(
   basePatterns: StrictPatternSet,
   literals: readonly LiteralTermDefinition[],
 ): StrictPatternSet {
+  const token = [
+    ...basePatterns.token,
+    ...compileStrictLiteralPatterns(literals, true),
+  ];
+
   return {
-    token: [
-      ...basePatterns.token,
-      ...compileStrictLiteralPatterns(literals, true),
-    ],
+    token,
+    tokenIndex: buildTokenPatternIndex(token),
     symbolToken: [
       ...basePatterns.symbolToken,
       ...compileStrictSymbolLiteralPatterns(literals),

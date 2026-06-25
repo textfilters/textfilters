@@ -115,6 +115,19 @@ const scanSecondCharMayFollow = (
 };
 
 const firstRequiredChars = (source: string): readonly string[] | undefined => {
+  const alternatives = splitTopLevelAlternatives(source);
+  if (alternatives.length > 1) {
+    const chars = new Set<string>();
+
+    for (const alternative of alternatives) {
+      const alternativeChars = firstRequiredChars(alternative);
+      if (alternativeChars === undefined) return undefined;
+      for (const char of alternativeChars) chars.add(char);
+    }
+
+    return chars.size === 0 ? undefined : [...chars];
+  }
+
   const atoms = readRuleAtoms(source);
   const lookaheadChars = leadingLookaheadBackreferenceFirstChars(atoms);
 
@@ -188,7 +201,8 @@ const isSkippableSeparatorAtom = ({
   base,
   source,
 }: ReturnType<typeof readRuleAtoms>[number]): boolean =>
-  source === `${base}*` && base.startsWith("[^");
+  source === `${base}*` &&
+  (base.startsWith(String.raw`[^\p{L}\p{N}`) || base === "[-._]");
 
 const leadingRequiredWordCharSets = (
   source: string,
