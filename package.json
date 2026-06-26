@@ -6,15 +6,21 @@
   "description": "Textfilters ecosystem — docs, benchmarks, and integration smoke tests.",
   "license": "MIT",
   "scripts": {
-    "benchmark": "node scripts/benchmark.mjs"
+    "benchmark": "node scripts/benchmark.mjs",
+    "check": "node scripts/check-ecosystem-drift.mjs && node scripts/check-ecosystem-drift.mjs --self-test"
   },
   "dependencies": {
-    "@textfilters/core": "^0.2.0",
-    "@textfilters/url": "^0.1.3",
-    "@textfilters/email": "^0.2.5",
-    "@textfilters/phone": "^0.1.3",
-    "@textfilters/profanity": "^0.13.3",
+    "@textfilters/core": "^0.3.1",
+    "@textfilters/url": "^0.1.4",
+    "@textfilters/email": "^0.2.6",
+    "@textfilters/phone": "^0.1.4",
+    "@textfilters/profanity": "^0.13.4",
     "@textfilters/spam": "^0.2.0"
+  },
+  "overrides": {
+    "@textfilters/spam": {
+      "@textfilters/core": "^0.3.1"
+    }
   },
   "engines": {
     "node": ">=24"
