@@ -58,6 +58,8 @@ the root public export, keep scanners/parsers/range collectors internal unless a
 public API explicitly requires them, expose isolated factories and stable public
 types from the root, and use package-specific modules for config, normalization,
 matching, range collection, dictionaries, or actor state as needed. See
+[ecosystem policy](docs/ecosystem-policy.md) for repository responsibilities,
+compatibility, performance, and release boundaries, and
 [package layout](docs/package-layout.md) for the preferred layout and alignment
 rules.
 

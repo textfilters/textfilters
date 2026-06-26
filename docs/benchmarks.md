@@ -5,7 +5,8 @@
 The benchmark suite measures the runtime cost of the current `@textfilters/*`
 package set on representative inputs. Use it for **before/after comparisons on
 the same machine**. Absolute numbers depend on hardware, OS scheduling, Node.js
-version, and local load.
+version, and local load. See [ecosystem policy](ecosystem-policy.md) for the
+performance comparison expectations that PRs should follow.
 
 ## Setup
 
