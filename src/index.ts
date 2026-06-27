@@ -9,15 +9,22 @@ import {
   type UrlFilter,
   type UrlFilterConfig,
 } from "./contracts.js";
-import { createMeta, toSkeleton } from "./meta.js";
-import { collectRanges } from "./ranges.js";
+import { createUrlScanner, scanUrlRanges } from "./scanner.js";
 import { DEFAULT_TLDS, normalizeTlds } from "./tlds.js";
 
 export {
   URL_FILTER_NAME,
   type UrlFilter,
   type UrlFilterConfig,
+  type UrlRangeScanner,
+  type UrlRangeScanResult,
+  type UrlScanInput,
 } from "./contracts.js";
+export {
+  createUrlScanner,
+  scanUrlRanges,
+  type UrlScannerConfig,
+} from "./scanner.js";
 
 const maskUrlRanges = (
   codePoints: readonly string[],
@@ -29,9 +36,7 @@ const maskUrlRanges = (
 };
 
 export function createUrlFilter(config: UrlFilterConfig = {}): UrlFilter {
-  const tlds = normalizeTlds(config.tlds);
-  const tldSet = new Set(tlds);
-  const tldSkeletonSet = new Set(tlds.map((tld) => toSkeleton(tld)));
+  const scanner = createUrlScanner({ tlds: normalizeTlds(config.tlds) });
   const maskChar = config.maskChar ?? "*";
 
   return {
@@ -39,9 +44,9 @@ export function createUrlFilter(config: UrlFilterConfig = {}): UrlFilter {
     censor(text) {
       const source = normalizeTextInput(text);
       if (!source) return source;
-      const meta = createMeta(source);
-      const ranges = collectRanges(meta, tldSet, tldSkeletonSet);
-      return maskUrlRanges(meta.codePoints, ranges, maskChar);
+      const codePoints = Array.from(source);
+      const ranges = scanner.scan({ text: source, codePoints }).ranges;
+      return maskUrlRanges(codePoints, ranges, maskChar);
     },
   };
 }

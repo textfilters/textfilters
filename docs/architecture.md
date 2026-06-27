@@ -25,7 +25,9 @@ The default `filter` export is a shared instance with the default TLD list. `url
 ```mermaid
 flowchart TD
   input["Input text"] --> config["Normalize mask character and TLD config"]
-  config --> meta["Create metadata"]
+  config --> scanner["Run URL scanner"]
+  scanner --> prefilter["Cheap candidate prefilter"]
+  prefilter --> meta["Create metadata"]
   meta --> explicit["Collect explicit scheme URLs"]
   meta --> bare["Collect bare domains"]
   explicit --> merge["Merge code point ranges"]
@@ -39,9 +41,11 @@ flowchart TD
 ```mermaid
 graph TD
   index["index.ts"] --> contracts["contracts.ts"]
+  index --> scanner["scanner.ts"]
   index --> tlds["tlds.ts"]
-  index --> meta["meta.ts"]
-  index --> ranges["ranges.ts"]
+  scanner --> meta["meta.ts"]
+  scanner --> ranges["ranges.ts"]
+  scanner --> tlds
   ranges --> scheme["scheme.ts"]
   ranges --> domain["domain.ts"]
   ranges --> explicit["explicit-authority.ts"]
@@ -59,8 +63,9 @@ graph TD
 
 | File                        | Responsibility                                                                                                     | Out of scope                          |
 | --------------------------- | ------------------------------------------------------------------------------------------------------------------ | ------------------------------------- |
-| `src/index.ts`              | Public entrypoint and censor orchestration.                                                                        | Parser details or matching policy.    |
+| `src/index.ts`              | Public entrypoint, public exports, and censor wrapper orchestration.                                               | Parser details or matching policy.    |
 | `src/contracts.ts`          | Public types and constants.                                                                                        | Internal parser types.                |
+| `src/scanner.ts`            | URL scanner factory, range scanner output, and cheap clean-text prefilter.                                         | Low-level parser rules.               |
 | `src/tlds.ts`               | Default TLDs and TLD normalization.                                                                                | Host parsing or URL range collection. |
 | `src/chars.ts`              | Shared character sets, punctuation policy, lookalike map, and static parser character arrays.                      | Parser control flow.                  |
 | `src/meta.ts`               | Source metadata, raw and skeleton views, and low-level consume helpers.                                            | URL-specific matching policy.         |
@@ -96,7 +101,16 @@ Examples:
 
 ## Range And Masking Rules
 
-The package collects code point ranges before masking. Explicit-scheme URLs are collected first because they can validate unknown TLDs and wider authority forms. Bare-domain ranges are collected after that. Ranges are merged and deduplicated before being passed to core masking.
+The package collects code point ranges before masking. Clearly clean text is
+rejected by a cheap prefilter before metadata arrays are built. Explicit-scheme
+URLs are collected first because they can validate unknown TLDs and wider
+authority forms. Bare-domain ranges are collected after that. Ranges are merged
+and deduplicated before being passed to core masking.
+
+The public `createUrlScanner()` wrapper returns code point ranges in a shape
+that can be adapted to the shared core range scanner contract. The existing
+`createUrlFilter()`, `urlFilter()`, and `filter` wrappers use that scanner while
+preserving their public censor behavior.
 
 Trailing punctuation and glued prose are trimmed before a range is emitted. Surrounding quotes and brackets stay outside explicit authority ranges unless they are structurally part of the URL, such as IPv6 brackets or balanced path parentheses.
 
@@ -112,6 +126,7 @@ Masking is idempotent because ranges are collected from the original text before
 | Change explicit host handling             | `src/explicit-authority.ts` + public API tests     |
 | Change trailing punctuation/path behavior | `src/path.ts` + public API tests                   |
 | Change source normalization/lookalikes    | `src/meta.ts` or `src/chars.ts` + public API tests |
+| Change scanner wrapping or prefiltering   | `src/scanner.ts` + scanner tests                   |
 
 ## Safety Rules
 

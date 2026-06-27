@@ -44,7 +44,22 @@ const urlFilter = createUrlFilter({ tlds: ["com", "org"], maskChar: "#" });
 const safeText = urlFilter.censor("visit example[.]com");
 ```
 
-The default shared instance is exported as `filter`. It has stable `name: "url"`. The package also exports `urlFilter()` as an alias for `createUrlFilter()`.
+The default shared instance is exported as `filter` with `name: "url"`. The
+package also exports `urlFilter()` as an alias for `createUrlFilter()`.
+
+For scanner-oriented integrations, `createUrlScanner()` returns code point
+ranges that can be passed through core range masking or a shared range scanner
+pipeline:
+
+```ts
+import { createUrlScanner } from "@textfilters/url";
+
+const scanner = createUrlScanner();
+const result = scanner.scan({
+  text: "visit https://example.com",
+  codePoints: Array.from("visit https://example.com"),
+});
+```
 
 ## Behavior
 
@@ -64,7 +79,20 @@ The filter masks:
 
 ## Architecture
 
-The parser is split into focused modules for metadata, schemes, defanged dots, domains, explicit authorities, paths, and range collection. See [docs/architecture.md](docs/architecture.md).
+The parser is split into focused modules for metadata, schemes, defanged dots,
+domains, explicit authorities, paths, range collection, and scanner wrapping.
+Clearly clean input skips URL parser work through a cheap prefilter. See
+[docs/architecture.md](docs/architecture.md).
+
+## Benchmarks
+
+Build the package, then run URL benchmark coverage for short clean, long clean,
+direct URL, obfuscated URL, and late-match cases:
+
+```sh
+npm run build
+npm run benchmark:url
+```
 
 ## Related Textfilters Packages
 

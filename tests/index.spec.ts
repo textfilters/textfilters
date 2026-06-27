@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  createUrlScanner,
   createUrlFilter,
   filter,
+  scanUrlRanges,
   URL_FILTER_NAME,
   urlFilter,
 } from "../src/index.js";
@@ -326,6 +328,61 @@ describe("compatibility behavior", () => {
     expect(f.censor("go example.internal/path?x=1#y.")).toBe(
       `go ${mask("example.internal/path?x=1#y")}.`,
     );
+  });
+});
+
+describe("URL scanner", () => {
+  it("exposes scanner ranges compatible with code point masking", () => {
+    const scanner = createUrlScanner();
+    expect(
+      scanner.scan({
+        text: "visit https://example.com now",
+        codePoints: Array.from("visit https://example.com now"),
+      }),
+    ).toEqual({
+      ranges: [[6, 25]],
+    });
+  });
+
+  it("supports custom TLD configuration", () => {
+    expect(scanUrlRanges("go svc.internal", new Set(["internal"]))).toEqual([
+      [3, 15],
+    ]);
+    expect(scanUrlRanges("go svc.internal")).toEqual([]);
+    expect(scanUrlRanges("go example.com", new Set(["internal"]))).toEqual([]);
+  });
+
+  it("returns no ranges for clearly clean text", () => {
+    const scanner = createUrlScanner();
+    expect(
+      scanner.scan({
+        text: "plain words only",
+        codePoints: Array.from("plain words only"),
+      }),
+    ).toEqual({ ranges: [] });
+  });
+
+  it("keeps obfuscated URL coverage through the scanner path", () => {
+    const astralLetter = "\u{10437}";
+    const cyrillicO = "\u043e";
+    const rawDotWord = ["\u0442", "\u043e", "\u0447", "\u043a", "\u0430"].join(
+      " ",
+    );
+
+    expect(scanUrlRanges(`${astralLetter}.com`)).toEqual([[0, 5]]);
+    expect(scanUrlRanges("visit hxxp[:]//example[.]com")).toEqual([[6, 28]]);
+    expect(scanUrlRanges("visit example dot com")).toEqual([[6, 21]]);
+    expect(scanUrlRanges("visit example d o t com")).toEqual([[6, 23]]);
+    expect(scanUrlRanges("visit example d-o-t com")).toEqual([[6, 23]]);
+    expect(scanUrlRanges(`visit example d${cyrillicO}t com`)).toEqual([
+      [6, 21],
+    ]);
+    expect(scanUrlRanges("visit example ( . ) com")).toEqual([[6, 23]]);
+    expect(scanUrlRanges("visit example { . } com")).toEqual([[6, 23]]);
+    expect(scanUrlRanges(`visit example ${rawDotWord} com`)).toEqual([[6, 27]]);
+    expect(scanUrlRanges("example(.)com")).toEqual([[0, 13]]);
+    expect(scanUrlRanges("example{.}com")).toEqual([[0, 13]]);
+    expect(scanUrlRanges("example。com")).toEqual([[0, 11]]);
   });
 });
 
