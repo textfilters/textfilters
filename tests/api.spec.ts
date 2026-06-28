@@ -658,6 +658,33 @@ describe("public API", () => {
     ).toEqual([]);
   });
 
+  it("checks taxonomy filters without requiring the first collected match to qualify", () => {
+    const strict = createProfanityFilter(
+      [
+        { source: "alpha", category: "EUPHEMISM", severity: "soft" },
+        { source: "beta", category: "VULGAR", severity: "medium" },
+        { source: "gamma", category: "OBSCENE_MAT", severity: "high" },
+      ],
+      [],
+    );
+    const input = "alpha beta gamma";
+    const options: ProfanityMatchOptions = {
+      categories: ["VULGAR"],
+      minSeverity: "medium",
+    };
+
+    expect(strict.check(input, options)).toBe(true);
+    expect(
+      strict.analyze(input).map((match) => input.slice(match[0], match[1])),
+    ).toEqual(["alpha", "beta", "gamma"]);
+    expect(
+      strict
+        .analyze(input, options)
+        .map((match) => input.slice(match[0], match[1])),
+    ).toEqual(["beta"]);
+    expect(strict.censor(input, options)).toBe("alpha **** gamma");
+  });
+
   it("treats empty taxonomy option arrays as empty filters", () => {
     const strict = createProfanityFilter(
       [{ source: "alpha", category: "OBSCENE_MAT", severity: "high" }],

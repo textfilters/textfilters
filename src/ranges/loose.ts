@@ -13,12 +13,14 @@ import {
 import { boundaryCheckedRange } from "./boundary.js";
 import { collectedRangeForPattern } from "./collected.js";
 import { knownHyphenatedSuffixRange } from "./hyphen-tail.js";
-import { forEachPatternMatch } from "./patterns.js";
+import { forEachPatternMatch, somePatternMatch } from "./patterns.js";
 
 interface LooseRangePatterns {
   readonly loose: readonly CompiledPattern[];
   readonly strict: StrictPatternSet;
 }
+
+type CollectedRangePredicate = (range: CollectedProfanityRange) => boolean;
 
 export const collectLooseRanges = (
   normalized: string,
@@ -35,6 +37,24 @@ export const collectLooseRanges = (
     if (range !== null) {
       ranges.push(collectedRangeForPattern(range, pattern));
     }
+  });
+};
+
+export const hasLooseRange = (
+  normalized: string,
+  source: string,
+  loosePatterns: readonly CompiledPattern[],
+  strictPatterns: StrictPatternSet,
+  predicate: CollectedRangePredicate,
+): boolean => {
+  const patterns = { loose: loosePatterns, strict: strictPatterns };
+
+  return somePatternMatch(normalized, loosePatterns, (start, end, pattern) => {
+    const range = looseRange(normalized, source, start, end, pattern, patterns);
+
+    return (
+      range !== null && predicate(collectedRangeForPattern(range, pattern))
+    );
   });
 };
 

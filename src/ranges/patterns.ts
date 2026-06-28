@@ -31,3 +31,33 @@ export const forEachPatternMatch = (
     }
   }
 };
+
+export const somePatternMatch = (
+  normalized: string,
+  patterns: readonly CompiledPattern[],
+  visit: (start: number, end: number, pattern: CompiledPattern) => boolean,
+): boolean => {
+  for (const pattern of patterns) {
+    if (!patternMayStartIn(pattern, normalized)) {
+      continue;
+    }
+
+    pattern.re.lastIndex = 0;
+    let match: RegExpExecArray | null;
+
+    while ((match = pattern.re.exec(normalized)) !== null) {
+      const end = match.index + match[0].length;
+
+      if (match[0].length === 0) {
+        pattern.re.lastIndex = nextCodePointEnd(normalized, match.index);
+        continue;
+      }
+
+      if (visit(match.index, end, pattern)) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+};

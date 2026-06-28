@@ -27,8 +27,8 @@ import {
 } from "./matches/ranges.js";
 import { normalizeTextInput } from "@textfilters/core";
 import { normalizeForMatchSameLen } from "./normalization/text.js";
-import { collectLooseRanges } from "./ranges/loose.js";
-import { collectStrictRanges } from "./ranges/strict.js";
+import { collectLooseRanges, hasLooseRange } from "./ranges/loose.js";
+import { collectStrictRanges, hasStrictRange } from "./ranges/strict.js";
 import { maskProfanityRanges } from "./token-ranges.js";
 import { LOOSE_BASE } from "./terms/loose-base.js";
 import { STRICT_BASE } from "./terms/strict-base.js";
@@ -461,24 +461,19 @@ const hasProfanity = (
 ): boolean => {
   // Normalization is same-length, so collected ranges stay source-compatible.
   const normalized = normalizeForMatchSameLen(text);
-  const strictRanges: CollectedProfanityRange[] = [];
+  const matchesTaxonomy = collectedRangeMatchesTaxonomy(options);
 
-  collectStrictRanges(normalized, state.strictPatterns, strictRanges);
-
-  if (hasMatchingCollectedRange(strictRanges, options)) {
+  if (hasStrictRange(normalized, state.strictPatterns, matchesTaxonomy)) {
     return true;
   }
 
-  const looseRanges: CollectedProfanityRange[] = [];
-  collectLooseRanges(
+  return hasLooseRange(
     normalized,
     text,
     state.loosePatterns,
     state.strictPatterns,
-    looseRanges,
+    matchesTaxonomy,
   );
-
-  return hasMatchingCollectedRange(looseRanges, options);
 };
 
 const censorText = (
@@ -553,25 +548,29 @@ const filterMatchesByTaxonomy = (
 const hasMatchingCollectedRange = (
   ranges: readonly CollectedProfanityRange[],
   options: ProfanityMatchOptions | undefined,
-): boolean => {
+): boolean => ranges.some(collectedRangeMatchesTaxonomy(options));
+
+const hasTaxonomyFilters = (options: ProfanityMatchOptions): boolean =>
+  options.categories !== undefined ||
+  options.severities !== undefined ||
+  options.minSeverity !== undefined;
+
+const collectedRangeMatchesTaxonomy = (
+  options: ProfanityMatchOptions | undefined,
+): ((range: Pick<ProfanityMatchRange, "category" | "severity">) => boolean) => {
   if (options === undefined || !hasTaxonomyFilters(options)) {
-    return ranges.length > 0;
+    return () => true;
   }
 
   const categories =
     options.categories === undefined ? undefined : new Set(options.categories);
   const severities =
     options.severities === undefined ? undefined : new Set(options.severities);
+  const minSeverity = options.minSeverity;
 
-  return ranges.some((range) =>
-    rangeMatchesTaxonomy(range, categories, severities, options.minSeverity),
-  );
+  return (range) =>
+    rangeMatchesTaxonomy(range, categories, severities, minSeverity);
 };
-
-const hasTaxonomyFilters = (options: ProfanityMatchOptions): boolean =>
-  options.categories !== undefined ||
-  options.severities !== undefined ||
-  options.minSeverity !== undefined;
 
 const rangeMatchesTaxonomy = (
   match: Pick<ProfanityMatchRange, "category" | "severity">,
