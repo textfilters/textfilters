@@ -40,12 +40,13 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "test": "vitest run --maxWorkers 4 --testTimeout 15000",
-    "lint": "prettier README.md docs examples package.json src tests --check",
-    "format": "prettier README.md docs examples package.json src tests --write",
+    "lint": "prettier README.md docs examples package.json src tests scripts --check",
+    "format": "prettier README.md docs examples package.json src tests scripts --write",
     "prepack": "npm run build",
     "smoke:dist": "npm run build && tsc --ignoreConfig --noEmit --target ES2024 --module NodeNext --moduleResolution NodeNext --strict --skipLibCheck tests/dist-public-api-smoke.ts && node tests/dist-public-api-smoke.mjs",
     "pack:dry-run": "npm pack --dry-run",
-    "check": "npm run lint && npm test && npm run smoke:dist && npm run pack:dry-run"
+    "check": "npm run lint && npm test && npm run smoke:dist && npm run pack:dry-run",
+    "benchmark:profanity": "npm run build && node scripts/benchmark-profanity.mjs"
   },
   "dependencies": {
     "@textfilters/core": "^0.3.1"

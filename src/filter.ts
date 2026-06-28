@@ -58,8 +58,14 @@ interface FilterState {
   looseTerms: MatcherTerms;
   strictPatterns: StrictPatternSet;
   loosePatterns: CompiledPattern[];
+  looseCandidatePrefilter: LooseCandidatePrefilter;
   strictBasePatterns?: StrictPatternSet;
   looseBasePatterns?: readonly CompiledPattern[];
+}
+
+interface LooseCandidatePrefilter {
+  readonly alwaysCandidate: boolean;
+  readonly firstChars: ReadonlySet<string>;
 }
 
 export interface CompiledProfanityDictionary {
@@ -240,6 +246,7 @@ function createState(
       phrase: [],
     },
     loosePatterns: [],
+    looseCandidatePrefilter: createLooseCandidatePrefilter([]),
   };
 
   rebuildStrict(state);
@@ -276,6 +283,7 @@ function createStateFromCompiledDictionary(
     looseTerms: cloneMatcherTerms(state.looseTerms),
     strictPatterns: cloneStrictPatternSet(state.strictPatterns),
     loosePatterns: [...state.loosePatterns],
+    looseCandidatePrefilter: createLooseCandidatePrefilter(state.loosePatterns),
     strictBasePatterns: cloneStrictPatternSet(state.strictPatterns),
     looseBasePatterns: [...state.loosePatterns],
   };
@@ -319,6 +327,9 @@ function rebuildLoose(state: FilterState): void {
           ...state.looseBasePatterns,
           ...compileLooseLiteralPatterns(state.looseTerms.literals),
         ];
+  state.looseCandidatePrefilter = createLooseCandidatePrefilter(
+    state.loosePatterns,
+  );
 }
 
 function appendStrictLiteralPatterns(
@@ -467,6 +478,10 @@ const hasProfanity = (
     return true;
   }
 
+  if (!hasLooseCandidate(normalized, state.looseCandidatePrefilter)) {
+    return false;
+  }
+
   return hasLooseRange(
     normalized,
     text,
@@ -501,13 +516,15 @@ const collectProfanityMatches = (
   const looseRanges: CollectedProfanityRange[] = [];
 
   collectStrictRanges(normalized, state.strictPatterns, strictRanges);
-  collectLooseRanges(
-    normalized,
-    text,
-    state.loosePatterns,
-    state.strictPatterns,
-    looseRanges,
-  );
+  if (hasLooseCandidate(normalized, state.looseCandidatePrefilter)) {
+    collectLooseRanges(
+      normalized,
+      text,
+      state.loosePatterns,
+      state.strictPatterns,
+      looseRanges,
+    );
+  }
 
   return filterMatchesByTaxonomy(
     [
@@ -570,6 +587,40 @@ const collectedRangeMatchesTaxonomy = (
 
   return (range) =>
     rangeMatchesTaxonomy(range, categories, severities, minSeverity);
+};
+
+const createLooseCandidatePrefilter = (
+  patterns: readonly CompiledPattern[],
+): LooseCandidatePrefilter => {
+  const firstChars = new Set<string>();
+
+  for (const pattern of patterns) {
+    if (pattern.scanFirstChars === undefined) {
+      return { alwaysCandidate: true, firstChars: new Set() };
+    }
+
+    for (const char of pattern.scanFirstChars) {
+      firstChars.add(char);
+    }
+  }
+
+  return { alwaysCandidate: false, firstChars };
+};
+
+const hasLooseCandidate = (
+  normalized: string,
+  prefilter: LooseCandidatePrefilter,
+): boolean => {
+  if (prefilter.alwaysCandidate) return true;
+  if (prefilter.firstChars.size === 0) return false;
+
+  for (const char of Array.from(normalized)) {
+    if (prefilter.firstChars.has(char)) {
+      return true;
+    }
+  }
+
+  return false;
 };
 
 const rangeMatchesTaxonomy = (
