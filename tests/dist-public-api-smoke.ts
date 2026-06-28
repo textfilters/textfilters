@@ -1,8 +1,10 @@
+import type { TextCodePointRange } from "@textfilters/core";
 import {
   compileProfanityDictionary,
   createProfanityFilter,
   createProfanityFilterFromCompiledDictionary,
   createProfanityFilterFromDictionary,
+  createProfanityScanner,
   filter,
   PROFANITY_FILTER_NAME,
   russianProfanityDictionary,
@@ -15,10 +17,27 @@ import {
   type ProfanityLanguageRuleDefinition,
   type ProfanityMatchOptions,
   type ProfanityMatchRange,
+  type ProfanityScanner,
+  type ProfanityScannerMetadata,
+  type ProfanityScannerOptions,
+  type ProfanityScannerOutput,
   type ProfanitySeverity,
   type ProfanityTaxonomyMetadata,
   type ReadonlyProfanityFilter,
 } from "../dist/index.js";
+
+interface CoreRangeScannerLike {
+  readonly name?: string;
+  scan(input: {
+    readonly text: string;
+    readonly codePoints: readonly string[];
+  }):
+    | readonly TextCodePointRange[]
+    | {
+        readonly ranges: readonly TextCodePointRange[];
+        readonly metadata?: Readonly<Record<string, unknown>>;
+      };
+}
 
 const category: ProfanityCategory = "OBSCENE_MAT";
 const severity: ProfanitySeverity = "high";
@@ -52,10 +71,25 @@ const dictionaryFilter: ProfanityFilter =
 const compiledDictionaryFilter: ProfanityFilter =
   createProfanityFilterFromCompiledDictionary(compiledDictionary);
 const sharedFilter: ReadonlyProfanityFilter = filter;
+const scannerOptions: ProfanityScannerOptions = {
+  filter: strict,
+  matchOptions: options,
+};
+const scanner: ProfanityScanner = createProfanityScanner(scannerOptions);
+const coreScanner: CoreRangeScannerLike = scanner;
 const match: ProfanityMatchRange | undefined = strict.analyze(
   "alpha beta gamma delta",
   options,
 )[0];
+const scanResult: ProfanityScannerOutput = scanner.scan({
+  text: "alpha beta gamma delta",
+  codePoints: Array.from("alpha beta gamma delta"),
+});
+coreScanner.scan({
+  text: "alpha beta gamma delta",
+  codePoints: Array.from("alpha beta gamma delta"),
+});
+const scanMetadata: ProfanityScannerMetadata = scanResult.metadata;
 
 filter.check("plain text");
 sharedFilter.censor("plain text");
@@ -87,4 +121,11 @@ if (
 
 if (match?.category !== category || match.severity !== severity) {
   throw new Error("Unexpected taxonomy declaration surface.");
+}
+
+if (
+  scanMetadata.matches.length !== 1 ||
+  scanResult.ranges.length !== scanMetadata.matches.length
+) {
+  throw new Error("Unexpected scanner declaration surface.");
 }

@@ -1,3 +1,5 @@
+import type { TextCodePointRange } from "@textfilters/core";
+
 export type ProfanityTermList = readonly unknown[];
 
 export type ProfanityCategory =
@@ -47,4 +49,30 @@ export interface ProfanityFilter extends ReadonlyProfanityFilter {
   setLoose(list: ProfanityTermList): void;
   addStrict(term: unknown): void;
   addLoose(term: unknown): void;
+}
+
+export interface ProfanityScanInput {
+  readonly text: string;
+  readonly codePoints: readonly string[];
+}
+
+export interface ProfanityScannerOptions {
+  readonly filter?: ReadonlyProfanityFilter;
+  readonly matchOptions?: ProfanityMatchOptions;
+}
+
+export interface ProfanityScannerMetadata extends Readonly<
+  Record<string, unknown>
+> {
+  readonly matches: readonly ProfanityMatchRange[];
+}
+
+export interface ProfanityScannerOutput {
+  readonly ranges: readonly TextCodePointRange[];
+  readonly metadata: ProfanityScannerMetadata;
+}
+
+export interface ProfanityScanner {
+  readonly name: typeof PROFANITY_FILTER_NAME;
+  scan(input: ProfanityScanInput): ProfanityScannerOutput;
 }

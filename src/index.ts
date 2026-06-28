@@ -5,6 +5,11 @@ export type {
   ProfanityMatchOptions,
   ProfanityMatchMode,
   ProfanityMatchRange,
+  ProfanityScanInput,
+  ProfanityScanner,
+  ProfanityScannerMetadata,
+  ProfanityScannerOptions,
+  ProfanityScannerOutput,
   ProfanitySeverity,
   ProfanityTaxonomyMetadata,
   ProfanityTermList,
@@ -33,4 +38,5 @@ export {
   profanityFilter,
 } from "./filter.js";
 export type { CompiledProfanityDictionary } from "./filter.js";
+export { createProfanityScanner } from "./scanner.js";
 export { russianProfanityDictionary } from "./languages/ru/index.js";

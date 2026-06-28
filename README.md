@@ -152,6 +152,35 @@ The taxonomy filtering contract is:
   exact severity set and the threshold.
 - The severity order is `soft < low < medium < high`.
 
+### `createProfanityScanner(options?)`
+
+Creates a range scanner adapter for callers that combine multiple detectors and
+mask collected ranges once. The adapter uses the public `analyze()` API and
+returns taxonomy metadata alongside the range list without exposing matcher
+internals:
+
+```ts
+import {
+  createProfanityFilter,
+  createProfanityScanner,
+} from "@textfilters/profanity";
+
+const filter = createProfanityFilter(
+  [{ source: "blocked", category: "OBSCENE_MAT", severity: "high" }],
+  [],
+);
+const scanner = createProfanityScanner({
+  filter,
+  matchOptions: { minSeverity: "medium" },
+});
+
+const text = "blocked text";
+const result = scanner.scan({ text, codePoints: Array.from(text) });
+
+console.log(result.ranges);
+console.log(result.metadata.matches[0]?.category);
+```
+
 For taxonomy-backed rules, runtime match output includes the available metadata:
 
 ```ts
