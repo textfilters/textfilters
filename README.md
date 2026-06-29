@@ -29,9 +29,9 @@ Packages are released independently, so versions are not kept in lockstep across
 | Package | Purpose | Shared mutable instance or stateless API | Output shape | Range support | Metadata/options support | Runtime dependencies inside the ecosystem | Dist smoke/check status | Repository |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `@textfilters/core` | Shared contracts, normalization helpers, range masking, and pipelines. | Stateless helpers plus factory-created pipelines with mutable registration order. | Censored text, guard decisions, pipeline process results, and range helpers. | Exposes UTF-16 and code point range types plus shared merge/mask helpers. | Pipeline and guard contracts; no package-specific detection metadata. | None. | `0.3.1`; Node `>=24`; npm `11.16.0`; check and release workflows present. | [`textfilters/core`](../core) |
-| `@textfilters/url` | Direct, obfuscated, defanged, and hxxp URL detection. | Shared default `filter`; `createUrlFilter` / `urlFilter` create isolated stateless censors. | Censored text through the `TextCensor` interface. | Builds URL ranges locally, then delegates length-preserving code point masking to core; ranges are not public API output. | `tlds` and `maskChar` options. | `@textfilters/core@^0.3.1`. | `0.1.4`; Node `>=24`; npm `11.16.0`; check and release workflows present. | [`textfilters/url`](../url) |
-| `@textfilters/email` | Direct and obfuscated email detection with contact redaction guards. | Shared default `filter`; `createEmailFilter` / `emailFilter` create isolated stateless censors. | Censored text through the `TextCensor` interface. | Builds email ranges locally, then delegates length-preserving code point masking to core; ranges are not public API output. | Masking, obfuscation, localhost, single-label domain, and exclusion options. | `@textfilters/core@^0.3.1`. | `0.2.6`; Node `>=24`; npm `11.16.0`; check and release workflows present. | [`textfilters/email`](../email) |
-| `@textfilters/phone` | Phone number and phone-like sequence detection. | Shared default `filter`; `createPhoneFilter` / `phoneFilter` create isolated stateless censors. | Censored text through the `TextCensor` interface. | Builds phone ranges locally, then delegates length-preserving code point masking to core; ranges are not public API output. | `maskChar` option. | `@textfilters/core@^0.3.1`. | `0.1.4`; Node `>=24`; npm `11.16.0`; check and release workflows present. | [`textfilters/phone`](../phone) |
+| `@textfilters/url` | Direct, obfuscated, defanged, and hxxp URL detection. | Shared default `filter`; `createUrlFilter` / `urlFilter` create isolated stateless censors. | Censored text through the `TextCensor` interface. | Builds URL ranges locally, then delegates length-preserving code point masking to core; ranges are not public API output in the published package. | `tlds` and `maskChar` options. | `@textfilters/core@^0.3.1`. | `0.1.4`; Node `>=24`; npm `11.16.0`; check and release workflows present. | [`textfilters/url`](../url) |
+| `@textfilters/email` | Direct and obfuscated email detection with contact redaction guards. | Shared default `filter`; `createEmailFilter` / `emailFilter` create isolated stateless censors. | Censored text through the `TextCensor` interface. | Builds email ranges locally, then delegates length-preserving code point masking to core; ranges are not public API output in the published package. | Masking, obfuscation, localhost, single-label domain, and exclusion options. | `@textfilters/core@^0.3.1`. | `0.2.6`; Node `>=24`; npm `11.16.0`; check and release workflows present. | [`textfilters/email`](../email) |
+| `@textfilters/phone` | Phone number and phone-like sequence detection. | Shared default `filter`; `createPhoneFilter` / `phoneFilter` create isolated stateless censors. | Censored text through the `TextCensor` interface. | Builds phone ranges locally, then delegates length-preserving code point masking to core; ranges are not public API output in the published package. | `maskChar` option. | `@textfilters/core@^0.3.1`. | `0.1.4`; Node `>=24`; npm `11.16.0`; check and release workflows present. | [`textfilters/phone`](../phone) |
 | `@textfilters/profanity` | Russian profanity filtering, dictionary validation, obfuscation handling, and taxonomy-aware matching. | Shared mutable `filter`; `createProfanityFilter` and dictionary factories create isolated mutable filters for runtime dictionary changes. | `censor()` text, `check()` boolean, and `analyze()` match ranges. | Public `analyze()` ranges include source offsets and match mode. | Category, severity, rule id, match-mode metadata, filter options, dictionary validation, compiled dictionary reuse, and mutable strict/loose term APIs. | `@textfilters/core@^0.3.1`. | `0.13.4`; Node `>=24`; npm `11.16.0`; check and release workflows present. | [`textfilters/profanity`](../profanity) |
 | `@textfilters/spam` | Interval, duplicate, burst, and actor-based anti-spam decisions. | Factory-created stateful guards; `reset()` clears actor state for the guard instance. | Guard decision objects: `{ allowed: true }` or `{ allowed: false, reason }`. | Not range-based. | Timing/window/max-actor config plus typed block reasons. | `@textfilters/core@^0.3.0`. | `0.2.0`; Node `>=24`; npm `11.16.0`; check and release workflows present. | [`textfilters/spam`](../spam) |
 
@@ -54,10 +54,11 @@ dependency range has caught up.
 
 Package source layout is intentionally similar across repositories where that
 does not force behavior changes. New package work should keep `src/index.ts` as
-the root public export, keep scanners/parsers/range collectors internal unless a
-public API explicitly requires them, expose isolated factories and stable public
-types from the root, and use package-specific modules for config, normalization,
-matching, range collection, dictionaries, or actor state as needed. See
+the root public export, expose documented scanner factories only when range
+pipeline integration is part of the public API, keep parsers and low-level range
+collectors internal, expose isolated factories and stable public types from the
+root, and use package-specific modules for config, normalization, matching,
+range collection, dictionaries, or actor state as needed. See
 [ecosystem policy](docs/ecosystem-policy.md) for repository responsibilities,
 compatibility, performance, and release boundaries, and
 [package layout](docs/package-layout.md) for the preferred layout and alignment
@@ -78,8 +79,8 @@ node --input-type=module --eval "import { createTextPipeline } from '@textfilter
 
 ## Package Behavior Model
 
-The URL, email, and phone packages are text censors. Their exported `filter`
-instances are convenient shared defaults, while `createUrlFilter`,
+The published URL, email, and phone packages are text censors. Their exported
+`filter` instances are convenient shared defaults, while `createUrlFilter`,
 `createEmailFilter`, and `createPhoneFilter` create isolated censors with their
 own options. They do not expose mutable runtime dictionaries, and callers
 receive censored text rather than public match ranges.
@@ -102,8 +103,9 @@ normalization helpers, `TextCensor`, pipeline composition, guard decision types,
 range merging, and UTF-16 and code point masking helpers. URL, email, and phone
 collect package-specific code point ranges internally and delegate final
 length-preserving masking to the shared core helper before returning censored
-text. Package-specific README files document the exact masking and offset
-guarantees for each filter.
+text. Scanner and range-pipeline APIs in source repositories should be
+documented in this control-plane repository after the corresponding packages are
+released and the compatibility matrix is bumped.
 
 ## Which Package Should I Use?
 
