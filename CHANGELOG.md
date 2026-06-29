@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.5](https://github.com/textfilters/url/compare/v0.1.4...v0.1.5) (2026-06-30)
+
+
+### Performance Improvements
+
+* add URL scanner prefilter ([66d74bd](https://github.com/textfilters/url/commit/66d74bd702445ef66033c877bbd424c6c5e4207c))
+* align URL scanner with shared hints ([16dc6d4](https://github.com/textfilters/url/commit/16dc6d4eef88c274cc01ef253342a7eb6c4bdd06))
+
 ## [0.1.4](https://github.com/textfilters/url/compare/v0.1.3...v0.1.4) (2026-06-25)
 
 
