@@ -14,12 +14,14 @@ That file is the package's public contract and should contain or re-export:
 - backwards-compatible aliases such as `urlFilter()` where already public
 - shared default instances such as `filter` only for stateless or intentionally
   shared package behavior
-- public options, result, metadata, and filter instance types
+- public scanner factories when range pipeline integration is part of the
+  package contract
+- public options, result, scanner metadata, and filter instance types
 - public constants such as stable block reasons or filter names
 
-Internal scanners, parsers, range collectors, dictionary compilers, and
-normalization details should stay behind the root export unless a package has a
-documented reason to expose them.
+Parsers, low-level range collectors, dictionary compilers, and normalization
+details should stay behind the root export unless a package has a documented
+reason to expose them.
 
 ## Preferred Source Layout
 
@@ -50,16 +52,17 @@ URL, email, and phone packages are stateless text censors. Their preferred
 layout is:
 
 - `src/index.ts` exports `filter`, `create*Filter`, `*Filter` alias, options,
-  and filter types
-- scanner/parser internals remain package-private
-- range collection stays internal and delegates final masking to
-  `@textfilters/core`
-- README documents masking and option behavior rather than internal ranges
+  documented `create*Scanner` factories, and public filter/scanner types
+- parser internals and low-level range collectors remain package-private
+- scanner output uses code point ranges that can feed the core range pipeline
+- censor factories delegate final masking to `@textfilters/core`
+- README documents masking, scanner range output, and option behavior rather
+  than parser internals
 
 Profanity is dictionary-backed and intentionally larger. Its preferred layout
 keeps dictionary validation, matcher compilation, range collection, and language
-data in separate internal modules while preserving public factories and
-dictionary types from `src/index.ts`.
+data in separate internal modules while preserving public factories, scanner
+integration, analyzer output, and dictionary types from `src/index.ts`.
 
 Spam is a stateful guard package. Its preferred layout keeps actor state,
 config normalization, text normalization, and public contracts separate. Do not

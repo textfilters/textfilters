@@ -30,9 +30,10 @@ helpers, but package-specific detection rules belong in the runtime package that
 uses them.
 
 `@textfilters/url`, `@textfilters/email`, and `@textfilters/phone` are
-stateless scanner-and-censor packages. They should expose thin root factories
-and stable public option types while keeping scanners, parsers, and range
-collection internals package-private.
+stateless scanner-and-censor packages. They should expose thin root censor
+factories, documented scanner factories for range pipeline integration, and
+stable public option types while keeping parsers and low-level range collection
+internals package-private.
 
 `@textfilters/profanity` owns the larger dictionary-backed surface: dictionary
 validation and compilation, maintained Russian dictionary data, taxonomy,
