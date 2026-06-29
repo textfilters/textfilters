@@ -10,15 +10,20 @@
 
 import { performance } from "node:perf_hooks";
 import { createTextPipeline } from "@textfilters/core";
+import * as corePackage from "@textfilters/core";
 import { createUrlFilter } from "@textfilters/url";
+import * as urlPackage from "@textfilters/url";
 import { createEmailFilter } from "@textfilters/email";
+import * as emailPackage from "@textfilters/email";
 import { createPhoneFilter } from "@textfilters/phone";
+import * as phonePackage from "@textfilters/phone";
 import {
   compileProfanityDictionary,
   createProfanityFilterFromCompiledDictionary,
   createProfanityFilterFromDictionary,
   russianProfanityDictionary,
 } from "@textfilters/profanity";
+import * as profanityPackage from "@textfilters/profanity";
 import { createSpamFilter } from "@textfilters/spam";
 
 // ---------------------------------------------------------------------------
@@ -85,6 +90,52 @@ function createCombinedPipeline(compiledDictionary) {
     .use(createUrlFilter())
     .use(createPhoneFilter())
     .use(createProfanityFilterFromCompiledDictionary(compiledDictionary));
+}
+
+function getOptionalExport(packageExports, name) {
+  const value = packageExports[name];
+  return typeof value === "function" ? value : undefined;
+}
+
+function createCombinedScannerPipeline(compiledDictionary) {
+  const createTextRangePipeline = getOptionalExport(
+    corePackage,
+    "createTextRangePipeline",
+  );
+  const createEmailScanner = getOptionalExport(emailPackage, "createEmailScanner");
+  const createUrlScanner = getOptionalExport(urlPackage, "createUrlScanner");
+  const createPhoneScanner = getOptionalExport(phonePackage, "createPhoneScanner");
+  const createProfanityScanner = getOptionalExport(
+    profanityPackage,
+    "createProfanityScanner",
+  );
+
+  const missingExports = [
+    ["@textfilters/core", createTextRangePipeline],
+    ["@textfilters/email", createEmailScanner],
+    ["@textfilters/url", createUrlScanner],
+    ["@textfilters/phone", createPhoneScanner],
+    ["@textfilters/profanity", createProfanityScanner],
+  ]
+    .filter(([, factory]) => factory === undefined)
+    .map(([packageName]) => packageName);
+
+  if (missingExports.length > 0) {
+    console.warn(
+      `Skipping combined scanner pipeline rows; missing scanner exports from ${missingExports.join(", ")}.`,
+    );
+    return undefined;
+  }
+
+  return createTextRangePipeline()
+    .use(createEmailScanner())
+    .use(createUrlScanner())
+    .use(createPhoneScanner())
+    .use(
+      createProfanityScanner({
+        filter: createProfanityFilterFromCompiledDictionary(compiledDictionary),
+      }),
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -350,7 +401,8 @@ runSuite("spam", "spam", () => {
 
 runSuite("combined", "pipeline · url + email + phone + profanity", () => {
   const compiled = compileProfanityDictionary(russianProfanityDictionary);
-  const pipeline = createCombinedPipeline(compiled);
+  const legacyPipeline = createCombinedPipeline(compiled);
+  const scannerPipeline = createCombinedScannerPipeline(compiled);
 
   const COMBINED_CLEAN = "Привет, как дела? Всё хорошо.";
   const COMBINED_MATCH =
@@ -359,20 +411,47 @@ runSuite("combined", "pipeline · url + email + phone + profanity", () => {
     "Обычный текст без нарушений. ".repeat(50) +
     "Пиши на evil@spam.ru или https://spam.ru тел +7 (999) 000-00-00 блять";
 
-  return [
+  const results = [
     bench("combined pipeline · create composed pipeline", () =>
       createCombinedPipeline(compiled),
       SETUP_ITERATIONS,
     ),
-    bench("combined pipeline · short clean", () => pipeline.censor(COMBINED_CLEAN)),
-    bench("combined pipeline · long clean", () => pipeline.censor(LONG_CLEAN)),
-    bench("combined pipeline · short all-match", () =>
-      pipeline.censor(COMBINED_MATCH),
+    bench("combined legacy sequential · short clean", () =>
+      legacyPipeline.censor(COMBINED_CLEAN),
     ),
-    bench("combined pipeline · long match late", () =>
-      pipeline.censor(COMBINED_LONG_LATE),
+    bench("combined legacy sequential · long clean", () =>
+      legacyPipeline.censor(LONG_CLEAN),
+    ),
+    bench("combined legacy sequential · short all-match", () =>
+      legacyPipeline.censor(COMBINED_MATCH),
+    ),
+    bench("combined legacy sequential · long match late", () =>
+      legacyPipeline.censor(COMBINED_LONG_LATE),
     ),
   ];
+
+  if (scannerPipeline !== undefined) {
+    results.push(
+      bench("combined scanner ranges · create pipeline", () =>
+        createCombinedScannerPipeline(compiled),
+        SETUP_ITERATIONS,
+      ),
+      bench("combined scanner ranges · short clean", () =>
+        scannerPipeline.censor(COMBINED_CLEAN),
+      ),
+      bench("combined scanner ranges · long clean", () =>
+        scannerPipeline.censor(LONG_CLEAN),
+      ),
+      bench("combined scanner ranges · short all-match", () =>
+        scannerPipeline.censor(COMBINED_MATCH),
+      ),
+      bench("combined scanner ranges · long match late", () =>
+        scannerPipeline.censor(COMBINED_LONG_LATE),
+      ),
+    );
+  }
+
+  return results;
 });
 
 console.log("\n✓ benchmark complete\n");
