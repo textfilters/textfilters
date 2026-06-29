@@ -23,8 +23,10 @@ npm install
 npm run benchmark
 ```
 
-No build step is required. The runner uses Node.js built-in modules and public
-package exports only.
+No build step is required for published packages. The runner uses Node.js
+built-in modules and public package exports only. The combined scanner rows are
+printed when the installed or locally linked package set exposes the public
+range scanner exports.
 
 ## Running a Subset
 
@@ -111,7 +113,15 @@ uses explicit `nowMs` values instead of wall-clock time.
 
 ### Combined Pipeline
 
-`url + email + phone + profanity` in one `TextPipeline`:
+`url + email + phone + profanity` in two comparable paths when scanner exports
+are available:
+
+- `combined legacy sequential`: the existing `TextPipeline` that censors through
+  each package in registration order
+- `combined scanner ranges`: the range scanner pipeline that collects URL,
+  email, phone, and profanity ranges before applying one mask pass
+
+Both paths cover:
 
 - composed pipeline setup
 - short clean text
@@ -119,11 +129,19 @@ uses explicit `nowMs` values instead of wall-clock time.
 - short text with all match types
 - long text with matches near the end
 
+If the installed package set does not expose scanner exports yet, the benchmark
+prints a skip message for the scanner rows and still runs the legacy sequential
+rows. Link or install local package builds to compare unpublished scanner work
+before release.
+
 ## Interpreting Results
 
 - Compare runs on the same machine before and after a change.
 - Treat a regression as meaningful only when it repeats across several runs.
 - `ops/sec` is derived from `avg ms`; prefer `avg ms` for precise comparisons.
+- For combined benchmark work, compare rows with the same input suffix, such as
+  `combined legacy sequential · long clean` against
+  `combined scanner ranges · long clean`.
 - `profanity · compileProfanityDictionary()` is expected to be slower than
   runtime calls because it is a setup operation. Reuse the compiled result with
   `createProfanityFilterFromCompiledDictionary()` when measuring hot paths.
