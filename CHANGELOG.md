@@ -1,5 +1,36 @@
 # Changelog
 
+## [0.14.0](https://github.com/textfilters/profanity/compare/v0.13.5...v0.14.0) (2026-06-29)
+
+
+### Features
+
+* add language dictionary conformance validator ([eafef1a](https://github.com/textfilters/profanity/commit/eafef1a67363d28c7e2b42ff5913d208749d626b))
+* add language dictionary validator cli ([2c9707b](https://github.com/textfilters/profanity/commit/2c9707b993f61fdffcc07f061fcc0508a7a3ac67))
+* add min severity taxonomy filter ([#42](https://github.com/textfilters/profanity/issues/42)) ([e84f526](https://github.com/textfilters/profanity/commit/e84f52612e91ab80f3a2b6712ad3f938adc34afc))
+* add reviewed Russian gap coverage ([#85](https://github.com/textfilters/profanity/issues/85)) ([21d5858](https://github.com/textfilters/profanity/commit/21d58588238d4d2e7a45caab3d4a48c5ee1c093a))
+* add reviewed Russian huylo coverage ([#87](https://github.com/textfilters/profanity/issues/87)) ([75464f6](https://github.com/textfilters/profanity/commit/75464f60ddae1aeb590b1fc756e35bb6d7cf6992))
+* add reviewed Russian sexual vulgarity coverage ([#88](https://github.com/textfilters/profanity/issues/88)) ([547d01a](https://github.com/textfilters/profanity/commit/547d01a92819595fc9742a030805367b99431de1))
+* add semantic metadata to Russian dictionary rules ([a93a529](https://github.com/textfilters/profanity/commit/a93a52907eaf3700188817e8e7680ad5dc4c7b3a))
+* add taxonomy filtering options ([2e7486c](https://github.com/textfilters/profanity/commit/2e7486ccba96b46560288cdf3a532493be99f56a))
+* establish language dictionary authoring platform ([6118e29](https://github.com/textfilters/profanity/commit/6118e299a28eadc3e560e563932aa0ad02176ea0))
+* export taxonomy metadata types ([da612be](https://github.com/textfilters/profanity/commit/da612be785f510b679dbe593cc2c081121ac4795))
+* expose profanity language dictionary API ([a1f58ed](https://github.com/textfilters/profanity/commit/a1f58ede25d0a0b1a685af6ee6e02c228b46bb39))
+* expose taxonomy metadata on matches ([da19dce](https://github.com/textfilters/profanity/commit/da19dce74ec420844067bb49f833a9416dbb0a7e))
+* improve aggressive profanity obfuscation coverage ([310402f](https://github.com/textfilters/profanity/commit/310402f42dfae438432b9089a9933c350a1417ea))
+* split Russian profanity dictionary files ([e02d70f](https://github.com/textfilters/profanity/commit/e02d70f83d3eefca749d3139f21f14d1d4079981))
+
+
+### Bug Fixes
+
+* clarify runtime literal semantics ([#117](https://github.com/textfilters/profanity/issues/117)) ([a98743f](https://github.com/textfilters/profanity/commit/a98743f546f2795ca8f9cfa16d943e193242f584))
+* harden profanity matching and test layout ([73f8bfb](https://github.com/textfilters/profanity/commit/73f8bfb524af353deb217a7bfb18e1abdadb15af))
+* keep reviewed Russian gaps strict-only ([#89](https://github.com/textfilters/profanity/issues/89)) ([9dbd759](https://github.com/textfilters/profanity/commit/9dbd7597505a4f76e25c47d07ca4f34655f3be50))
+* load built-in corpus from JSON data files ([e746524](https://github.com/textfilters/profanity/commit/e74652405c41958e64c6c80b05b182bd5abb6419))
+* make default filter read-only ([#119](https://github.com/textfilters/profanity/issues/119)) ([6055bb1](https://github.com/textfilters/profanity/commit/6055bb1943b7bbe069d8618e880b1da681ec5ae9))
+* use shared public input normalization ([e6c194e](https://github.com/textfilters/profanity/commit/e6c194e67438c8a5455c826af7d86bd69644078d))
+* validate language dictionaries before compile ([54d5173](https://github.com/textfilters/profanity/commit/54d5173457d8c55de25b82e4e36007db97095423)), closes [#122](https://github.com/textfilters/profanity/issues/122)
+
 ## [0.13.5](https://github.com/textfilters/profanity/compare/v0.13.4...v0.13.5) (2026-06-30)
 
 
