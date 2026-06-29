@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.1.6](https://github.com/textfilters/url/compare/v0.1.5...v0.1.6) (2026-06-29)
+
+
+### Bug Fixes
+
+* adopt core length-preserving masking ([f6a8a41](https://github.com/textfilters/url/commit/f6a8a417f20c49070b14cc1f79ac1b6b6218256e))
+* expanded URL coverage ([43973f0](https://github.com/textfilters/url/commit/43973f00bfbf44c68ba13c4ef3fa02be7e93e3e1))
+* use shared public input normalization ([bb0e9df](https://github.com/textfilters/url/commit/bb0e9df008f13b59f661e7b60b01498203a43b69))
+
 ## [0.1.5](https://github.com/textfilters/url/compare/v0.1.4...v0.1.5) (2026-06-30)
 
 
