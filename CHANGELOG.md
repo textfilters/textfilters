@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.13.5](https://github.com/textfilters/profanity/compare/v0.13.4...v0.13.5) (2026-06-30)
+
+
+### Performance Improvements
+
+* add allocation-aware profanity scanner ([c90027d](https://github.com/textfilters/profanity/commit/c90027d6ccf46949709269233af37cb1e42cdb2e))
+* add fast profanity check path ([0cec027](https://github.com/textfilters/profanity/commit/0cec02720bdaa17b5deb3f40af3613855365dee4))
+* add profanity candidate prefilter ([a306b2d](https://github.com/textfilters/profanity/commit/a306b2d42d9ab3a0c9bc2a0610d4fe5fd0ce4875))
+* expose profanity scanner adapter ([79bc093](https://github.com/textfilters/profanity/commit/79bc09368d628978ba970dd668f1d740ecea61d4))
+
 ## [0.13.4](https://github.com/textfilters/profanity/compare/v0.13.3...v0.13.4) (2026-06-25)
 
 
