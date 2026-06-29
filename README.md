@@ -155,9 +155,10 @@ The taxonomy filtering contract is:
 ### `createProfanityScanner(options?)`
 
 Creates a range scanner adapter for callers that combine multiple detectors and
-mask collected ranges once. The adapter uses the public `analyze()` API and
-returns taxonomy metadata alongside the range list without exposing matcher
-internals:
+mask collected ranges once. The adapter uses the public filter APIs, supports
+`check(input)` for boolean checks, and supports `scan(input, sink)` for
+allocation-aware range streaming with early stop. Legacy `scan(input)` returns
+taxonomy metadata alongside the range list without exposing matcher internals:
 
 ```ts
 import {
@@ -176,6 +177,12 @@ const scanner = createProfanityScanner({
 
 const text = "blocked text";
 const result = scanner.scan({ text, codePoints: Array.from(text) });
+const hasMatch = scanner.check({ text, codePoints: Array.from(text) });
+
+scanner.scan({ text, codePoints: Array.from(text) }, (match) => {
+  console.log(match.range, match.match.category);
+  return false;
+});
 
 console.log(result.ranges);
 console.log(result.metadata.matches[0]?.category);

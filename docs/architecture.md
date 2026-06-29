@@ -20,6 +20,8 @@ Intentional public-package changes:
 - Built-in package-owned rules use an internal compiler that is not exposed through the public API.
 - The filter exposes stable `name: "profanity"`.
 - The filter exposes `check(text): boolean` for boolean-only detection.
+- The scanner adapter exposes `check(input)` and sink-based `scan(input, sink)`
+  for allocation-aware range pipelines while preserving legacy `scan(input)`.
 - Masking preserves JavaScript string length for astral code points.
 
 ## High-Level Flow
@@ -136,6 +138,12 @@ Loose matching allows separators between letters, which covers common obfuscatio
 such as `п-и-з-д-е-ц` or `х/у/й`. Loose matches still pass token-boundary checks
 before masking, so a prefix inside a larger token is rejected unless the match
 actually covers the relevant token span.
+
+Boolean checks run strict matching first and only enter loose matching when the
+loose candidate prefilter indicates a viable input. The scanner adapter delegates
+its `check(input)` path to that fast boolean API, while sink-based scanning keeps
+range emission compatible with shared range pipelines and can stop after the
+first emitted match.
 
 ## Why The Code Is Split This Way
 

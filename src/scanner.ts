@@ -1,8 +1,13 @@
 import type { TextCodePointRange } from "@textfilters/core";
-import { filter as sharedProfanityFilter } from "./filter.js";
+import {
+  canStreamProfanityMatches,
+  filter as sharedProfanityFilter,
+  streamProfanityMatches,
+} from "./filter.js";
 import { PROFANITY_FILTER_NAME } from "./types.js";
 import type {
   ProfanityScanInput,
+  ProfanityRangeMatchSink,
   ProfanityScanner,
   ProfanityScannerOptions,
   ProfanityScannerOutput,
@@ -14,11 +19,32 @@ export function createProfanityScanner(
 ): ProfanityScanner {
   const activeFilter = options.filter ?? sharedProfanityFilter;
   const matchOptions = options.matchOptions;
+  const allocationAware = canStreamProfanityMatches(activeFilter);
 
-  return {
+  function scan(input: ProfanityScanInput): ProfanityScannerOutput;
+  function scan(
+    input: ProfanityScanInput,
+    sink: ProfanityRangeMatchSink,
+  ): boolean;
+  function scan(input: ProfanityScanInput, sink?: ProfanityRangeMatchSink) {
+    if (sink === undefined) {
+      return scanProfanity(activeFilter, input, matchOptions);
+    }
+
+    return scanProfanityMatches(activeFilter, input, matchOptions, sink);
+  }
+
+  const scanner: ProfanityScanner = {
     name: PROFANITY_FILTER_NAME,
-    scan: (input) => scanProfanity(activeFilter, input, matchOptions),
+    check: (input) => activeFilter.check(input.text, matchOptions),
+    scan,
   };
+
+  if (allocationAware) {
+    return { ...scanner, allocationAware: true };
+  }
+
+  return scanner;
 }
 
 function scanProfanity(
@@ -30,10 +56,12 @@ function scanProfanity(
   const codePointIndexByUtf16Offset = createCodePointIndexByUtf16Offset(
     input.codePoints,
   );
+  const codePointIndexForUtf16Offset = (offset: number) =>
+    codePointIndexByUtf16Offset[offset] ?? input.codePoints.length;
   const ranges = matches.map(
     (match): TextCodePointRange => [
-      codePointIndexByUtf16Offset[match[0]] ?? input.codePoints.length,
-      codePointIndexByUtf16Offset[match[1]] ?? input.codePoints.length,
+      codePointIndexForUtf16Offset(match[0]),
+      codePointIndexForUtf16Offset(match[1]),
     ],
   );
 
@@ -43,6 +71,47 @@ function scanProfanity(
       matches,
     },
   };
+}
+
+function scanProfanityMatches(
+  filter: ReadonlyProfanityFilter,
+  input: ProfanityScanInput,
+  matchOptions: ProfanityScannerOptions["matchOptions"],
+  sink: ProfanityRangeMatchSink,
+): boolean {
+  const codePointIndexByUtf16Offset = createUtf16OffsetToCodePointIndex(
+    input.codePoints,
+  );
+  const streamed = streamProfanityMatches(
+    filter,
+    input.text,
+    matchOptions,
+    (match) => {
+      const range = matchToCodePointRange(match, codePointIndexByUtf16Offset);
+      return sink({ range, match });
+    },
+  );
+
+  if (streamed !== undefined) return streamed;
+
+  const matches = filter.analyze(input.text, matchOptions);
+
+  for (const match of matches) {
+    const range = matchToCodePointRange(match, codePointIndexByUtf16Offset);
+    if (sink({ range, match }) === false) return false;
+  }
+
+  return true;
+}
+
+function matchToCodePointRange(
+  match: readonly [number, number],
+  codePointIndexByUtf16Offset: (offset: number) => number,
+): TextCodePointRange {
+  return [
+    codePointIndexByUtf16Offset(match[0]),
+    codePointIndexByUtf16Offset(match[1]),
+  ];
 }
 
 function createCodePointIndexByUtf16Offset(
@@ -59,4 +128,25 @@ function createCodePointIndexByUtf16Offset(
   codePointIndexByUtf16Offset[utf16Offset] = codePoints.length;
 
   return codePointIndexByUtf16Offset;
+}
+
+function createUtf16OffsetToCodePointIndex(
+  codePoints: readonly string[],
+): (offset: number) => number {
+  const codePointIndexByUtf16Offset: number[] = [0];
+  let codePointIndex = 0;
+  let utf16Offset = 0;
+
+  return (offset) => {
+    const cached = codePointIndexByUtf16Offset[offset];
+    if (cached !== undefined) return cached;
+
+    while (utf16Offset < offset && codePointIndex < codePoints.length) {
+      utf16Offset += codePoints[codePointIndex].length;
+      codePointIndex++;
+      codePointIndexByUtf16Offset[utf16Offset] = codePointIndex;
+    }
+
+    return utf16Offset === offset ? codePointIndex : codePoints.length;
+  };
 }

@@ -5,6 +5,8 @@ export type {
   ProfanityMatchOptions,
   ProfanityMatchMode,
   ProfanityMatchRange,
+  ProfanityRangeMatch,
+  ProfanityRangeMatchSink,
   ProfanityScanInput,
   ProfanityScanner,
   ProfanityScannerMetadata,

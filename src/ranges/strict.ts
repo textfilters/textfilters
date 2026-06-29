@@ -11,7 +11,7 @@ import {
 } from "../token-ranges.js";
 import { boundaryCheckedRange } from "./boundary.js";
 import { collectedRangeForPattern } from "./collected.js";
-import { forEachPatternMatch, somePatternMatch } from "./patterns.js";
+import { iteratePatternMatches, somePatternMatch } from "./patterns.js";
 
 type CollectedRangePredicate = (range: CollectedProfanityRange) => boolean;
 
@@ -20,10 +20,21 @@ export const collectStrictRanges = (
   patterns: StrictPatternSet,
   ranges: CollectedProfanityRange[],
 ): void => {
-  collectWordRanges(normalized, patterns, ranges);
-  collectSymbolRanges(normalized, patterns, ranges);
-  collectPhraseRanges(normalized, patterns, ranges);
+  for (const range of iterateStrictRanges(normalized, patterns)) {
+    ranges.push(range);
+  }
 };
+
+export function* iterateStrictRanges(
+  normalized: string,
+  patterns: StrictPatternSet,
+): IterableIterator<CollectedProfanityRange> {
+  if (!hasStrictPatterns(patterns)) return;
+
+  yield* iterateWordRanges(normalized, patterns);
+  yield* iterateSymbolRanges(normalized, patterns);
+  yield* iteratePhraseRanges(normalized, patterns);
+}
 
 export const hasStrictRange = (
   normalized: string,
@@ -39,6 +50,17 @@ const collectWordRanges = (
   patterns: StrictPatternSet,
   ranges: CollectedProfanityRange[],
 ): void => {
+  for (const range of iterateWordRanges(normalized, patterns)) {
+    ranges.push(range);
+  }
+};
+
+function* iterateWordRanges(
+  normalized: string,
+  patterns: StrictPatternSet,
+): IterableIterator<CollectedProfanityRange> {
+  if (patterns.token.length === 0) return;
+
   // Strict terms must own the whole word token; embedded prefixes are rejected by
   // boundaryCheckedRange before they become mask ranges.
   for (const match of normalized.matchAll(WORD_RE)) {
@@ -53,16 +75,18 @@ const collectWordRanges = (
       match.index + match[0].length,
     );
     if (range !== null) {
-      ranges.push(collectedRangeForPattern(range, pattern));
+      yield collectedRangeForPattern(range, pattern);
     }
   }
-};
+}
 
 const hasWordRange = (
   normalized: string,
   patterns: StrictPatternSet,
   predicate: CollectedRangePredicate,
 ): boolean => {
+  if (patterns.token.length === 0) return false;
+
   for (const match of normalized.matchAll(WORD_RE)) {
     const pattern = findMatchingIndexedTokenPattern(patterns, match[0]);
     if (pattern === null) {
@@ -87,98 +111,128 @@ const collectSymbolRanges = (
   patterns: StrictPatternSet,
   ranges: CollectedProfanityRange[],
 ): void => {
-  // Symbol-only literals such as "(" or "." never appear in WORD_RE.
-  forEachSymbolRun(normalized, (start, end) => {
-    const positions = codePointPositions(normalized, start, end);
+  for (const range of iterateSymbolRanges(normalized, patterns)) {
+    ranges.push(range);
+  }
+};
 
-    for (let left = 0; left < positions.length - 1; left++) {
-      for (const length of patterns.symbolLengths) {
-        const rangeStart = positions[left];
-        const rangeEnd = rangeStart + length;
-        if (rangeEnd > end) {
-          continue;
-        }
-        const pattern = findMatchingPatternInList(
-          patterns.symbolToken,
-          normalized.slice(rangeStart, rangeEnd),
-        );
-        if (pattern !== null) {
-          ranges.push(
-            collectedRangeForPattern([rangeStart, rangeEnd], pattern),
-          );
-        }
+function* iterateSymbolRanges(
+  normalized: string,
+  patterns: StrictPatternSet,
+): IterableIterator<CollectedProfanityRange> {
+  if (
+    patterns.symbolToken.length === 0 ||
+    patterns.symbolLengths.length === 0
+  ) {
+    return;
+  }
+
+  // Symbol-only literals such as "(" or "." never appear in WORD_RE.
+  for (let rangeStart = 0; rangeStart < normalized.length; ) {
+    const charEnd = nextCodePointEnd(normalized, rangeStart);
+    if (!isSymbolCodePoint(normalized, rangeStart, charEnd)) {
+      rangeStart = charEnd;
+      continue;
+    }
+
+    for (const length of patterns.symbolLengths) {
+      const rangeEnd = rangeStart + length;
+      if (!isSymbolRange(normalized, rangeStart, rangeEnd)) {
+        continue;
+      }
+
+      const pattern = findMatchingPatternInList(
+        patterns.symbolToken,
+        normalized.slice(rangeStart, rangeEnd),
+      );
+      if (pattern !== null) {
+        yield collectedRangeForPattern([rangeStart, rangeEnd], pattern);
       }
     }
-  });
-};
+
+    rangeStart = charEnd;
+  }
+}
 
 const hasSymbolRange = (
   normalized: string,
   patterns: StrictPatternSet,
   predicate: CollectedRangePredicate,
 ): boolean => {
-  let matched = false;
-  forEachSymbolRun(normalized, (start, end) => {
-    if (matched) return;
+  if (
+    patterns.symbolToken.length === 0 ||
+    patterns.symbolLengths.length === 0
+  ) {
+    return false;
+  }
 
-    const positions = codePointPositions(normalized, start, end);
-
-    for (let left = 0; left < positions.length - 1; left++) {
-      for (const length of patterns.symbolLengths) {
-        const rangeStart = positions[left];
-        const rangeEnd = rangeStart + length;
-        if (rangeEnd > end) {
-          continue;
-        }
-        const pattern = findMatchingPatternInList(
-          patterns.symbolToken,
-          normalized.slice(rangeStart, rangeEnd),
-        );
-        if (
-          pattern !== null &&
-          predicate(collectedRangeForPattern([rangeStart, rangeEnd], pattern))
-        ) {
-          matched = true;
-          return;
-        }
-      }
+  for (const range of iterateSymbolRanges(normalized, patterns)) {
+    if (predicate(range)) {
+      return true;
     }
-  });
+  }
 
-  return matched;
+  return false;
 };
 
 const collectPhraseRanges = (
   normalized: string,
   patterns: StrictPatternSet,
   ranges: CollectedProfanityRange[],
-): void =>
+): void => {
+  for (const range of iteratePhraseRanges(normalized, patterns)) {
+    ranges.push(range);
+  }
+};
+
+function* iteratePhraseRanges(
+  normalized: string,
+  patterns: StrictPatternSet,
+): IterableIterator<CollectedProfanityRange> {
+  if (patterns.phrase.length === 0) return;
+
   // Phrase pass is for strict literals that contain punctuation, for example
   // `foo.bar`; plain word literals are already handled by collectWordRanges.
-  forEachPatternMatch(normalized, patterns.phrase, (start, end, pattern) => {
+  for (const { start, end, pattern } of iteratePatternMatches(
+    normalized,
+    patterns.phrase,
+  )) {
     if (
       boundaryCheckedRange(normalized, start, end) !== null ||
       !containsWordChar(normalized, start, end)
     ) {
-      ranges.push(collectedRangeForPattern([start, end], pattern));
+      yield collectedRangeForPattern([start, end], pattern);
     }
-  });
+  }
+}
 
 const hasPhraseRange = (
   normalized: string,
   patterns: StrictPatternSet,
   predicate: CollectedRangePredicate,
-): boolean =>
-  somePatternMatch(normalized, patterns.phrase, (start, end, pattern) => {
-    if (
-      boundaryCheckedRange(normalized, start, end) === null &&
-      containsWordChar(normalized, start, end)
-    ) {
-      return false;
-    }
+): boolean => {
+  if (patterns.phrase.length === 0) return false;
 
-    return predicate(collectedRangeForPattern([start, end], pattern));
-  });
+  return somePatternMatch(
+    normalized,
+    patterns.phrase,
+    (start, end, pattern) => {
+      if (
+        boundaryCheckedRange(normalized, start, end) === null &&
+        containsWordChar(normalized, start, end)
+      ) {
+        return false;
+      }
+
+      return predicate(collectedRangeForPattern([start, end], pattern));
+    },
+  );
+};
+
+const hasStrictPatterns = (patterns: StrictPatternSet): boolean =>
+  patterns.token.length > 0 ||
+  patterns.symbolToken.length > 0 ||
+  patterns.phrase.length > 0;
 
 const findMatchingIndexedTokenPattern = (
   patterns: StrictPatternSet,
@@ -243,45 +297,30 @@ const findMatchingPatternInList = (
   return null;
 };
 
-const forEachSymbolRun = (
-  normalized: string,
-  visit: (start: number, end: number) => void,
-): void => {
-  for (let position = 0; position < normalized.length; ) {
-    const charEnd = nextCodePointEnd(normalized, position);
-    const char = normalized.slice(position, charEnd);
-
-    if (WORD_CHAR_RE.test(char) || WHITESPACE_RE.test(char)) {
-      position = charEnd;
-      continue;
-    }
-
-    const start = position;
-    position = charEnd;
-
-    while (position < normalized.length) {
-      const nextEnd = nextCodePointEnd(normalized, position);
-      const next = normalized.slice(position, nextEnd);
-      if (WORD_CHAR_RE.test(next) || WHITESPACE_RE.test(next)) {
-        break;
-      }
-      position = nextEnd;
-    }
-
-    visit(start, position);
-  }
-};
-
-const codePointPositions = (
+const isSymbolRange = (
   normalized: string,
   start: number,
   end: number,
-): number[] => {
-  const positions = [start];
+): boolean => {
+  if (end > normalized.length) return false;
+
   let position = start;
   while (position < end) {
-    position = nextCodePointEnd(normalized, position);
-    positions.push(position);
+    const charEnd = nextCodePointEnd(normalized, position);
+    if (charEnd > end || !isSymbolCodePoint(normalized, position, charEnd)) {
+      return false;
+    }
+    position = charEnd;
   }
-  return positions;
+
+  return position === end;
+};
+
+const isSymbolCodePoint = (
+  normalized: string,
+  start: number,
+  end: number,
+): boolean => {
+  const char = normalized.slice(start, end);
+  return !WORD_CHAR_RE.test(char) && !WHITESPACE_RE.test(char);
 };

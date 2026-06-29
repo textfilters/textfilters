@@ -13,7 +13,7 @@ import {
 import { boundaryCheckedRange } from "./boundary.js";
 import { collectedRangeForPattern } from "./collected.js";
 import { knownHyphenatedSuffixRange } from "./hyphen-tail.js";
-import { forEachPatternMatch, somePatternMatch } from "./patterns.js";
+import { iteratePatternMatches, somePatternMatch } from "./patterns.js";
 
 interface LooseRangePatterns {
   readonly loose: readonly CompiledPattern[];
@@ -29,16 +29,35 @@ export const collectLooseRanges = (
   strictPatterns: StrictPatternSet,
   ranges: CollectedProfanityRange[],
 ): void => {
+  for (const range of iterateLooseRanges(
+    normalized,
+    source,
+    loosePatterns,
+    strictPatterns,
+  )) {
+    ranges.push(range);
+  }
+};
+
+export function* iterateLooseRanges(
+  normalized: string,
+  source: string,
+  loosePatterns: readonly CompiledPattern[],
+  strictPatterns: StrictPatternSet,
+): IterableIterator<CollectedProfanityRange> {
   const patterns = { loose: loosePatterns, strict: strictPatterns };
 
-  forEachPatternMatch(normalized, loosePatterns, (start, end, pattern) => {
+  for (const { start, end, pattern } of iteratePatternMatches(
+    normalized,
+    loosePatterns,
+  )) {
     const range = looseRange(normalized, source, start, end, pattern, patterns);
 
     if (range !== null) {
-      ranges.push(collectedRangeForPattern(range, pattern));
+      yield collectedRangeForPattern(range, pattern);
     }
-  });
-};
+  }
+}
 
 export const hasLooseRange = (
   normalized: string,

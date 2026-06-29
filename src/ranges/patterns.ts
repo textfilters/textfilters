@@ -4,11 +4,16 @@ import {
 } from "../matchers/compile.js";
 import { nextCodePointEnd } from "../normalization/text.js";
 
-export const forEachPatternMatch = (
+export interface PatternMatch {
+  readonly start: number;
+  readonly end: number;
+  readonly pattern: CompiledPattern;
+}
+
+export function* iteratePatternMatches(
   normalized: string,
   patterns: readonly CompiledPattern[],
-  visit: (start: number, end: number, pattern: CompiledPattern) => void,
-): void => {
+): IterableIterator<PatternMatch> {
   for (const pattern of patterns) {
     if (!patternMayStartIn(pattern, normalized)) {
       continue;
@@ -20,15 +25,28 @@ export const forEachPatternMatch = (
     while ((match = pattern.re.exec(normalized)) !== null) {
       const end = match.index + match[0].length;
 
-      // Lookarounds in controlled internal rules can win with an empty match;
-      // advance by code point so global regexp state never lands in a surrogate.
       if (match[0].length === 0) {
         pattern.re.lastIndex = nextCodePointEnd(normalized, match.index);
         continue;
       }
 
-      visit(match.index, end, pattern);
+      const nextIndex = pattern.re.lastIndex;
+      yield { start: match.index, end, pattern };
+      pattern.re.lastIndex = nextIndex;
     }
+  }
+}
+
+export const forEachPatternMatch = (
+  normalized: string,
+  patterns: readonly CompiledPattern[],
+  visit: (start: number, end: number, pattern: CompiledPattern) => void,
+): void => {
+  for (const { start, end, pattern } of iteratePatternMatches(
+    normalized,
+    patterns,
+  )) {
+    visit(start, end, pattern);
   }
 };
 

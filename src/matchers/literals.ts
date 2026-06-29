@@ -22,6 +22,11 @@ export const compileStrictLiteralPatterns = (
     wholeToken,
   );
 
+export const compileStrictTokenLiteralPatterns = (
+  terms: readonly LiteralTermDefinition[],
+): CompiledPattern[] =>
+  compileStrictLiteralPatterns(terms.filter(needsTokenPass), true);
+
 export const compileStrictPhraseLiteralPatterns = (
   terms: readonly LiteralTermDefinition[],
 ): CompiledPattern[] =>
@@ -84,6 +89,9 @@ const needsPhrasePass = (term: LiteralTermDefinition): boolean => {
     (WORD_CHAR_RE.test(normalized) || WHITESPACE_RE.test(normalized))
   );
 };
+
+const needsTokenPass = (term: LiteralTermDefinition): boolean =>
+  !needsPhrasePass(term) && !isSymbolOnlyLiteral(term);
 
 const isSymbolOnlyLiteral = (term: LiteralTermDefinition): boolean =>
   isSymbolRunLiteral(normalizeLiteralTerm(term.source));

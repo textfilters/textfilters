@@ -1,13 +1,18 @@
 import { performance } from "node:perf_hooks";
-import { createProfanityFilter } from "../dist/index.js";
+import {
+  createProfanityFilter,
+  createProfanityScanner,
+} from "../dist/index.js";
 
 const ITERATIONS = 1_000;
 const SETUP_ITERATIONS = 100;
 
 const DEFAULT_MATCH = "\u0431\u043b\u044f\u0434\u044c";
 const SHORT_CLEAN = "Hello world";
+const CYRILLIC_CLEAN = "Обычный текст без нарушений";
 const LONG_CLEAN = "The quick brown fox jumps over the lazy dog. ".repeat(50);
 const SHORT_MATCH = `hello ${DEFAULT_MATCH}`;
+const LOOSE_MATCH = "hello б л я д ь";
 const LONG_LATE_MATCH =
   "The quick brown fox jumps over the lazy dog. ".repeat(50) + DEFAULT_MATCH;
 
@@ -37,6 +42,8 @@ function printResults(results) {
 }
 
 const filter = createProfanityFilter();
+const scanner = createProfanityScanner({ filter });
+const input = (text) => ({ text, codePoints: Array.from(text) });
 
 printResults([
   bench(
@@ -45,9 +52,19 @@ printResults([
     SETUP_ITERATIONS,
   ),
   bench("check short clean", () => filter.check(SHORT_CLEAN)),
+  bench("check cyrillic clean", () => filter.check(CYRILLIC_CLEAN)),
   bench("check long clean", () => filter.check(LONG_CLEAN)),
   bench("check short match", () => filter.check(SHORT_MATCH)),
+  bench("check loose match", () => filter.check(LOOSE_MATCH)),
   bench("check long late match", () => filter.check(LONG_LATE_MATCH)),
+  bench("scanner check short clean", () => scanner.check(input(SHORT_CLEAN))),
+  bench("scanner check short match", () => scanner.check(input(SHORT_MATCH))),
+  bench("scanner scan short match", () => scanner.scan(input(SHORT_MATCH))),
+  bench("analyze short match", () => filter.analyze(SHORT_MATCH)),
+  bench("censor short match", () => filter.censor(SHORT_MATCH)),
+  bench("check minSeverity high", () =>
+    filter.check(SHORT_MATCH, { minSeverity: "high" }),
+  ),
 ]);
 
 console.log("\nbenchmark complete\n");

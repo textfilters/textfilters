@@ -20,15 +20,14 @@ import {
   type ProfanityLanguageDictionaryValidationIssue,
 } from "./languages/validation.js";
 import {
-  type CollectedProfanityRange,
-  matchRangesForMode,
+  matchRangeForMode,
   PROFANITY_MATCH_MODE,
   textRangesForMode,
 } from "./matches/ranges.js";
 import { normalizeTextInput } from "@textfilters/core";
 import { normalizeForMatchSameLen } from "./normalization/text.js";
-import { collectLooseRanges, hasLooseRange } from "./ranges/loose.js";
-import { collectStrictRanges, hasStrictRange } from "./ranges/strict.js";
+import { hasLooseRange, iterateLooseRanges } from "./ranges/loose.js";
+import { hasStrictRange, iterateStrictRanges } from "./ranges/strict.js";
 import { maskProfanityRanges } from "./token-ranges.js";
 import { LOOSE_BASE } from "./terms/loose-base.js";
 import { STRICT_BASE } from "./terms/strict-base.js";
@@ -63,6 +62,11 @@ interface FilterState {
   looseBasePatterns?: readonly CompiledPattern[];
 }
 
+type FilterStateSnapshot = Pick<
+  FilterState,
+  "strictPatterns" | "loosePatterns" | "looseCandidatePrefilter"
+>;
+
 interface LooseCandidatePrefilter {
   readonly alwaysCandidate: boolean;
   readonly firstChars: ReadonlySet<string>;
@@ -87,10 +91,15 @@ const compiledDictionaryStates = new WeakMap<
 >();
 const COMPILED_DICTIONARY_STATE =
   "__textfiltersProfanityCompiledDictionaryState";
+const filterStates = new WeakMap<ReadonlyProfanityFilter, FilterState>();
 
 type CompiledProfanityDictionaryWithState = CompiledProfanityDictionary & {
   readonly [COMPILED_DICTIONARY_STATE]?: CompiledDictionaryState;
 };
+
+export const canStreamProfanityMatches = (
+  filter: ReadonlyProfanityFilter,
+): boolean => filterStates.has(filter);
 
 export const createProfanityFilter = (
   strictTerms: ProfanityTermList = STRICT_BASE,
@@ -173,7 +182,7 @@ function formatValidationIssues(
 }
 
 function createFilter(state: FilterState): ProfanityFilter {
-  return {
+  const filter: ProfanityFilter = {
     name: PROFANITY_FILTER_NAME,
     analyze: (text, options) =>
       collectProfanityMatches(state, normalizeTextInput(text), options),
@@ -200,6 +209,9 @@ function createFilter(state: FilterState): ProfanityFilter {
       rebuildLoose(state);
     },
   };
+
+  filterStates.set(filter, state);
+  return filter;
 }
 
 function createReadOnlyFilter(
@@ -215,6 +227,11 @@ function createReadOnlyFilter(
     setLoose: rejectReadOnlyFilterMutation,
     addLoose: rejectReadOnlyFilterMutation,
   });
+
+  const state = filterStates.get(filter);
+  if (state !== undefined) {
+    filterStates.set(readOnlyFilter, state);
+  }
 
   return readOnlyFilter;
 }
@@ -508,64 +525,63 @@ const collectProfanityMatches = (
   state: FilterState,
   text: string,
   options?: ProfanityMatchOptions,
-): ProfanityMatchRange[] => {
-  // Normalization is same-length, so ranges collected from the normalized string
-  // can be applied directly to the original source string.
+): ProfanityMatchRange[] => [...iterateProfanityMatches(state, text, options)];
+
+export const streamProfanityMatches = (
+  filter: ReadonlyProfanityFilter,
+  text: string,
+  options: ProfanityMatchOptions | undefined,
+  visit: (match: ProfanityMatchRange) => boolean | void,
+): boolean | undefined => {
+  const state = filterStates.get(filter);
+  if (state === undefined) return undefined;
+  const snapshot = snapshotFilterState(state);
+
+  for (const match of iterateProfanityMatches(snapshot, text, options)) {
+    if (visit(match) === false) return false;
+  }
+
+  return true;
+};
+
+const snapshotFilterState = (state: FilterState): FilterStateSnapshot => ({
+  strictPatterns: state.strictPatterns,
+  loosePatterns: state.loosePatterns,
+  looseCandidatePrefilter: state.looseCandidatePrefilter,
+});
+
+function* iterateProfanityMatches(
+  state: FilterStateSnapshot,
+  text: string,
+  options?: ProfanityMatchOptions,
+): IterableIterator<ProfanityMatchRange> {
+  // Normalization is same-length, so yielded ranges stay source-compatible.
   const normalized = normalizeForMatchSameLen(text);
-  const strictRanges: CollectedProfanityRange[] = [];
-  const looseRanges: CollectedProfanityRange[] = [];
+  const matchesTaxonomy = collectedRangeMatchesTaxonomy(options);
 
-  collectStrictRanges(normalized, state.strictPatterns, strictRanges);
-  if (hasLooseCandidate(normalized, state.looseCandidatePrefilter)) {
-    collectLooseRanges(
-      normalized,
-      text,
-      state.loosePatterns,
-      state.strictPatterns,
-      looseRanges,
-    );
+  for (const range of iterateStrictRanges(normalized, state.strictPatterns)) {
+    const match = matchRangeForMode(range, PROFANITY_MATCH_MODE.STRICT);
+    if (matchesTaxonomy(match)) {
+      yield match;
+    }
   }
 
-  return filterMatchesByTaxonomy(
-    [
-      ...matchRangesForMode(strictRanges, PROFANITY_MATCH_MODE.STRICT),
-      ...matchRangesForMode(looseRanges, PROFANITY_MATCH_MODE.LOOSE),
-    ],
-    options,
-  );
-};
-
-const filterMatchesByTaxonomy = (
-  matches: ProfanityMatchRange[],
-  options: ProfanityMatchOptions | undefined,
-): ProfanityMatchRange[] => {
-  if (options === undefined) {
-    return matches;
+  if (!hasLooseCandidate(normalized, state.looseCandidatePrefilter)) {
+    return;
   }
 
-  const categories =
-    options.categories === undefined ? undefined : new Set(options.categories);
-  const severities =
-    options.severities === undefined ? undefined : new Set(options.severities);
-  const minSeverity = options.minSeverity;
-
-  if (
-    categories === undefined &&
-    severities === undefined &&
-    minSeverity === undefined
-  ) {
-    return matches;
+  for (const range of iterateLooseRanges(
+    normalized,
+    text,
+    state.loosePatterns,
+    state.strictPatterns,
+  )) {
+    const match = matchRangeForMode(range, PROFANITY_MATCH_MODE.LOOSE);
+    if (matchesTaxonomy(match)) {
+      yield match;
+    }
   }
-
-  return matches.filter((match) =>
-    rangeMatchesTaxonomy(match, categories, severities, minSeverity),
-  );
-};
-
-const hasMatchingCollectedRange = (
-  ranges: readonly CollectedProfanityRange[],
-  options: ProfanityMatchOptions | undefined,
-): boolean => ranges.some(collectedRangeMatchesTaxonomy(options));
+}
 
 const hasTaxonomyFilters = (options: ProfanityMatchOptions): boolean =>
   options.categories !== undefined ||
@@ -614,7 +630,7 @@ const hasLooseCandidate = (
   if (prefilter.alwaysCandidate) return true;
   if (prefilter.firstChars.size === 0) return false;
 
-  for (const char of Array.from(normalized)) {
+  for (const char of normalized) {
     if (prefilter.firstChars.has(char)) {
       return true;
     }

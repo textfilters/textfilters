@@ -17,16 +17,21 @@ export interface CollectedProfanityRange extends TextRange {
   readonly severity?: ProfanitySeverity;
 }
 
+export const matchRangeForMode = (
+  range: CollectedProfanityRange,
+  mode: ProfanityMatchMode,
+): ProfanityMatchRange => {
+  const matchRange = Object.assign([range[0], range[1]] as [number, number], {
+    mode,
+  });
+  return Object.assign(matchRange, rangeMetadata(range));
+};
+
 export const matchRangesForMode = (
   ranges: readonly CollectedProfanityRange[],
   mode: ProfanityMatchMode,
 ): ProfanityMatchRange[] =>
-  ranges.map((range) => {
-    const matchRange = Object.assign([range[0], range[1]] as [number, number], {
-      mode,
-    });
-    return Object.assign(matchRange, rangeMetadata(range));
-  });
+  ranges.map((range) => matchRangeForMode(range, mode));
 
 export const textRangesForMode = (
   ranges: readonly ProfanityMatchRange[],

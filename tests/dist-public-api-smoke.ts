@@ -85,6 +85,13 @@ const scanResult: ProfanityScannerOutput = scanner.scan({
   text: "alpha beta gamma delta",
   codePoints: Array.from("alpha beta gamma delta"),
 });
+const sinkScanCompleted: boolean = scanner.scan(
+  {
+    text: "alpha beta gamma delta",
+    codePoints: Array.from("alpha beta gamma delta"),
+  },
+  () => false,
+);
 coreScanner.scan({
   text: "alpha beta gamma delta",
   codePoints: Array.from("alpha beta gamma delta"),
@@ -125,7 +132,8 @@ if (match?.category !== category || match.severity !== severity) {
 
 if (
   scanMetadata.matches.length !== 1 ||
-  scanResult.ranges.length !== scanMetadata.matches.length
+  scanResult.ranges.length !== scanMetadata.matches.length ||
+  sinkScanCompleted
 ) {
   throw new Error("Unexpected scanner declaration surface.");
 }

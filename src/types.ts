@@ -54,6 +54,10 @@ export interface ProfanityFilter extends ReadonlyProfanityFilter {
 export interface ProfanityScanInput {
   readonly text: string;
   readonly codePoints: readonly string[];
+  readonly hints?: {
+    readonly textLength?: number;
+    readonly hasNonAscii?: boolean;
+  };
 }
 
 export interface ProfanityScannerOptions {
@@ -72,7 +76,19 @@ export interface ProfanityScannerOutput {
   readonly metadata: ProfanityScannerMetadata;
 }
 
+export interface ProfanityRangeMatch {
+  readonly range: TextCodePointRange;
+  readonly match: ProfanityMatchRange;
+}
+
+export type ProfanityRangeMatchSink = (
+  match: ProfanityRangeMatch,
+) => boolean | void;
+
 export interface ProfanityScanner {
   readonly name: typeof PROFANITY_FILTER_NAME;
+  readonly allocationAware?: true;
+  check(input: ProfanityScanInput): boolean;
   scan(input: ProfanityScanInput): ProfanityScannerOutput;
+  scan(input: ProfanityScanInput, sink: ProfanityRangeMatchSink): boolean;
 }

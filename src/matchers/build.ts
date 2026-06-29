@@ -6,8 +6,8 @@ import {
 import {
   compileLooseLiteralPatterns,
   compileStrictPhraseLiteralPatterns,
-  compileStrictLiteralPatterns,
   compileStrictSymbolLiteralPatterns,
+  compileStrictTokenLiteralPatterns,
   type LiteralTermDefinition,
   strictSymbolLiteralLengths,
 } from "./literals.js";
@@ -42,7 +42,7 @@ export interface TokenPatternIndex {
 export const buildStrictPatterns = (terms: MatcherTerms): StrictPatternSet => {
   const token = [
     ...compileStrictInternalRulePatterns(terms.internal),
-    ...compileStrictLiteralPatterns(terms.literals, true),
+    ...compileStrictTokenLiteralPatterns(terms.literals),
   ];
 
   return {
