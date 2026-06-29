@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  checkUrlRanges,
   createUrlScanner,
   createUrlFilter,
   filter,
+  scanUrlRangeMatches,
   scanUrlRanges,
   URL_FILTER_NAME,
   urlFilter,
@@ -342,6 +344,90 @@ describe("URL scanner", () => {
     ).toEqual({
       ranges: [[6, 25]],
     });
+  });
+
+  it("checks URL candidates without collecting every range", () => {
+    const scanner = createUrlScanner();
+    const text = "visit https://example.com and https://second.example now";
+    const input = { text, codePoints: Array.from(text) };
+
+    expect(scanner.check(input)).toBe(true);
+    expect(scanner.check({ text: "plain words only", codePoints: [] })).toBe(
+      false,
+    );
+    expect(checkUrlRanges(input)).toBe(true);
+  });
+
+  it("streams scanner ranges into a sink and supports early stop", () => {
+    const scanner = createUrlScanner();
+    const text = "visit example.com and example.org now";
+    const seen: Array<readonly [number, number]> = [];
+
+    const completed = scanner.scan(
+      { text, codePoints: Array.from(text) },
+      (match) => {
+        seen.push(match.range);
+        return false;
+      },
+    );
+
+    expect(completed).toBe(false);
+    expect(seen).toEqual([[6, 17]]);
+  });
+
+  it("uses shared-style hints to skip clearly clean text", () => {
+    expect(
+      checkUrlRanges({
+        text: "plain words only",
+        codePoints: Array.from("plain words only"),
+        hints: {
+          hasNonAscii: false,
+          hasDot: false,
+          hasSlash: false,
+          hasColon: false,
+        },
+      }),
+    ).toBe(false);
+  });
+
+  it("does not let false shared hints hide split-dot URLs", () => {
+    const scanner = createUrlScanner();
+    const text = "visit example d o t com";
+    const input = {
+      text,
+      codePoints: Array.from(text),
+      hints: {
+        hasNonAscii: false,
+        hasDot: false,
+        hasSlash: false,
+        hasColon: false,
+      },
+    };
+    const seen: Array<readonly [number, number]> = [];
+
+    expect(scanner.check(input)).toBe(true);
+    expect(
+      scanner.scan(input, (match) => {
+        seen.push(match.range);
+        return false;
+      }),
+    ).toBe(false);
+    expect(seen).toEqual([[6, 23]]);
+  });
+
+  it("streams prefixed, bare-domain, and punctuation-trimmed ranges", () => {
+    const text = "go https://example.com/path, then example.org.";
+    const seen: Array<readonly [number, number]> = [];
+
+    expect(
+      scanUrlRangeMatches({ text, codePoints: Array.from(text) }, (match) => {
+        seen.push(match.range);
+      }),
+    ).toBe(true);
+    expect(seen).toEqual([
+      [3, 27],
+      [34, 45],
+    ]);
   });
 
   it("supports custom TLD configuration", () => {

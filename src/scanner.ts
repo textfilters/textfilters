@@ -1,4 +1,8 @@
-import { lowerNfkc, stripZeroWidth } from "@textfilters/core";
+import {
+  lowerNfkc,
+  stripZeroWidth,
+  type TextCodePointRange,
+} from "@textfilters/core";
 
 import {
   DOT_CHAR_SET,
@@ -7,9 +11,14 @@ import {
   DOT_WORDS_SKELETON,
   LETTER_OR_DIGIT_RE,
 } from "./chars.js";
-import { URL_FILTER_NAME, type UrlRangeScanner } from "./contracts.js";
+import {
+  URL_FILTER_NAME,
+  type UrlRangeMatchSink,
+  type UrlRangeScanner,
+  type UrlScanInput,
+} from "./contracts.js";
 import { createMeta, toSkeleton } from "./meta.js";
-import { collectRanges } from "./ranges.js";
+import { collectRangeMatches, collectRanges } from "./ranges.js";
 import { DEFAULT_TLDS, normalizeTlds } from "./tlds.js";
 
 export interface UrlScannerConfig {
@@ -23,13 +32,25 @@ export function createUrlScanner(
   const tldSet = new Set(tlds);
   const tldSkeletonSet = new Set(tlds.map((tld) => toSkeleton(tld)));
 
-  return {
-    name: URL_FILTER_NAME,
-    scan(input) {
+  function scan(input: UrlScanInput): { ranges: readonly TextCodePointRange[] };
+  function scan(input: UrlScanInput, sink: UrlRangeMatchSink): boolean;
+  function scan(input: UrlScanInput, sink?: UrlRangeMatchSink) {
+    if (sink === undefined) {
       return {
         ranges: scanUrlRanges(input.text, tldSet, tldSkeletonSet),
       };
+    }
+
+    return scanUrlRangeMatches(input, sink, tldSet, tldSkeletonSet);
+  }
+
+  return {
+    name: URL_FILTER_NAME,
+    allocationAware: true,
+    check(input) {
+      return checkUrlRanges(input, tldSet, tldSkeletonSet);
     },
+    scan,
   };
 }
 
@@ -39,12 +60,64 @@ export function scanUrlRanges(
   tldSkeletonSet: ReadonlySet<string> = new Set(
     Array.from(tldSet, (tld) => toSkeleton(tld)),
   ),
-): ReturnType<UrlRangeScanner["scan"]>["ranges"] {
+): readonly TextCodePointRange[] {
   const source = String(text ?? "");
   if (!source || !hasUrlCandidate(source)) return [];
 
   const meta = createMeta(source);
   return collectRanges(meta, tldSet, tldSkeletonSet);
+}
+
+export function checkUrlRanges(
+  input: UrlScanInput,
+  tldSet: ReadonlySet<string> = new Set(DEFAULT_TLDS),
+  tldSkeletonSet: ReadonlySet<string> = new Set(
+    Array.from(tldSet, (tld) => toSkeleton(tld)),
+  ),
+): boolean {
+  if (!hasUrlCandidateInput(input)) return false;
+
+  const meta = createMeta(input.text);
+  let found = false;
+  collectRangeMatches(meta, tldSet, tldSkeletonSet, () => {
+    found = true;
+    return false;
+  });
+  return found;
+}
+
+export function scanUrlRangeMatches(
+  input: UrlScanInput,
+  sink: UrlRangeMatchSink,
+  tldSet: ReadonlySet<string> = new Set(DEFAULT_TLDS),
+  tldSkeletonSet: ReadonlySet<string> = new Set(
+    Array.from(tldSet, (tld) => toSkeleton(tld)),
+  ),
+): boolean {
+  if (!hasUrlCandidateInput(input)) return true;
+
+  const meta = createMeta(input.text);
+  return collectRangeMatches(meta, tldSet, tldSkeletonSet, (range) =>
+    sink({ range }),
+  );
+}
+
+function hasUrlCandidateInput(input: UrlScanInput): boolean {
+  if (!input.text) return false;
+
+  const hints = input.hints;
+  if (
+    hints !== undefined &&
+    hints.hasDot === false &&
+    hints.hasSlash === false &&
+    hints.hasColon === false &&
+    hints.hasNonAscii === false &&
+    !hasUrlWordCandidate(input.text)
+  ) {
+    return false;
+  }
+
+  return hasUrlCandidate(input.text);
 }
 
 function hasUrlCandidate(source: string): boolean {
@@ -64,6 +137,17 @@ function hasUrlCandidate(source: string): boolean {
     DOT_WORDS_RAW.some((word) => hasSplitWordCandidate(normalized, word)) ||
     normalized.includes("http") ||
     normalized.includes("hxxp")
+  );
+}
+
+function hasUrlWordCandidate(source: string): boolean {
+  const normalized = stripZeroWidth(lowerNfkc(source));
+  const skeleton = toSkeleton(normalized);
+  return (
+    normalized.includes("http") ||
+    normalized.includes("hxxp") ||
+    DOT_WORDS_SKELETON.some((word) => hasSplitWordCandidate(skeleton, word)) ||
+    DOT_WORDS_RAW.some((word) => hasSplitWordCandidate(normalized, word))
   );
 }
 

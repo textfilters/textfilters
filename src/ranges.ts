@@ -10,6 +10,8 @@ import {
 } from "./meta.js";
 import { parseSchemePrefix } from "./scheme.js";
 
+export type UrlRangeSink = (range: CodePointRange) => boolean | void;
+
 const hasBareBoundary = (
   meta: TextMeta,
   start: number,
@@ -88,6 +90,19 @@ export const collectRanges = (
   tldSkeletonSet: ReadonlySet<string>,
 ): readonly CodePointRange[] => {
   const ranges: CodePointRange[] = [];
+  collectRangeMatches(meta, tldSet, tldSkeletonSet, (range) => {
+    ranges.push(range);
+  });
+  return mergeCodePointRanges(ranges);
+};
+
+export const collectRangeMatches = (
+  meta: TextMeta,
+  tldSet: ReadonlySet<string>,
+  tldSkeletonSet: ReadonlySet<string>,
+  sink: UrlRangeSink,
+): boolean => {
+  const ranges: CodePointRange[] = [];
   for (let i = 0; i < meta.codePoints.length; i++) {
     const scheme = canStartScheme(meta, i) ? parseSchemePrefix(meta, i) : null;
     if (scheme) {
@@ -100,6 +115,7 @@ export const collectRanges = (
         const start = scheme.start;
         const end = target.end;
         if (hasExplicitBoundary(meta, start, end, target.pos)) {
+          if (sink([start, end]) === false) return false;
           ranges.push([start, end]);
           i = Math.max(i, end - 1, target.pos - 1);
           continue;
@@ -112,8 +128,9 @@ export const collectRanges = (
     if (!domain) continue;
     const start = maybeExpandBareSplitPrefix(meta, domain);
     if (!hasBareBoundary(meta, start, domain.end, ranges)) continue;
+    if (sink([start, domain.end]) === false) return false;
     ranges.push([start, domain.end]);
     i = Math.max(i, domain.end - 1);
   }
-  return mergeCodePointRanges(ranges);
+  return true;
 };

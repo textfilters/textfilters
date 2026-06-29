@@ -16,12 +16,16 @@ export {
   URL_FILTER_NAME,
   type UrlFilter,
   type UrlFilterConfig,
+  type UrlRangeMatch,
+  type UrlRangeMatchSink,
   type UrlRangeScanner,
   type UrlRangeScanResult,
   type UrlScanInput,
 } from "./contracts.js";
 export {
+  checkUrlRanges,
   createUrlScanner,
+  scanUrlRangeMatches,
   scanUrlRanges,
   type UrlScannerConfig,
 } from "./scanner.js";

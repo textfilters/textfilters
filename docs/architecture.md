@@ -65,7 +65,7 @@ graph TD
 | --------------------------- | ------------------------------------------------------------------------------------------------------------------ | ------------------------------------- |
 | `src/index.ts`              | Public entrypoint, public exports, and censor wrapper orchestration.                                               | Parser details or matching policy.    |
 | `src/contracts.ts`          | Public types and constants.                                                                                        | Internal parser types.                |
-| `src/scanner.ts`            | URL scanner factory, range scanner output, and cheap clean-text prefilter.                                         | Low-level parser rules.               |
+| `src/scanner.ts`            | URL scanner factory, range scanner output, boolean checks, sink streaming, and cheap clean-text prefilter.         | Low-level parser rules.               |
 | `src/tlds.ts`               | Default TLDs and TLD normalization.                                                                                | Host parsing or URL range collection. |
 | `src/chars.ts`              | Shared character sets, punctuation policy, lookalike map, and static parser character arrays.                      | Parser control flow.                  |
 | `src/meta.ts`               | Source metadata, raw and skeleton views, and low-level consume helpers.                                            | URL-specific matching policy.         |
@@ -108,9 +108,13 @@ authority forms. Bare-domain ranges are collected after that. Ranges are merged
 and deduplicated before being passed to core masking.
 
 The public `createUrlScanner()` wrapper returns code point ranges in a shape
-that can be adapted to the shared core range scanner contract. The existing
-`createUrlFilter()`, `urlFilter()`, and `filter` wrappers use that scanner while
-preserving their public censor behavior.
+that can be used by the shared core range scanner contract. It also exposes
+`check(input)` for boolean checks and `scan(input, sink)` for allocation-aware
+range streaming with early stop support. Inputs may include shared-style text
+hints such as dot, slash, colon, and non-ASCII markers so clearly clean text can
+skip parser metadata allocation. The existing `createUrlFilter()`, `urlFilter()`,
+and `filter` wrappers use that scanner while preserving their public censor
+behavior.
 
 Trailing punctuation and glued prose are trimmed before a range is emitted. Surrounding quotes and brackets stay outside explicit authority ranges unless they are structurally part of the URL, such as IPv6 brackets or balanced path parentheses.
 

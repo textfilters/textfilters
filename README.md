@@ -59,6 +59,22 @@ const result = scanner.scan({
   text: "visit https://example.com",
   codePoints: Array.from("visit https://example.com"),
 });
+
+const hasUrl = scanner.check({
+  text: "visit https://example.com",
+  codePoints: Array.from("visit https://example.com"),
+});
+
+scanner.scan(
+  {
+    text: "visit https://example.com",
+    codePoints: Array.from("visit https://example.com"),
+  },
+  (match) => {
+    console.log(match.range);
+    return false;
+  },
+);
 ```
 
 ## Behavior
@@ -86,8 +102,9 @@ Clearly clean input skips URL parser work through a cheap prefilter. See
 
 ## Benchmarks
 
-Build the package, then run URL benchmark coverage for short clean, long clean,
-direct URL, obfuscated URL, and late-match cases:
+Build the package, then run URL benchmark coverage for scanner setup,
+`check()`, clean text, direct URLs, bare domains, obfuscated URLs, and
+late-match cases:
 
 ```sh
 npm run build

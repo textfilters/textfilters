@@ -17,13 +17,28 @@ export interface UrlFilter {
 export interface UrlScanInput {
   readonly text: string;
   readonly codePoints: readonly string[];
+  readonly hints?: {
+    readonly hasNonAscii?: boolean;
+    readonly hasDot?: boolean;
+    readonly hasSlash?: boolean;
+    readonly hasColon?: boolean;
+  };
 }
 
 export interface UrlRangeScanResult {
   readonly ranges: readonly TextCodePointRange[];
 }
 
+export interface UrlRangeMatch {
+  readonly range: TextCodePointRange;
+}
+
+export type UrlRangeMatchSink = (match: UrlRangeMatch) => boolean | void;
+
 export interface UrlRangeScanner {
   readonly name: typeof URL_FILTER_NAME;
+  readonly allocationAware: true;
+  check(input: UrlScanInput): boolean;
   scan(input: UrlScanInput): UrlRangeScanResult;
+  scan(input: UrlScanInput, sink: UrlRangeMatchSink): boolean | void;
 }
