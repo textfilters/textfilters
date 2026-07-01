@@ -14,24 +14,26 @@ export interface UrlFilter {
   censor(text: unknown): string;
 }
 
+export interface UrlScanHints {
+  readonly hasNonAscii?: boolean;
+  readonly hasDot?: boolean;
+  readonly hasSlash?: boolean;
+  readonly hasColon?: boolean;
+}
+
 export interface UrlScanInput {
   readonly text: string;
   readonly codePoints: readonly string[];
-  readonly hints?: {
-    readonly hasNonAscii?: boolean;
-    readonly hasDot?: boolean;
-    readonly hasSlash?: boolean;
-    readonly hasColon?: boolean;
-  };
+  readonly hints?: UrlScanHints;
 }
 
-export interface UrlRangeScanResult {
+export type UrlRangeScanResult = {
   readonly ranges: readonly TextCodePointRange[];
-}
+};
 
-export interface UrlRangeMatch {
+export type UrlRangeMatch = {
   readonly range: TextCodePointRange;
-}
+};
 
 export type UrlRangeMatchSink = (match: UrlRangeMatch) => boolean | void;
 

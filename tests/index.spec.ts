@@ -8,6 +8,9 @@ import {
   scanUrlRangeMatches,
   scanUrlRanges,
   URL_FILTER_NAME,
+  type UrlRangeScanner,
+  type UrlRangeScanResult,
+  type UrlScanHints,
   urlFilter,
 } from "../src/index.js";
 
@@ -334,6 +337,24 @@ describe("compatibility behavior", () => {
 });
 
 describe("URL scanner", () => {
+  it("keeps scanner contracts compatible with shared range shapes", () => {
+    const scanner: UrlRangeScanner = createUrlScanner();
+    const hints: UrlScanHints = {
+      hasNonAscii: false,
+      hasDot: true,
+      hasSlash: false,
+      hasColon: false,
+    };
+    const text = "visit example.com now";
+    const result: UrlRangeScanResult = scanner.scan({
+      text,
+      codePoints: Array.from(text),
+      hints,
+    });
+
+    expect(result).toEqual({ ranges: [[6, 17]] });
+  });
+
   it("exposes scanner ranges compatible with code point masking", () => {
     const scanner = createUrlScanner();
     expect(
@@ -344,6 +365,20 @@ describe("URL scanner", () => {
     ).toEqual({
       ranges: [[6, 25]],
     });
+  });
+
+  it("keeps the public censor wrapper aligned with scanner ranges", () => {
+    const text = "go https://example.com/path now";
+    const scanner = createUrlScanner();
+    const ranges = scanner.scan({
+      text,
+      codePoints: Array.from(text),
+    }).ranges;
+
+    expect(ranges).toEqual([[3, 27]]);
+    expect(createUrlFilter({ maskChar: "#" }).censor(text)).toBe(
+      `go ${mask("https://example.com/path", "#")} now`,
+    );
   });
 
   it("checks URL candidates without collecting every range", () => {

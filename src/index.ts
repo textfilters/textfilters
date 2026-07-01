@@ -1,8 +1,4 @@
-import {
-  maskCodePointRangesPreservingLength,
-  normalizeTextInput,
-  type TextCodePointRange,
-} from "@textfilters/core";
+import { censorCodePointRanges, normalizeTextInput } from "@textfilters/core";
 
 import {
   URL_FILTER_NAME,
@@ -20,6 +16,7 @@ export {
   type UrlRangeMatchSink,
   type UrlRangeScanner,
   type UrlRangeScanResult,
+  type UrlScanHints,
   type UrlScanInput,
 } from "./contracts.js";
 export {
@@ -29,15 +26,6 @@ export {
   scanUrlRanges,
   type UrlScannerConfig,
 } from "./scanner.js";
-
-const maskUrlRanges = (
-  codePoints: readonly string[],
-  ranges: readonly TextCodePointRange[],
-  maskChar: string,
-): string => {
-  if (ranges.length === 0) return codePoints.join("");
-  return maskCodePointRangesPreservingLength(codePoints, ranges, maskChar);
-};
 
 export function createUrlFilter(config: UrlFilterConfig = {}): UrlFilter {
   const scanner = createUrlScanner({ tlds: normalizeTlds(config.tlds) });
@@ -50,7 +38,7 @@ export function createUrlFilter(config: UrlFilterConfig = {}): UrlFilter {
       if (!source) return source;
       const codePoints = Array.from(source);
       const ranges = scanner.scan({ text: source, codePoints }).ranges;
-      return maskUrlRanges(codePoints, ranges, maskChar);
+      return censorCodePointRanges(codePoints, ranges, maskChar);
     },
   };
 }
