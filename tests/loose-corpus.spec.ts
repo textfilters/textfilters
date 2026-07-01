@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { mergeRanges } from "@textfilters/core";
 
 import { createProfanityFilter, filter } from "../src";
 
@@ -188,4 +189,42 @@ describe("loose corpus", () => {
       "********",
     );
   });
+
+  it("keeps Russian obscene root ranges from absorbing a following conjunction", () => {
+    const input = "привет хуй и мир";
+    const ranges = filter.analyze(input).map(([start, end]) => [start, end]);
+
+    expect(ranges).toContainEqual([7, 10]);
+    expect(ranges).not.toContainEqual([7, 12]);
+    expect(ranges.every(([, end]) => end <= 10)).toBe(true);
+    expect(filter.censor(input)).toBe("привет *** и мир");
+  });
+
+  it("keeps Telegram HTML spoiler output limited to the obscene token", () => {
+    const input = "💬 привет хуй и мир <script>";
+
+    expect(renderTelegramSpoilers(input)).toContain(
+      "💬 привет <tg-spoiler>хуй</tg-spoiler> и мир &lt;script&gt;",
+    );
+  });
 });
+
+const renderTelegramSpoilers = (input: string): string => {
+  const ranges = mergeRanges(filter.analyze(input));
+  let output = "";
+  let offset = 0;
+
+  for (const [start, end] of ranges) {
+    output += escapeTelegramHtml(input.slice(offset, start));
+    output += `<tg-spoiler>${escapeTelegramHtml(input.slice(start, end))}</tg-spoiler>`;
+    offset = end;
+  }
+
+  return output + escapeTelegramHtml(input.slice(offset));
+};
+
+const escapeTelegramHtml = (input: string): string =>
+  input
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");

@@ -5,7 +5,7 @@
       "id": "ru.obscene.huy.base",
       "category": "OBSCENE_MAT",
       "severity": "high",
-      "source": "ху[йяиёею]",
+      "source": "(?:хуй|хуя|хуи|хуё|хуе|хую)",
       "match": {
         "strict": {},
         "loose": {
