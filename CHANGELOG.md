@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.14.1](https://github.com/textfilters/profanity/compare/v0.14.0...v0.14.1) (2026-07-01)
+
+
+### Bug Fixes
+
+* keep Russian root match from absorbing conjunctions ([#146](https://github.com/textfilters/profanity/issues/146)) ([0b67a55](https://github.com/textfilters/profanity/commit/0b67a556961fadd6782a032258378bf25ff6e16c))
+* preserve profanity scanner check fast path ([1abf767](https://github.com/textfilters/profanity/commit/1abf767c695775233de6b4cb6fc59e50cabf879a))
+
 ## [0.14.0](https://github.com/textfilters/profanity/compare/v0.13.5...v0.14.0) (2026-06-29)
 
 
