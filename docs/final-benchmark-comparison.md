@@ -34,9 +34,9 @@ so legacy sequential, range scanner, and shared-hints scanner rows all ran.
 
 | Row | avg ms |
 | --- | ---: |
-| combined pipeline · create composed pipeline | 0.0532 |
-| combined scanner ranges · create pipeline | 0.0576 |
-| combined shared hints · create scanner set | 0.0689 |
+| combined pipeline · create composed pipeline | 0.0447 |
+| combined scanner ranges · create pipeline | 0.0600 |
+| combined shared hints · create scanner set | 0.0517 |
 
 Scanner setup is slightly higher than the legacy composed pipeline, but setup is
 not the hot path for normal censor/check calls.
@@ -45,9 +45,9 @@ not the hot path for normal censor/check calls.
 
 | Scenario | Legacy sequential censor | Range scanner scan | Range scanner censor | Shared-hints check | Shared-hints scan | Shared-hints censor |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| short clean | 0.0763 | 0.0686 | 0.0709 | 0.0653 | 0.0683 | 0.0666 |
-| long clean | 5.2407 | 5.1776 | 5.0040 | 5.0350 | 4.9394 | 4.9199 |
-| cyrillic clean | 0.0781 | 0.0815 | 0.0824 | 0.0754 | 0.0778 | 0.0798 |
+| short clean | 0.0875 | 0.0685 | 0.0685 | 0.0695 | 0.0672 | 0.0667 |
+| long clean | 5.4348 | 5.0153 | 4.9836 | 5.0397 | 4.9929 | 4.9948 |
+| cyrillic clean | 0.0783 | 0.0846 | 0.0798 | 0.0788 | 0.0793 | 0.0765 |
 
 Clean text benefits from the shared scanner paths. The long clean case improves
 because the scanner paths avoid repeated full censor passes through the legacy
@@ -57,10 +57,10 @@ pipeline.
 
 | Scenario | Legacy sequential censor | Range scanner scan | Range scanner censor | Shared-hints check | Shared-hints scan | Shared-hints censor |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| short all-match | 0.2361 | 0.3334 | 0.3258 | 0.0185 | 0.2978 | 0.2993 |
-| long match late | 4.4535 | 6.1990 | 6.4022 | 0.3912 | 6.2651 | 6.4815 |
-| mixed overlaps | 0.2183 | 0.2884 | 0.2888 | 0.0138 | 0.2869 | 0.2886 |
-| obfuscated | 0.1388 | 0.2100 | 0.2102 | 0.1547 | 0.2104 | 0.2121 |
+| short all-match | 0.2276 | 0.3139 | 0.3119 | 0.0197 | 0.3030 | 0.3189 |
+| long match late | 5.0057 | 6.4300 | 6.5847 | 0.3716 | 6.8506 | 6.6133 |
+| mixed overlaps | 0.1948 | 0.3001 | 0.2907 | 0.0135 | 0.2859 | 0.2905 |
+| obfuscated | 0.1399 | 0.2133 | 0.2161 | 0.1540 | 0.2143 | 0.2136 |
 
 The shared-hints `check()` path is materially faster for positive direct-match
 cases because it can stop after the first scanner hit instead of collecting and
