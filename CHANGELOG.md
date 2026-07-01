@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.0](https://github.com/textfilters/url/compare/v0.1.6...v0.2.0) (2026-07-01)
+
+
+### Features
+
+* align URL scanner contract ([4432cc7](https://github.com/textfilters/url/commit/4432cc73c22c46817e4053a7958ffc5aab9924c1))
+
 ## [0.1.6](https://github.com/textfilters/url/compare/v0.1.5...v0.1.6) (2026-06-29)
 
 
