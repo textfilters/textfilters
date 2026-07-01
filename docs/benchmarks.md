@@ -6,7 +6,9 @@ The benchmark suite measures the runtime cost of the current `@textfilters/*`
 package set on representative inputs. Use it for **before/after comparisons on
 the same machine**. Absolute numbers depend on hardware, OS scheduling, Node.js
 version, and local load. See [ecosystem policy](ecosystem-policy.md) for the
-performance comparison expectations that PRs should follow.
+performance comparison expectations that PRs should follow, and see
+[performance budget](performance-budget.md) for regression thresholds and PR
+reporting expectations.
 
 ## Setup
 
@@ -113,24 +115,30 @@ uses explicit `nowMs` values instead of wall-clock time.
 
 ### Combined Pipeline
 
-`url + email + phone + profanity` in two comparable paths when scanner exports
+`url + email + phone + profanity` in three comparable paths when scanner exports
 are available:
 
 - `combined legacy sequential`: the existing `TextPipeline` that censors through
   each package in registration order
 - `combined scanner ranges`: the range scanner pipeline that collects URL,
   email, phone, and profanity ranges before applying one mask pass
+- `combined shared hints`: the shared-hints scanner set that measures `check()`,
+  `scan()`, and `censor()` separately when the installed packages expose the
+  allocation-aware scanner contract
 
-Both paths cover:
+Setup rows are printed separately from steady-state rows. The steady-state
+matrix covers:
 
-- composed pipeline setup
 - short clean text
 - long clean text
 - short text with all match types
 - long text with matches near the end
+- mixed URL/email/phone/profanity inputs
+- Cyrillic clean text
+- obfuscated profanity candidates
 
 If the installed package set does not expose scanner exports yet, the benchmark
-prints a skip message for the scanner rows and still runs the legacy sequential
+prints a skip message for scanner rows and still runs the legacy sequential
 rows. Link or install local package builds to compare unpublished scanner work
 before release.
 
@@ -140,8 +148,10 @@ before release.
 - Treat a regression as meaningful only when it repeats across several runs.
 - `ops/sec` is derived from `avg ms`; prefer `avg ms` for precise comparisons.
 - For combined benchmark work, compare rows with the same input suffix, such as
-  `combined legacy sequential · long clean` against
-  `combined scanner ranges · long clean`.
+  `combined legacy sequential · censor · long clean` against
+  `combined scanner ranges · censor · long clean`.
+- Compare `combined shared hints · check` against `scan` and `censor` rows to
+  confirm boolean checks avoid unnecessary full-match work.
 - `profanity · compileProfanityDictionary()` is expected to be slower than
   runtime calls because it is a setup operation. Reuse the compiled result with
   `createProfanityFilterFromCompiledDictionary()` when measuring hot paths.

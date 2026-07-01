@@ -97,11 +97,11 @@ function getOptionalExport(packageExports, name) {
   return typeof value === "function" ? value : undefined;
 }
 
-function createCombinedScannerPipeline(compiledDictionary) {
-  const createTextRangePipeline = getOptionalExport(
-    corePackage,
-    "createTextRangePipeline",
-  );
+function uniqueNames(names) {
+  return [...new Set(names)];
+}
+
+function getCombinedScannerCapabilities(compiledDictionary) {
   const createEmailScanner = getOptionalExport(emailPackage, "createEmailScanner");
   const createUrlScanner = getOptionalExport(urlPackage, "createUrlScanner");
   const createPhoneScanner = getOptionalExport(phonePackage, "createPhoneScanner");
@@ -110,15 +110,54 @@ function createCombinedScannerPipeline(compiledDictionary) {
     "createProfanityScanner",
   );
 
-  const missingExports = [
-    ["@textfilters/core", createTextRangePipeline],
-    ["@textfilters/email", createEmailScanner],
-    ["@textfilters/url", createUrlScanner],
-    ["@textfilters/phone", createPhoneScanner],
-    ["@textfilters/profanity", createProfanityScanner],
-  ]
-    .filter(([, factory]) => factory === undefined)
-    .map(([packageName]) => packageName);
+  const missingScannerExports = uniqueNames(
+    [
+      ["@textfilters/email", createEmailScanner],
+      ["@textfilters/url", createUrlScanner],
+      ["@textfilters/phone", createPhoneScanner],
+      ["@textfilters/profanity", createProfanityScanner],
+    ]
+      .filter(([, factory]) => factory === undefined)
+      .map(([packageName]) => packageName),
+  );
+
+  if (missingScannerExports.length > 0) {
+    return {
+      scanners: undefined,
+      missingScannerExports,
+    };
+  }
+
+  return {
+    scanners: [
+      createEmailScanner(),
+      createUrlScanner(),
+      createPhoneScanner(),
+      createProfanityScanner({
+        filter: createProfanityFilterFromCompiledDictionary(compiledDictionary),
+      }),
+    ],
+    missingScannerExports,
+  };
+}
+
+function createCombinedScannerPipeline(compiledDictionary) {
+  const createTextRangePipeline = getOptionalExport(
+    corePackage,
+    "createTextRangePipeline",
+  );
+  const capabilities = getCombinedScannerCapabilities(compiledDictionary);
+  const missingExports = uniqueNames(
+    [
+      ["@textfilters/core", createTextRangePipeline],
+      ...capabilities.missingScannerExports.map((packageName) => [
+        packageName,
+        undefined,
+      ]),
+    ]
+      .filter(([, factory]) => factory === undefined)
+      .map(([packageName]) => packageName),
+  );
 
   if (missingExports.length > 0) {
     console.warn(
@@ -127,15 +166,54 @@ function createCombinedScannerPipeline(compiledDictionary) {
     return undefined;
   }
 
-  return createTextRangePipeline()
-    .use(createEmailScanner())
-    .use(createUrlScanner())
-    .use(createPhoneScanner())
-    .use(
-      createProfanityScanner({
-        filter: createProfanityFilterFromCompiledDictionary(compiledDictionary),
-      }),
+  return capabilities.scanners.reduce(
+    (pipeline, scanner) => pipeline.use(scanner),
+    createTextRangePipeline(),
+  );
+}
+
+function createSharedHintsCombinedScanner(compiledDictionary) {
+  const checkTextRanges = getOptionalExport(corePackage, "checkTextRanges");
+  const censorCodePointRanges = getOptionalExport(
+    corePackage,
+    "censorCodePointRanges",
+  );
+  const scanTextRanges = getOptionalExport(corePackage, "scanTextRanges");
+  const capabilities = getCombinedScannerCapabilities(compiledDictionary);
+  const missingExports = uniqueNames(
+    [
+      ["@textfilters/core", checkTextRanges],
+      ["@textfilters/core", censorCodePointRanges],
+      ["@textfilters/core", scanTextRanges],
+      ...capabilities.missingScannerExports.map((packageName) => [
+        packageName,
+        undefined,
+      ]),
+    ]
+      .filter(([, factory]) => factory === undefined)
+      .map(([packageName]) => packageName),
+  );
+
+  if (missingExports.length > 0) {
+    console.warn(
+      `Skipping shared-hints combined scanner rows; missing scanner exports from ${missingExports.join(", ")}.`,
     );
+    return undefined;
+  }
+
+  const scanners = capabilities.scanners;
+  return {
+    check(value) {
+      return checkTextRanges(value, scanners);
+    },
+    scan(value) {
+      return scanTextRanges(value, scanners);
+    },
+    censor(value) {
+      const result = scanTextRanges(value, scanners);
+      return censorCodePointRanges(result.codePoints, result.ranges);
+    },
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -403,30 +481,34 @@ runSuite("combined", "pipeline · url + email + phone + profanity", () => {
   const compiled = compileProfanityDictionary(russianProfanityDictionary);
   const legacyPipeline = createCombinedPipeline(compiled);
   const scannerPipeline = createCombinedScannerPipeline(compiled);
+  const sharedHintsScanner = createSharedHintsCombinedScanner(compiled);
 
-  const COMBINED_CLEAN = "Привет, как дела? Всё хорошо.";
-  const COMBINED_MATCH =
+  const COMBINED_SHORT_CLEAN = "Hello, this message is clean.";
+  const COMBINED_CYRILLIC_CLEAN = "Привет, как дела? Всё хорошо.";
+  const COMBINED_SHORT_ALL_MATCH =
     "Пиши на evil@spam.ru или https://spam.ru, тел. +7 (999) 000-00-00, и не будь мудаком";
   const COMBINED_LONG_LATE =
     "Обычный текст без нарушений. ".repeat(50) +
     "Пиши на evil@spam.ru или https://spam.ru тел +7 (999) 000-00-00 блять";
+  const COMBINED_MIXED_OVERLAPS =
+    "Contact admin@example.com, https://example.com/support, +1 555 123 4567, хуй";
+  const COMBINED_OBFUSCATED_PROFANITY =
+    "Looks ordinary, but б л я т ь appears between safe words.";
+
+  const scenarios = [
+    ["short clean", COMBINED_SHORT_CLEAN],
+    ["long clean", LONG_CLEAN],
+    ["short all-match", COMBINED_SHORT_ALL_MATCH],
+    ["long match late", COMBINED_LONG_LATE],
+    ["mixed overlaps", COMBINED_MIXED_OVERLAPS],
+    ["cyrillic clean", COMBINED_CYRILLIC_CLEAN],
+    ["obfuscated", COMBINED_OBFUSCATED_PROFANITY],
+  ];
 
   const results = [
     bench("combined pipeline · create composed pipeline", () =>
       createCombinedPipeline(compiled),
       SETUP_ITERATIONS,
-    ),
-    bench("combined legacy sequential · short clean", () =>
-      legacyPipeline.censor(COMBINED_CLEAN),
-    ),
-    bench("combined legacy sequential · long clean", () =>
-      legacyPipeline.censor(LONG_CLEAN),
-    ),
-    bench("combined legacy sequential · short all-match", () =>
-      legacyPipeline.censor(COMBINED_MATCH),
-    ),
-    bench("combined legacy sequential · long match late", () =>
-      legacyPipeline.censor(COMBINED_LONG_LATE),
     ),
   ];
 
@@ -436,19 +518,49 @@ runSuite("combined", "pipeline · url + email + phone + profanity", () => {
         createCombinedScannerPipeline(compiled),
         SETUP_ITERATIONS,
       ),
-      bench("combined scanner ranges · short clean", () =>
-        scannerPipeline.censor(COMBINED_CLEAN),
-      ),
-      bench("combined scanner ranges · long clean", () =>
-        scannerPipeline.censor(LONG_CLEAN),
-      ),
-      bench("combined scanner ranges · short all-match", () =>
-        scannerPipeline.censor(COMBINED_MATCH),
-      ),
-      bench("combined scanner ranges · long match late", () =>
-        scannerPipeline.censor(COMBINED_LONG_LATE),
+    );
+  }
+
+  if (sharedHintsScanner !== undefined) {
+    results.push(
+      bench("combined shared hints · create scanner set", () =>
+        createSharedHintsCombinedScanner(compiled),
+        SETUP_ITERATIONS,
       ),
     );
+  }
+
+  for (const [label, input] of scenarios) {
+    results.push(
+      bench(`combined legacy sequential · censor · ${label}`, () =>
+        legacyPipeline.censor(input),
+      ),
+    );
+
+    if (scannerPipeline !== undefined) {
+      results.push(
+        bench(`combined scanner ranges · scan · ${label}`, () =>
+          scannerPipeline.scan(input),
+        ),
+        bench(`combined scanner ranges · censor · ${label}`, () =>
+          scannerPipeline.censor(input),
+        ),
+      );
+    }
+
+    if (sharedHintsScanner !== undefined) {
+      results.push(
+        bench(`combined shared hints · check · ${label}`, () =>
+          sharedHintsScanner.check(input),
+        ),
+        bench(`combined shared hints · scan · ${label}`, () =>
+          sharedHintsScanner.scan(input),
+        ),
+        bench(`combined shared hints · censor · ${label}`, () =>
+          sharedHintsScanner.censor(input),
+        ),
+      );
+    }
   }
 
   return results;
