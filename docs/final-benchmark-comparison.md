@@ -69,8 +69,9 @@ legacy sequential path for positive multi-match cases because they preserve
 range metadata and run one combined masking pass after all scanners complete.
 
 The obfuscated case is the exception for `check()`: loose profanity candidate
-matching still does more work than direct URL, email, and phone checks, so the
-shared-hints check path is slightly slower than legacy censor for that case.
+matching still does more work than direct URL, email, and phone scanner checks,
+so the shared-hints check path is slightly slower than legacy censor for that
+case.
 
 ## Interpretation
 

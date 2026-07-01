@@ -103,8 +103,9 @@ from the maintained dictionary.
 normalization helpers, `TextCensor`, pipeline composition, guard decision types,
 scanner inputs, scanner hints, scanner results, range merging, and UTF-16 and
 code point masking helpers. URL, email, phone, and profanity expose scanner
-factories that can participate in the core range pipeline while preserving their
-existing direct `check()` and `censor()` wrappers.
+factories that can participate in the core range pipeline while preserving the
+existing URL, email, and phone censor wrappers and the profanity
+`check()`/`censor()`/`analyze()` filter API.
 
 ## Which Package Should I Use?
 
