@@ -70,6 +70,8 @@ record the package refs in the PR body.
 
 ## Current Baseline
 
-The current published package set exposes the legacy wrapper path only. Scanner
-range and shared-hints rows are expected to be skipped until the corresponding
-package PRs are released or locally linked for benchmark runs.
+The current package set exposes the legacy wrapper path, range scanner path, and
+shared-hints scanner path. Scanner rows should run in the combined benchmark
+when the dependency ranges in this repository are installed. See
+[final benchmark comparison](final-benchmark-comparison.md) for the first
+post-alignment combined run and row-by-row tradeoffs.

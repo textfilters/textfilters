@@ -8,7 +8,10 @@ the same machine**. Absolute numbers depend on hardware, OS scheduling, Node.js
 version, and local load. See [ecosystem policy](ecosystem-policy.md) for the
 performance comparison expectations that PRs should follow, and see
 [performance budget](performance-budget.md) for regression thresholds and PR
-reporting expectations.
+reporting expectations. See the
+[final benchmark comparison](final-benchmark-comparison.md) for the first
+combined legacy sequential, range scanner, and shared-hints scanner comparison
+after the package scanner alignment work.
 
 ## Setup
 
