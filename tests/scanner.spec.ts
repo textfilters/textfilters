@@ -71,6 +71,21 @@ describe("profanity scanner adapter", () => {
     ).toBe(false);
   });
 
+  it("uses shared text-length hints to skip package-owned empty checks", () => {
+    const filter = createProfanityFilter(["alpha"], []);
+    const checkSpy = vi.spyOn(filter, "check");
+    const scanner = createProfanityScanner({ filter });
+
+    expect(
+      scanner.check({
+        text: "",
+        codePoints: [],
+        hints: { textLength: 0, hasNonAscii: false },
+      }),
+    ).toBe(false);
+    expect(checkSpy).not.toHaveBeenCalled();
+  });
+
   it("streams ranges into a sink and supports early stop", () => {
     const filter = createProfanityFilter(["alpha", "beta"], []);
     const scanner = createProfanityScanner({ filter });
@@ -108,17 +123,26 @@ describe("profanity scanner adapter", () => {
     const analyze = vi.fn(() => [
       Object.assign([0, 5] as [number, number], { mode: "strict" as const }),
     ]);
+    const check = vi.fn(() => true);
     const scanner = createProfanityScanner({
       filter: {
         name: PROFANITY_FILTER_NAME,
         analyze,
-        check: () => true,
+        check,
         censor: (text) => String(text),
       },
     });
     const seen: TextCodePointRange[] = [];
 
     expect("allocationAware" in scanner).toBe(false);
+    expect(
+      scanner.check({
+        text: "",
+        codePoints: [],
+        hints: { textLength: 0, hasNonAscii: false },
+      }),
+    ).toBe(true);
+    expect(check).toHaveBeenCalledOnce();
     expect(
       scanner.scan(
         { text: "alpha", codePoints: Array.from("alpha") },

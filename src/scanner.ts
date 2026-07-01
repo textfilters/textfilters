@@ -36,7 +36,10 @@ export function createProfanityScanner(
 
   const scanner: ProfanityScanner = {
     name: PROFANITY_FILTER_NAME,
-    check: (input) => activeFilter.check(input.text, matchOptions),
+    check: (input) =>
+      allocationAware && input.hints?.textLength === 0
+        ? false
+        : activeFilter.check(input.text, matchOptions),
     scan,
   };
 

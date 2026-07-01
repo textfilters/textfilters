@@ -44,6 +44,17 @@ function printResults(results) {
 const filter = createProfanityFilter();
 const scanner = createProfanityScanner({ filter });
 const input = (text) => ({ text, codePoints: Array.from(text) });
+const hintedEmptyInput = {
+  text: "",
+  codePoints: [],
+  hints: {
+    textLength: 0,
+    codePointLength: 0,
+    isEmpty: true,
+    hasAsciiOnly: true,
+    hasNonAscii: false,
+  },
+};
 
 printResults([
   bench(
@@ -58,6 +69,7 @@ printResults([
   bench("check loose match", () => filter.check(LOOSE_MATCH)),
   bench("check long late match", () => filter.check(LONG_LATE_MATCH)),
   bench("scanner check short clean", () => scanner.check(input(SHORT_CLEAN))),
+  bench("scanner check hinted empty", () => scanner.check(hintedEmptyInput)),
   bench("scanner check short match", () => scanner.check(input(SHORT_MATCH))),
   bench("scanner scan short match", () => scanner.scan(input(SHORT_MATCH))),
   bench("analyze short match", () => filter.analyze(SHORT_MATCH)),

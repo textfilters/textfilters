@@ -54,10 +54,26 @@ export interface ProfanityFilter extends ReadonlyProfanityFilter {
 export interface ProfanityScanInput {
   readonly text: string;
   readonly codePoints: readonly string[];
-  readonly hints?: {
-    readonly textLength?: number;
-    readonly hasNonAscii?: boolean;
-  };
+  readonly hints?: ProfanityScanHints;
+}
+
+export interface ProfanityScanHints {
+  readonly textLength?: number;
+  readonly codePointLength?: number;
+  readonly isEmpty?: boolean;
+  readonly hasAsciiOnly?: boolean;
+  readonly hasNonAscii?: boolean;
+  readonly hasDigit?: boolean;
+  readonly digitCount?: number;
+  readonly hasAsciiLetter?: boolean;
+  readonly hasWhitespace?: boolean;
+  readonly hasPunctuation?: boolean;
+  readonly punctuationCount?: number;
+  readonly hasAtSign?: boolean;
+  readonly hasDot?: boolean;
+  readonly hasSlash?: boolean;
+  readonly hasColon?: boolean;
+  readonly hasPlus?: boolean;
 }
 
 export interface ProfanityScannerOptions {
