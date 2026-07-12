@@ -483,6 +483,15 @@
       }
     },
     {
+      "id": "ru.obscene.eb.truncated",
+      "category": "OBSCENE_MAT",
+      "severity": "high",
+      "source": "(?<!\\p{L})еба(?!\\p{L})",
+      "match": {
+        "strict": {}
+      }
+    },
+    {
       "id": "ru.obscene.ebash.family",
       "category": "OBSCENE_MAT",
       "severity": "high",

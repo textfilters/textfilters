@@ -127,6 +127,15 @@
       "match": {
         "loose": {}
       }
+    },
+    {
+      "id": "ru.insult.pidor.as.plural.symbol.loose",
+      "category": "STRONG_INSULT",
+      "severity": "high",
+      "source": "(?<!\\p{L})пидора[$#]сы(?!\\p{L})",
+      "match": {
+        "loose": {}
+      }
     }
   ]
 }
