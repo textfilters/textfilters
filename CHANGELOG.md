@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.14.2](https://github.com/textfilters/profanity/compare/v0.14.1...v0.14.2) (2026-07-12)
+
+
+### Bug Fixes
+
+* cover reviewed Russian profanity gaps ([#150](https://github.com/textfilters/profanity/issues/150)) ([94ad4ef](https://github.com/textfilters/profanity/commit/94ad4eff5e866985119d996dc4937bdfaba6ce36))
+
 ## [0.14.1](https://github.com/textfilters/profanity/compare/v0.14.0...v0.14.1) (2026-07-01)
 
 
