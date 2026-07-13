@@ -25,7 +25,10 @@ import {
   textRangesForMode,
 } from "./matches/ranges.js";
 import { normalizeTextInput } from "@textfilters/core";
-import { normalizeForMatchSameLen } from "./normalization/text.js";
+import {
+  normalizeForMatchSameLen,
+  normalizeForMatchSameLenWithoutHomoglyphs,
+} from "./normalization/text.js";
 import { hasLooseRange, iterateLooseRanges } from "./ranges/loose.js";
 import { hasStrictRange, iterateStrictRanges } from "./ranges/strict.js";
 import { maskProfanityRanges } from "./token-ranges.js";
@@ -47,6 +50,7 @@ import {
   compileStrictSymbolLiteralPatterns,
   normalizeLiteralTerm,
   type LiteralTermDefinition,
+  type LiteralNormalizer,
   strictSymbolLiteralLengths,
 } from "./matchers/literals.js";
 
@@ -60,11 +64,15 @@ interface FilterState {
   looseCandidatePrefilter: LooseCandidatePrefilter;
   strictBasePatterns?: StrictPatternSet;
   looseBasePatterns?: readonly CompiledPattern[];
+  normalizeForMatch: LiteralNormalizer;
 }
 
 type FilterStateSnapshot = Pick<
   FilterState,
-  "strictPatterns" | "loosePatterns" | "looseCandidatePrefilter"
+  | "strictPatterns"
+  | "loosePatterns"
+  | "looseCandidatePrefilter"
+  | "normalizeForMatch"
 >;
 
 interface LooseCandidatePrefilter {
@@ -83,6 +91,7 @@ interface CompiledDictionaryState {
   readonly looseTerms: MatcherTerms;
   readonly strictPatterns: StrictPatternSet;
   readonly loosePatterns: readonly CompiledPattern[];
+  readonly normalizeForMatch: LiteralNormalizer;
 }
 
 const compiledDictionaryStates = new WeakMap<
@@ -191,21 +200,29 @@ function createFilter(state: FilterState): ProfanityFilter {
     censor: (text, options) =>
       censorText(state, normalizeTextInput(text), options),
     setStrict: (list) => {
-      state.strictTerms = runtimeLiteralTerms(list);
+      state.strictTerms = runtimeLiteralTerms(list, state.normalizeForMatch);
       state.strictBasePatterns = undefined;
       rebuildStrict(state);
     },
     addStrict: (term) => {
-      state.strictTerms = appendRuntimeLiteralTerm(state.strictTerms, term);
+      state.strictTerms = appendRuntimeLiteralTerm(
+        state.strictTerms,
+        term,
+        state.normalizeForMatch,
+      );
       rebuildStrict(state);
     },
     setLoose: (list) => {
-      state.looseTerms = runtimeLiteralTerms(list);
+      state.looseTerms = runtimeLiteralTerms(list, state.normalizeForMatch);
       state.looseBasePatterns = undefined;
       rebuildLoose(state);
     },
     addLoose: (term) => {
-      state.looseTerms = appendRuntimeLiteralTerm(state.looseTerms, term);
+      state.looseTerms = appendRuntimeLiteralTerm(
+        state.looseTerms,
+        term,
+        state.normalizeForMatch,
+      );
       rebuildLoose(state);
     },
   };
@@ -250,11 +267,11 @@ function createState(
     strictTerms:
       strictTerms === STRICT_BASE
         ? builtInRuleTerms(strictTerms, "strict")
-        : runtimeLiteralTerms(strictTerms),
+        : runtimeLiteralTerms(strictTerms, normalizeForMatchSameLen),
     looseTerms:
       looseTerms === LOOSE_BASE
         ? builtInRuleTerms(looseTerms, "loose")
-        : runtimeLiteralTerms(looseTerms),
+        : runtimeLiteralTerms(looseTerms, normalizeForMatchSameLen),
     strictPatterns: {
       token: [],
       tokenIndex: buildTokenPatternIndex([]),
@@ -264,6 +281,7 @@ function createState(
     },
     loosePatterns: [],
     looseCandidatePrefilter: createLooseCandidatePrefilter([]),
+    normalizeForMatch: normalizeForMatchSameLen,
   };
 
   rebuildStrict(state);
@@ -283,12 +301,17 @@ function compileDictionaryState(
     dictionaryRulesForMode(dictionary, "loose"),
     "loose",
   );
+  const normalizeForMatch =
+    dictionary.language === "en"
+      ? normalizeForMatchSameLenWithoutHomoglyphs
+      : normalizeForMatchSameLen;
 
   return {
     strictTerms,
     looseTerms,
-    strictPatterns: buildStrictPatterns(strictTerms),
-    loosePatterns: buildLoosePatterns(looseTerms),
+    strictPatterns: buildStrictPatterns(strictTerms, normalizeForMatch),
+    loosePatterns: buildLoosePatterns(looseTerms, normalizeForMatch),
+    normalizeForMatch,
   };
 }
 
@@ -303,6 +326,7 @@ function createStateFromCompiledDictionary(
     looseCandidatePrefilter: createLooseCandidatePrefilter(state.loosePatterns),
     strictBasePatterns: cloneStrictPatternSet(state.strictPatterns),
     looseBasePatterns: [...state.loosePatterns],
+    normalizeForMatch: state.normalizeForMatch,
   };
 }
 
@@ -328,10 +352,11 @@ function rebuildStrict(state: FilterState): void {
   state.strictPatterns =
     state.strictBasePatterns === undefined ||
     state.strictTerms.internal.length === 0
-      ? buildStrictPatterns(state.strictTerms)
+      ? buildStrictPatterns(state.strictTerms, state.normalizeForMatch)
       : appendStrictLiteralPatterns(
           state.strictBasePatterns,
           state.strictTerms.literals,
+          state.normalizeForMatch,
         );
 }
 
@@ -339,10 +364,13 @@ function rebuildLoose(state: FilterState): void {
   state.loosePatterns =
     state.looseBasePatterns === undefined ||
     state.looseTerms.internal.length === 0
-      ? buildLoosePatterns(state.looseTerms)
+      ? buildLoosePatterns(state.looseTerms, state.normalizeForMatch)
       : [
           ...state.looseBasePatterns,
-          ...compileLooseLiteralPatterns(state.looseTerms.literals),
+          ...compileLooseLiteralPatterns(
+            state.looseTerms.literals,
+            state.normalizeForMatch,
+          ),
         ];
   state.looseCandidatePrefilter = createLooseCandidatePrefilter(
     state.loosePatterns,
@@ -352,10 +380,11 @@ function rebuildLoose(state: FilterState): void {
 function appendStrictLiteralPatterns(
   basePatterns: StrictPatternSet,
   literals: readonly LiteralTermDefinition[],
+  normalize: LiteralNormalizer,
 ): StrictPatternSet {
   const token = [
     ...basePatterns.token,
-    ...compileStrictLiteralPatterns(literals, true),
+    ...compileStrictLiteralPatterns(literals, true, normalize),
   ];
 
   return {
@@ -363,15 +392,15 @@ function appendStrictLiteralPatterns(
     tokenIndex: buildTokenPatternIndex(token),
     symbolToken: [
       ...basePatterns.symbolToken,
-      ...compileStrictSymbolLiteralPatterns(literals),
+      ...compileStrictSymbolLiteralPatterns(literals, normalize),
     ],
     symbolLengths: [
       ...basePatterns.symbolLengths,
-      ...strictSymbolLiteralLengths(literals),
+      ...strictSymbolLiteralLengths(literals, normalize),
     ],
     phrase: [
       ...basePatterns.phrase,
-      ...compileStrictPhraseLiteralPatterns(literals),
+      ...compileStrictPhraseLiteralPatterns(literals, normalize),
     ],
   };
 }
@@ -411,22 +440,27 @@ const isRuleDefinition = (
   typeof term.source === "string" &&
   term.source.trim().length > 0;
 
-const runtimeLiteralTerms = (terms: ProfanityTermList): MatcherTerms => ({
+const runtimeLiteralTerms = (
+  terms: ProfanityTermList,
+  normalize: LiteralNormalizer,
+): MatcherTerms => ({
   internal: [],
-  literals: literalDefinitions(terms),
+  literals: literalDefinitions(terms, normalize),
 });
 
 const appendRuntimeLiteralTerm = (
   terms: MatcherTerms,
   term: unknown,
+  normalize: LiteralNormalizer,
 ): MatcherTerms => ({
   // Keep the existing internal rules intact and append only to the literal side.
   internal: terms.internal,
-  literals: appendLiteralTerm(terms.literals, term),
+  literals: appendLiteralTerm(terms.literals, term, normalize),
 });
 
 const literalDefinitions = (
   terms: ProfanityTermList,
+  normalize: LiteralNormalizer,
 ): LiteralTermDefinition[] => {
   if (!Array.isArray(terms)) {
     return [];
@@ -441,7 +475,7 @@ const literalDefinitions = (
       continue;
     }
 
-    const key = normalizeLiteralTerm(definition.source);
+    const key = normalizeLiteralTerm(definition.source, normalize);
     if (seen.has(key)) {
       continue;
     }
@@ -456,15 +490,18 @@ const literalDefinitions = (
 const appendLiteralTerm = (
   terms: readonly LiteralTermDefinition[],
   term: unknown,
+  normalize: LiteralNormalizer,
 ): LiteralTermDefinition[] => {
   const definition = literalDefinition(term);
   if (definition === null) {
     return [...terms];
   }
 
-  const key = normalizeLiteralTerm(definition.source);
+  const key = normalizeLiteralTerm(definition.source, normalize);
 
-  return terms.some((term) => normalizeLiteralTerm(term.source) === key)
+  return terms.some(
+    (term) => normalizeLiteralTerm(term.source, normalize) === key,
+  )
     ? [...terms]
     : [...terms, definition];
 };
@@ -488,7 +525,7 @@ const hasProfanity = (
   options?: ProfanityMatchOptions,
 ): boolean => {
   // Normalization is same-length, so collected ranges stay source-compatible.
-  const normalized = normalizeForMatchSameLen(text);
+  const normalized = state.normalizeForMatch(text);
   const matchesTaxonomy = collectedRangeMatchesTaxonomy(options);
 
   if (hasStrictRange(normalized, state.strictPatterns, matchesTaxonomy)) {
@@ -548,6 +585,7 @@ const snapshotFilterState = (state: FilterState): FilterStateSnapshot => ({
   strictPatterns: state.strictPatterns,
   loosePatterns: state.loosePatterns,
   looseCandidatePrefilter: state.looseCandidatePrefilter,
+  normalizeForMatch: state.normalizeForMatch,
 });
 
 function* iterateProfanityMatches(
@@ -556,7 +594,7 @@ function* iterateProfanityMatches(
   options?: ProfanityMatchOptions,
 ): IterableIterator<ProfanityMatchRange> {
   // Normalization is same-length, so yielded ranges stay source-compatible.
-  const normalized = normalizeForMatchSameLen(text);
+  const normalized = state.normalizeForMatch(text);
   const matchesTaxonomy = collectedRangeMatchesTaxonomy(options);
 
   for (const range of iterateStrictRanges(normalized, state.strictPatterns)) {

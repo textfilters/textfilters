@@ -80,6 +80,7 @@ until ongoing maintenance is credible.
 
 ## Current Boundaries
 
-This policy does not add a new package, repository, language, dependency, or
-runtime behavior. It also does not move the built-in Russian dictionary out of
-`@textfilters/profanity`.
+The repository contains a real reviewed English dictionary as a private,
+non-published example. It remains an opt-in test and authoring artifact until a
+named maintainer or maintenance group satisfies the ownership criteria above.
+It does not change the built-in Russian dictionary or the shared default filter.

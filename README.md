@@ -287,7 +287,7 @@ dictionaries are the supported boundary for maintained language-specific rule
 data. Runtime calls such as `setStrict`, `setLoose`, `addStrict`, and `addLoose`
 only mutate the returned filter instance; they do not change the compiled
 dictionary object or other filters created from it. This release intentionally
-does not add new languages or separate packages.
+does not add another built-in language or a separately published package.
 
 The Russian dictionary is maintained as split family data with an explicit rule
 order. New high-risk family rules are expected to add nearby coverage and
@@ -357,6 +357,11 @@ human-maintained JSON, and conformance expectations.
 The [external language pack policy](docs/external-language-pack-policy.md)
 defines when the project is ready to create a real external package and keeps
 the built-in Russian dictionary in this package for now.
+
+A reviewed, opt-in English dictionary is available as a private non-published
+[English language pack example](examples/english-language-pack/README.md). It
+does not change the Russian shared default and remains intentionally limited to
+the reviewed audit vocabulary until English-language ownership is established.
 
 ## Related Textfilters Packages
 

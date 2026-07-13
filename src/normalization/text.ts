@@ -31,10 +31,15 @@ export const normalizeFullwidthAsciiSameLen = (value: string): string =>
 // Every transform must preserve UTF-16 length so match ranges stay source-based.
 // Zero-width markers must stay outside WORD_RE so strict token bounds do not
 // grow past the visible word.
-export const normalizeForMatchSameLen = (value: string): string =>
-  foldHomoglyphs(normalizeFullwidthAsciiSameLen(value))
+export const normalizeForMatchSameLenWithoutHomoglyphs = (
+  value: string,
+): string =>
+  normalizeFullwidthAsciiSameLen(value)
     .replace(/[ёЁ]/g, (char) => (char === "Ё" ? "Е" : "е"))
     .replace(ZERO_WIDTH_RE, ZERO_WIDTH_SPLIT_MARKER);
+
+export const normalizeForMatchSameLen = (value: string): string =>
+  foldHomoglyphs(normalizeForMatchSameLenWithoutHomoglyphs(value));
 
 export const codePointStartAt = (value: string, index: number): number => {
   if (

@@ -145,6 +145,13 @@ transliteration coverage should be authored as explicit reviewed dictionary
 rules with taxonomy metadata and false-positive tests, not as a global runtime
 normalization switch.
 
+English dictionaries preserve Latin letters during matching so maintained
+English sources remain readable and do not pass through the built-in Russian
+homoglyph folding step. Other language dictionaries retain the existing
+normalization behavior for compatibility. Filters created from an English
+dictionary apply the same Latin-preserving normalization to later runtime
+literal mutations.
+
 ## Human-Maintained JSON
 
 Source dictionaries should stay human-maintained JSON. They should describe
@@ -313,8 +320,9 @@ The following work is intentionally out of scope for this milestone:
 
 - creating `@textfilters/profanity-ru` or any other external language package;
 - moving the Russian dictionary out of this package;
-- adding another real language dictionary;
-- broadening profanity coverage;
+- adding another real language dictionary beyond the private reviewed English
+  pack;
+- broadening profanity coverage beyond the reviewed English vocabulary;
 - changing Russian runtime behavior;
 - adding generated matcher metadata to source dictionaries;
 - publishing packages or changing package versions manually.
