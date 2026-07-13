@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.15.0](https://github.com/textfilters/profanity/compare/v0.14.2...v0.15.0) (2026-07-13)
+
+
+### Features
+
+* add reviewed English profanity pack ([1361734](https://github.com/textfilters/profanity/commit/13617346a9b93a5b82ba0ce7786b03ba2457e033))
+
 ## [0.14.2](https://github.com/textfilters/profanity/compare/v0.14.1...v0.14.2) (2026-07-12)
 
 
