@@ -286,8 +286,30 @@ fields. Runtime dictionary terms remain normalized literals; language
 dictionaries are the supported boundary for maintained language-specific rule
 data. Runtime calls such as `setStrict`, `setLoose`, `addStrict`, and `addLoose`
 only mutate the returned filter instance; they do not change the compiled
-dictionary object or other filters created from it. This release intentionally
-does not add another built-in language or a separately published package.
+dictionary object or other filters created from it.
+
+The package also ships a reviewed, opt-in English language pack:
+
+```ts
+import {
+  createEnglishProfanityFilter,
+  englishProfanityDictionary,
+  englishProfanityFilter,
+} from "@textfilters/profanity";
+
+englishProfanityFilter.check("fucking");
+englishProfanityFilter.censor("fucking");
+
+const mutableEnglishFilter = createEnglishProfanityFilter();
+mutableEnglishFilter.addStrict("tenant-only-term");
+```
+
+`englishProfanityFilter` is a shared read-only filter initialized on first use.
+`createEnglishProfanityFilter()` returns an isolated mutable filter, while
+`englishProfanityDictionary` exposes the validated source dictionary. Importing
+the package does not add English rules to `filter`; the shared default remains
+Russian-only. The English pack is intentionally limited to its reviewed audit
+vocabulary and is not a broad toxicity or hate-speech classifier.
 
 The Russian dictionary is maintained as split family data with an explicit rule
 order. New high-risk family rules are expected to add nearby coverage and
@@ -355,13 +377,12 @@ For future external language pack guidance, see
 source dictionary shape, stable ids, taxonomy metadata, strict and loose views,
 human-maintained JSON, and conformance expectations.
 The [external language pack policy](docs/external-language-pack-policy.md)
-defines when the project is ready to create a real external package and keeps
-the built-in Russian dictionary in this package for now.
+defines when the project is ready to create a separately published language
+package and keeps the built-in dictionaries in this package for now.
 
-A reviewed, opt-in English dictionary is available as a private non-published
-[English language pack example](examples/english-language-pack/README.md). It
-does not change the Russian shared default and remains intentionally limited to
-the reviewed audit vocabulary until English-language ownership is established.
+The [English language pack example](examples/english-language-pack/README.md)
+documents the reviewed vocabulary and re-exports the package-owned
+implementation from `src/languages/en` for repository-level examples.
 
 ## Related Textfilters Packages
 

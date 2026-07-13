@@ -2,7 +2,7 @@
   "name": "@textfilters/profanity",
   "version": "0.15.0",
   "type": "module",
-  "description": "TypeScript profanity filter with Russian dictionary support, obfuscation handling, taxonomy metadata, and language-pack validation.",
+  "description": "TypeScript profanity filter with Russian and opt-in English dictionaries, obfuscation handling, taxonomy metadata, and language-pack validation.",
   "license": "MIT",
   "keywords": [
     "text-filtering",
@@ -14,6 +14,7 @@
     "redaction",
     "profanity-filter",
     "russian-profanity",
+    "english-profanity",
     "language-dictionaries",
     "obfuscation",
     "taxonomy",

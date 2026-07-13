@@ -1,9 +1,9 @@
 # Reviewed English Profanity Language Pack
 
-This directory contains a real, opt-in English dictionary for the reviewed
-audit vocabulary. It is deliberately non-published: the package is marked
-`private`, has no release workflow, and remains an in-repository example until
-an English-language maintainer or maintenance group is named.
+The package-owned implementation of this reviewed, opt-in English dictionary
+lives in `src/languages/en` and is included in the published distribution. This
+private example re-exports that implementation so repository examples exercise
+the same code as package consumers.
 
 The pack covers only `fuck`, `fucking`, `fucked`, `shit`, `dick`,
 `motherfucker` (including detection before a possessive suffix), `cock`,
@@ -12,20 +12,26 @@ or contextual moderation.
 
 ## Opt-in API
 
-The example exports a validated dictionary and an isolated filter:
+The public package exports a validated dictionary, a shared read-only filter,
+and a factory for isolated mutable filters:
 
 ```ts
 import {
+  createEnglishProfanityFilter,
   englishProfanityDictionary,
   englishProfanityFilter,
-} from "./src/index.js";
+} from "@textfilters/profanity";
 
 englishProfanityFilter.check("reviewed English text");
 englishProfanityFilter.analyze("reviewed English text");
+
+const mutableEnglishFilter = createEnglishProfanityFilter();
+mutableEnglishFilter.addStrict("tenant-only-term");
 ```
 
-Importing the main `@textfilters/profanity` package does not enable these
-rules. The built-in shared filter remains Russian-only.
+Importing the main package does not enable these rules on the default `filter`.
+The built-in shared default remains Russian-only, and the English filter is
+initialized only when its methods are first called.
 
 ## Policy boundaries
 
@@ -41,5 +47,6 @@ rules. The built-in shared filter remains Russian-only.
   retain the normal runtime matching contract.
 - The possessive suffix in `motherfucker's` is not part of the reported range;
   only the maintained profanity token is censored.
-- Publication requires the ownership and release criteria in
+- A separately published language package requires the ownership and release
+  criteria in
   [the external language pack policy](../../docs/external-language-pack-policy.md).

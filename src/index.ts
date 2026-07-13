@@ -41,4 +41,9 @@ export {
 } from "./filter.js";
 export type { CompiledProfanityDictionary } from "./filter.js";
 export { createProfanityScanner } from "./scanner.js";
+export {
+  createEnglishProfanityFilter,
+  englishProfanityDictionary,
+  englishProfanityFilter,
+} from "./languages/en/index.js";
 export { russianProfanityDictionary } from "./languages/ru/index.js";

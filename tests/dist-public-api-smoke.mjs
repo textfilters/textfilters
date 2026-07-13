@@ -1,8 +1,11 @@
 import {
   compileProfanityDictionary,
+  createEnglishProfanityFilter,
   createProfanityFilter,
   createProfanityFilterFromCompiledDictionary,
   createProfanityFilterFromDictionary,
+  englishProfanityDictionary,
+  englishProfanityFilter,
   filter,
   PROFANITY_FILTER_NAME,
   russianProfanityDictionary,
@@ -33,6 +36,23 @@ if (PROFANITY_FILTER_NAME !== "profanity") {
 
 if (!filter.check("привет блядь")) {
   throw new Error("Default dist filter did not detect a built-in match.");
+}
+
+if (
+  englishProfanityDictionary.language !== "en" ||
+  !englishProfanityFilter.check("fucking") ||
+  "addStrict" in englishProfanityFilter
+) {
+  throw new Error("Dist English language pack was not exported read-only.");
+}
+
+const mutableEnglishFilter = createEnglishProfanityFilter();
+mutableEnglishFilter.addStrict("tenant-only-term");
+
+if (!mutableEnglishFilter.check("tenant-only-term")) {
+  throw new Error(
+    "Dist English filter factory did not return a mutable filter.",
+  );
 }
 
 if (!dictionaryFilter.check("привет блядь")) {

@@ -320,8 +320,8 @@ The following work is intentionally out of scope for this milestone:
 
 - creating `@textfilters/profanity-ru` or any other external language package;
 - moving the Russian dictionary out of this package;
-- adding another real language dictionary beyond the private reviewed English
-  pack;
+- adding another real language dictionary beyond the reviewed English pack in
+  `src/languages/en`;
 - broadening profanity coverage beyond the reviewed English vocabulary;
 - changing Russian runtime behavior;
 - adding generated matcher metadata to source dictionaries;

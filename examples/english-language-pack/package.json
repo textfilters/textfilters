@@ -6,9 +6,6 @@
   "description": "Non-published reviewed English profanity language pack.",
   "license": "UNLICENSED",
   "sideEffects": false,
-  "dependencies": {
-    "@textfilters/core": "^0.3.1"
-  },
   "files": [
     "dist",
     "README.md"

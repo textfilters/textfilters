@@ -80,7 +80,12 @@ until ongoing maintenance is credible.
 
 ## Current Boundaries
 
-The repository contains a real reviewed English dictionary as a private,
-non-published example. It remains an opt-in test and authoring artifact until a
-named maintainer or maintenance group satisfies the ownership criteria above.
-It does not change the built-in Russian dictionary or the shared default filter.
+The main package contains a reviewed English dictionary under
+`src/languages/en` and exposes it through an opt-in public API. It is not a
+separately published language package, does not change the built-in Russian
+dictionary, and does not add English rules to the shared default filter.
+
+A future separately published English package still requires a named maintainer
+or maintenance group that satisfies the ownership criteria above. Shipping a
+limited opt-in dictionary in the main package does not by itself satisfy those
+external-package requirements.

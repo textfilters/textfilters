@@ -1,16 +1,14 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  createEnglishProfanityFilter,
   createProfanityFilterFromDictionary,
   createProfanityScanner,
+  englishProfanityDictionary,
+  englishProfanityFilter,
   filter,
   validateProfanityLanguageDictionary,
 } from "../src";
-import {
-  createEnglishProfanityFilter,
-  englishProfanityDictionary,
-  englishProfanityFilter,
-} from "../examples/english-language-pack/src/index.js";
 
 const reviewedCases = [
   ["fuck", "en.obscene.fuck.family", "OBSCENE_MAT", "high"],
@@ -210,6 +208,22 @@ describe("reviewed English language pack", () => {
 
     expect(isolated.check("fucking")).toBe(true);
     expect(filter.check("fucking")).toBe(false);
+  });
+
+  it("exports a read-only shared English filter", () => {
+    const mutableExportedRules =
+      englishProfanityDictionary.rules as unknown as unknown[];
+    const originalRules = [...mutableExportedRules];
+    mutableExportedRules.length = 0;
+
+    try {
+      expect(englishProfanityFilter.check("fucking")).toBe(true);
+      expect(createEnglishProfanityFilter().check("fucking")).toBe(true);
+      expect("addStrict" in englishProfanityFilter).toBe(false);
+      expect(Object.isFrozen(englishProfanityFilter)).toBe(true);
+    } finally {
+      mutableExportedRules.push(...originalRules);
+    }
   });
 
   it("uses English normalization for runtime literal mutations", () => {

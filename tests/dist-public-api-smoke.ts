@@ -1,10 +1,13 @@
 import type { TextCodePointRange } from "@textfilters/core";
 import {
   compileProfanityDictionary,
+  createEnglishProfanityFilter,
   createProfanityFilter,
   createProfanityFilterFromCompiledDictionary,
   createProfanityFilterFromDictionary,
   createProfanityScanner,
+  englishProfanityDictionary,
+  englishProfanityFilter,
   filter,
   PROFANITY_FILTER_NAME,
   russianProfanityDictionary,
@@ -51,6 +54,8 @@ const metadata: ProfanityTaxonomyMetadata = {
   severity,
 };
 const dictionary: ProfanityLanguageDictionary = russianProfanityDictionary;
+const englishDictionary: ProfanityLanguageDictionary =
+  englishProfanityDictionary;
 const compiledDictionary: CompiledProfanityDictionary =
   compileProfanityDictionary(dictionary);
 const dictionaryRule: ProfanityLanguageRuleDefinition | undefined =
@@ -71,6 +76,8 @@ const dictionaryFilter: ProfanityFilter =
 const compiledDictionaryFilter: ProfanityFilter =
   createProfanityFilterFromCompiledDictionary(compiledDictionary);
 const sharedFilter: ReadonlyProfanityFilter = filter;
+const sharedEnglishFilter: ReadonlyProfanityFilter = englishProfanityFilter;
+const mutableEnglishFilter: ProfanityFilter = createEnglishProfanityFilter();
 const scannerOptions: ProfanityScannerOptions = {
   filter: strict,
   matchOptions: options,
@@ -100,6 +107,8 @@ const scanMetadata: ProfanityScannerMetadata = scanResult.metadata;
 
 filter.check("plain text");
 sharedFilter.censor("plain text");
+sharedEnglishFilter.censor("fucking text");
+mutableEnglishFilter.addStrict("tenant-only-term");
 dictionaryFilter.check("plain text");
 compiledDictionaryFilter.check("plain text");
 
@@ -116,6 +125,14 @@ if (dictionaryRule?.source === undefined) {
 
 if (dictionaryValidationIssues.length !== 0) {
   throw new Error("Unexpected dictionary validation issue surface.");
+}
+
+if (
+  englishDictionary.language !== "en" ||
+  !sharedEnglishFilter.check("fucking") ||
+  "addStrict" in sharedEnglishFilter
+) {
+  throw new Error("Unexpected English language pack declaration surface.");
 }
 
 if (
