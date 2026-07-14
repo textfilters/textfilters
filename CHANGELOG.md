@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1](https://github.com/textfilters/url/compare/v0.2.0...v0.2.1) (2026-07-14)
+
+
+### Bug Fixes
+
+* updated core dependency to 0.4.0 ([b57f4fd](https://github.com/textfilters/url/commit/b57f4fd6b83296fd761e0ecbb0291316b8418486))
+
 ## [0.2.0](https://github.com/textfilters/url/compare/v0.1.6...v0.2.0) (2026-07-01)
 
 
