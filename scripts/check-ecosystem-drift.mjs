@@ -17,49 +17,49 @@ const GITHUB_REF_OVERRIDE = process.env.TEXTFILTERS_REF;
 const EXPECTED_NODE = ">=24";
 const EXPECTED_NPM = "npm@11.16.0";
 const EXPECTED_REGISTRY = "https://npm.pkg.github.com";
-const EXPECTED_CORE_RANGE = "^0.3.1";
+const EXPECTED_CORE_RANGE = "^0.4.0";
 
 const PACKAGES = [
   {
     repo: "core",
     packageName: "@textfilters/core",
-    fallbackRef: "9e8a8bff18f4ca9e53c407d3dd4921beca996d1b",
+    fallbackRef: "0c24cda3fe2c5cb3ba9770f9482ec916da24cb0a",
     dependencyRange: null,
     files: ["dist", "README.md", "LICENSE"],
   },
   {
     repo: "url",
     packageName: "@textfilters/url",
-    fallbackRef: "4432cc73c22c46817e4053a7958ffc5aab9924c1",
+    fallbackRef: "89f70bdac00e79414f76539f36290b806068fa2d",
     dependencyRange: EXPECTED_CORE_RANGE,
     files: ["dist", "docs", "README.md", "LICENSE"],
   },
   {
     repo: "email",
     packageName: "@textfilters/email",
-    fallbackRef: "a87c592fb5a97ef8241fcabda583a06dcf63c74a",
+    fallbackRef: "7e7c261423ee244b377711311de92628fa345a8b",
     dependencyRange: EXPECTED_CORE_RANGE,
     files: ["dist", "docs", "README.md", "LICENSE"],
   },
   {
     repo: "phone",
     packageName: "@textfilters/phone",
-    fallbackRef: "99c95d6c3fb1c429bfdc5e5036e7a4fb3f391792",
+    fallbackRef: "c3ae79e434013d8d66637e6c79618735c6dad898",
     dependencyRange: EXPECTED_CORE_RANGE,
     files: ["dist", "docs", "README.md", "LICENSE"],
   },
   {
     repo: "profanity",
     packageName: "@textfilters/profanity",
-    fallbackRef: "1abf767c695775233de6b4cb6fc59e50cabf879a",
+    fallbackRef: "442d2b13ee5cc45787cfcffc7213dc8fb9352a70",
     dependencyRange: EXPECTED_CORE_RANGE,
     files: ["dist", "docs", "README.md", "LICENSE"],
   },
   {
     repo: "spam",
     packageName: "@textfilters/spam",
-    fallbackRef: "0e3f54e842272322b10b6e055fd38fd2be1ae2a6",
-    dependencyRange: "^0.3.0",
+    fallbackRef: "67f7683e620b429007aa6d0f2235dd4df3afc19f",
+    dependencyRange: EXPECTED_CORE_RANGE,
     files: ["dist", "docs", "README.md", "LICENSE"],
   },
 ];
@@ -107,9 +107,9 @@ async function checkEcosystem() {
   checkEqual(
     failures,
     "textfilters",
-    "package.json overrides.@textfilters/spam.@textfilters/core",
-    rootPackage.overrides?.["@textfilters/spam"]?.["@textfilters/core"],
-    EXPECTED_CORE_RANGE,
+    "package.json overrides",
+    rootPackage.overrides,
+    undefined,
   );
 
   const expectedRootDependencies = Object.fromEntries(

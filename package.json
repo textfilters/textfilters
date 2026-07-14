@@ -10,17 +10,12 @@
     "check": "node scripts/check-ecosystem-drift.mjs && node scripts/check-ecosystem-drift.mjs --self-test"
   },
   "dependencies": {
-    "@textfilters/core": "^0.3.2",
-    "@textfilters/url": "^0.1.6",
-    "@textfilters/email": "^0.2.7",
-    "@textfilters/phone": "^0.1.5",
-    "@textfilters/profanity": "^0.14.0",
-    "@textfilters/spam": "^0.3.0"
-  },
-  "overrides": {
-    "@textfilters/spam": {
-      "@textfilters/core": "^0.3.1"
-    }
+    "@textfilters/core": "^0.4.0",
+    "@textfilters/url": "^0.2.1",
+    "@textfilters/email": "^0.3.1",
+    "@textfilters/phone": "^0.2.1",
+    "@textfilters/profanity": "^0.15.2",
+    "@textfilters/spam": "^0.3.2"
   },
   "engines": {
     "node": ">=24"
