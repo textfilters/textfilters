@@ -50,7 +50,7 @@
     "benchmark:profanity": "npm run build && node scripts/benchmark-profanity.mjs"
   },
   "dependencies": {
-    "@textfilters/core": "^0.3.1"
+    "@textfilters/core": "^0.4.0"
   },
   "devDependencies": {
     "@types/node": "^25.9.3",
