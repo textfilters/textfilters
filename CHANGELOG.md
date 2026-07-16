@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.15.3](https://github.com/textfilters/profanity/compare/v0.15.2...v0.15.3) (2026-07-16)
+
+
+### Bug Fixes
+
+* expanded reviewed English profanity coverage ([bc56918](https://github.com/textfilters/profanity/commit/bc56918f027c5ef8a1ccd7546d0c737d722c3a0c))
+
 ## [0.15.2](https://github.com/textfilters/profanity/compare/v0.15.1...v0.15.2) (2026-07-14)
 
 
