@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.16.0](https://github.com/textfilters/profanity/compare/v0.15.3...v0.16.0) (2026-07-16)
+
+
+### Features
+
+* add composable profanity language profiles ([#163](https://github.com/textfilters/profanity/issues/163)) ([1896a00](https://github.com/textfilters/profanity/commit/1896a007d69e2cde3fbfdf6071e1502b966c2c22))
+
 ## [0.15.3](https://github.com/textfilters/profanity/compare/v0.15.2...v0.15.3) (2026-07-16)
 
 
