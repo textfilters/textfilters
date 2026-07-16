@@ -7,8 +7,9 @@ the same code as package consumers.
 
 The pack covers only `fuck`, `fucking`, `fucked`, `shit`, `dick`,
 `motherfucker` (including detection before a possessive suffix), `cock`,
-`bitch`, and `bastard`. It does not attempt broad toxicity, hate-speech, slur,
-or contextual moderation.
+`bitch`, `whore`, `nigga`, `suck`, `fag`, `faggot`, and `bastard`. It does not
+attempt broad toxicity, comprehensive hate-speech or slur detection, or
+contextual moderation.
 
 ## Opt-in API
 
@@ -35,7 +36,10 @@ initialized only when its methods are first called.
 
 ## Policy boundaries
 
-- Every maintained rule is strict-only and requires a complete word token.
+- The explicitly reviewed `fuck`, `shit`, `bitch`, `whore`, `nigga`, `suck`,
+  `fag`, and `faggot` rules accept separator-obfuscated loose forms while still
+  requiring complete token boundaries. Other maintained rules remain
+  strict-only.
 - Matching is case-insensitive and accepts punctuation around a token.
 - Substrings inside longer words and names are excluded by strict token
   boundaries. Exact maintained tokens are also ignored when they form an

@@ -34,6 +34,21 @@ const reviewedCases = [
   ["bitch", "en.insult.bitch", "STRONG_INSULT", "medium"],
   ["Bitch", "en.insult.bitch", "STRONG_INSULT", "medium"],
   ["Hey, bitch.", "en.insult.bitch", "STRONG_INSULT", "medium"],
+  ["whore", "en.insult.whore", "STRONG_INSULT", "high"],
+  ["WHORE", "en.insult.whore", "STRONG_INSULT", "high"],
+  ["You whore!", "en.insult.whore", "STRONG_INSULT", "high"],
+  ["nigga", "en.insult.nigga", "STRONG_INSULT", "high"],
+  ["NIGGA", "en.insult.nigga", "STRONG_INSULT", "high"],
+  ["Hey, nigga.", "en.insult.nigga", "STRONG_INSULT", "high"],
+  ["suck", "en.vulgar.suck", "VULGAR", "medium"],
+  ["SUCK", "en.vulgar.suck", "VULGAR", "medium"],
+  ["You suck!", "en.vulgar.suck", "VULGAR", "medium"],
+  ["fag", "en.insult.fag", "STRONG_INSULT", "high"],
+  ["FAG", "en.insult.fag", "STRONG_INSULT", "high"],
+  ["You fag!", "en.insult.fag", "STRONG_INSULT", "high"],
+  ["faggot", "en.insult.faggot", "STRONG_INSULT", "high"],
+  ["FAGGOT", "en.insult.faggot", "STRONG_INSULT", "high"],
+  ["You faggot!", "en.insult.faggot", "STRONG_INSULT", "high"],
   ["bastard", "en.insult.bastard", "STRONG_INSULT", "medium"],
   ["BASTARD", "en.insult.bastard", "STRONG_INSULT", "medium"],
   ["You bastard!", "en.insult.bastard", "STRONG_INSULT", "medium"],
@@ -79,6 +94,11 @@ const falsePositiveCases = [
   "cocktail",
   "cockatoo",
   "Bitchfield",
+  "whorehouse",
+  "niggardly",
+  "sucker",
+  "Fagaceae",
+  "faggoting",
   "Scunthorpe",
   "unfuckingbelievable",
   "shitake.example",
@@ -114,6 +134,25 @@ const falsePositiveCases = [
   "＠ｂｉｔｃｈ",
   "cocktail_user",
 ];
+
+const reviewedLooseCases = [
+  ["f-u-c-k", "en.obscene.fuck.family", "OBSCENE_MAT", "high"],
+  ["s h i t", "en.obscene.shit", "OBSCENE_MAT", "high"],
+  ["b*i*t*c*h", "en.insult.bitch", "STRONG_INSULT", "medium"],
+  ["w/h/o/r/e", "en.insult.whore", "STRONG_INSULT", "high"],
+  ["n_i_g_g_a", "en.insult.nigga", "STRONG_INSULT", "high"],
+  ["s-u-c-k", "en.vulgar.suck", "VULGAR", "medium"],
+  ["f a g", "en.insult.fag", "STRONG_INSULT", "high"],
+  ["f-a-g-g-o-t", "en.insult.faggot", "STRONG_INSULT", "high"],
+] as const;
+
+const excludedLooseContextCases = [
+  "f.u.c.k",
+  "s.h.i.t.example",
+  "reader@n.i.g.g.a.example",
+  "@b-i-t-c-h",
+  "@f-a-g-g-o-t_user",
+] as const;
 
 const invalidAddressLikeCases = [
   "shit@",
@@ -163,8 +202,34 @@ describe("reviewed English language pack", () => {
         mode: "strict",
       });
       expect(text.slice(match[0], match[1]).toLowerCase()).toMatch(
-        /^(?:fuck(?:ed|ing)?|shit|dick|motherfucker|cock|bitch|bastard)$/u,
+        /^(?:fuck(?:ed|ing)?|shit|dick|motherfucker|cock|bitch|whore|nigga|suck|fag|faggot|bastard)$/u,
       );
+    },
+  );
+
+  it.each(reviewedLooseCases)(
+    "matches reviewed loose case %s with stable metadata",
+    (text, ruleId, category, severity) => {
+      const match = englishProfanityFilter.analyze(text)[0];
+
+      expect(match).toMatchObject({
+        0: 0,
+        1: text.length,
+        ruleId,
+        category,
+        severity,
+        mode: "loose",
+      });
+      expect(englishProfanityFilter.censor(text)).toBe("*".repeat(text.length));
+    },
+  );
+
+  it.each(excludedLooseContextCases)(
+    "does not match loose rule in excluded context %s",
+    (text) => {
+      expect(englishProfanityFilter.check(text)).toBe(false);
+      expect(englishProfanityFilter.analyze(text)).toEqual([]);
+      expect(englishProfanityFilter.censor(text)).toBe(text);
     },
   );
 
