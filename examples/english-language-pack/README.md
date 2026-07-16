@@ -13,20 +13,22 @@ contextual moderation.
 
 ## Opt-in API
 
-The public package exports a validated dictionary, a shared read-only filter,
-and a factory for isolated mutable filters:
+The English subpath exports a validated dictionary, a shared read-only filter,
+a factory for isolated mutable filters, and a declarative profile. Its short
+names match the Russian subpath:
 
 ```ts
 import {
-  createEnglishProfanityFilter,
-  englishProfanityDictionary,
-  englishProfanityFilter,
-} from "@textfilters/profanity";
+  createFilter,
+  dictionary,
+  filter,
+  profile,
+} from "@textfilters/profanity/en";
 
-englishProfanityFilter.check("reviewed English text");
-englishProfanityFilter.analyze("reviewed English text");
+filter.check("reviewed English text");
+filter.analyze("reviewed English text");
 
-const mutableEnglishFilter = createEnglishProfanityFilter();
+const mutableEnglishFilter = createFilter();
 mutableEnglishFilter.addStrict("tenant-only-term");
 ```
 

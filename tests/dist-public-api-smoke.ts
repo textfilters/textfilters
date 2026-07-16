@@ -1,6 +1,8 @@
 import type { TextCodePointRange } from "@textfilters/core";
 import {
   compileProfanityDictionary,
+  composeProfanityProfiles,
+  createCustomProfanityFilter,
   createEnglishProfanityFilter,
   createProfanityFilter,
   createProfanityFilterFromCompiledDictionary,
@@ -11,10 +13,12 @@ import {
   filter,
   PROFANITY_FILTER_NAME,
   russianProfanityDictionary,
+  type ComposedProfanityFilter,
   type CompiledProfanityDictionary,
   validateProfanityLanguageDictionary,
   type ProfanityCategory,
   type ProfanityFilter,
+  type ProfanityLanguageProfile,
   type ProfanityLanguageDictionary,
   type ProfanityLanguageDictionaryValidationIssue,
   type ProfanityLanguageRuleDefinition,
@@ -28,6 +32,18 @@ import {
   type ProfanityTaxonomyMetadata,
   type ReadonlyProfanityFilter,
 } from "../dist/index.js";
+import {
+  createFilter as createEnglishFilter,
+  dictionary as englishDictionaryFromEntrypoint,
+  filter as englishFilterFromEntrypoint,
+  profile as englishProfile,
+} from "@textfilters/profanity/en";
+import {
+  createFilter as createRussianFilter,
+  dictionary as russianDictionaryFromEntrypoint,
+  filter as russianFilterFromEntrypoint,
+  profile as russianProfile,
+} from "@textfilters/profanity/ru";
 
 interface CoreRangeScannerLike {
   readonly name?: string;
@@ -78,6 +94,12 @@ const compiledDictionaryFilter: ProfanityFilter =
 const sharedFilter: ReadonlyProfanityFilter = filter;
 const sharedEnglishFilter: ReadonlyProfanityFilter = englishProfanityFilter;
 const mutableEnglishFilter: ProfanityFilter = createEnglishProfanityFilter();
+const languageProfile: ProfanityLanguageProfile = englishProfile;
+const configuredFilter: ComposedProfanityFilter = composeProfanityProfiles([
+  russianProfile,
+  languageProfile,
+]);
+const customFilter = createCustomProfanityFilter({ strict: ["custom"] });
 const scannerOptions: ProfanityScannerOptions = {
   filter: strict,
   matchOptions: options,
@@ -109,6 +131,8 @@ filter.check("plain text");
 sharedFilter.censor("plain text");
 sharedEnglishFilter.censor("fucking text");
 mutableEnglishFilter.addStrict("tenant-only-term");
+configuredFilter.check("бля shit");
+customFilter.check("custom");
 dictionaryFilter.check("plain text");
 compiledDictionaryFilter.check("plain text");
 
@@ -135,8 +159,31 @@ if (
   throw new Error("Unexpected English language pack declaration surface.");
 }
 
+if (configuredFilter.censor("бля shit") !== "*** ****") {
+  throw new Error("Unexpected configured language profile behavior.");
+}
+
+if (
+  configuredFilter.analyze("shit")[0]?.profileId !== "en:default" ||
+  createProfanityScanner({ filter: configuredFilter }).allocationAware !== true
+) {
+  throw new Error("Unexpected profile provenance or streaming surface.");
+}
+
+if (
+  englishDictionaryFromEntrypoint !== englishProfanityDictionary ||
+  englishFilterFromEntrypoint !== englishProfanityFilter ||
+  !createEnglishFilter().check("shit") ||
+  russianDictionaryFromEntrypoint !== russianProfanityDictionary ||
+  russianFilterFromEntrypoint !== filter ||
+  !createRussianFilter().check("бля")
+) {
+  throw new Error("Unexpected language entrypoint surface.");
+}
+
 if (
   compiledDictionary.language !== "ru" ||
+  compiledDictionary.normalization !== "cyrillic-homoglyphs" ||
   compiledDictionary.strictRuleCount === 0 ||
   compiledDictionary.looseRuleCount === 0
 ) {

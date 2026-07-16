@@ -14,6 +14,12 @@ homoglyph folding, `ё` to `е` folding, and zero-width replacement with a regul
 split marker. Do not introduce normalization that inserts, deletes, or reorders
 UTF-16 code units unless range mapping is redesigned first.
 
+Language dictionaries select either `cyrillic-homoglyphs` or
+`latin-preserving`. Both strategies must preserve UTF-16 length. New strategies
+must be implemented and reviewed inside this package; dictionary authors cannot
+inject arbitrary normalization callbacks. Older dictionaries that omit the
+strategy keep the Cyrillic-homoglyph compatibility default.
+
 ## UTF-16 Source Ranges
 
 All ranges are UTF-16 offsets into the original source string. This is why
@@ -23,13 +29,25 @@ length around emoji and other astral code points.
 ## Runtime Literals Vs Internal Built-In Rules
 
 Runtime dictionary terms from `createProfanityFilter(strict, loose)`,
+`createCustomProfanityFilter({ strict, loose })`,
 `setStrict`, `setLoose`, `addStrict`, and `addLoose` are normalized literals.
 They are not regular expressions.
 
-The exported `filter` is a shared mutable default instance. Its mutation methods
-are intentionally process-local shared state for backward compatibility. New
-runtime dictionary customization should prefer factory-created filters so
-application, tenant, request, or test-specific terms remain isolated.
+The exported `filter` is a shared read-only default instance. Factory-created
+filters remain the mutable boundary, so application, tenant, request, or
+test-specific terms stay isolated. Filters returned by
+`composeProfanityProfiles()` are also read-only and preserve each selected
+profile's maintained runtime policy.
+
+Language profiles are declarative objects with stable `id`, `languageTag`, and
+a ready-to-use read-only filter. Composition identity is based on `id`, not the
+language tag, so multiple explicit profiles may cover the same language.
+
+Composed `analyze()` output preserves overlapping strict, loose, and profile
+evidence and annotates it with profile provenance. Censoring and legacy scanner
+range output may merge equivalent source ranges, but scanner metadata must keep
+the original match evidence. Sink streaming may use profile and matcher order
+to preserve early stop.
 
 The built-in Russian corpus is package-owned, human-maintained language
 dictionary data and may use controlled internal rules. Keep user-provided terms

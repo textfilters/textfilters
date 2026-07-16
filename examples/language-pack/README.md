@@ -17,8 +17,9 @@ examples/language-pack/
 - `package.json` shows hypothetical package metadata for an unpublished
   language pack named `@textfilters/profanity-zz`.
 - `src/dictionary.ts` keeps the human-maintained source dictionary.
-- `src/index.ts` validates that dictionary, creates a filter from it, and
-  exports both values from the hypothetical package entrypoint.
+- `src/index.ts` validates that dictionary, creates a filter and declarative
+  profile from it, and exports all three values from the hypothetical package
+  entrypoint.
 
 ## Starting a Real Package
 
@@ -65,6 +66,7 @@ import type { ProfanityLanguageDictionary } from "@textfilters/profanity";
 
 export const zzProfanityDictionary = {
   language: "zz",
+  normalization: "latin-preserving",
   rules: [
     {
       id: "zz.vulgar.qwr",
@@ -83,7 +85,8 @@ export const zzProfanityDictionary = {
 ```
 
 The example terms are neutral placeholders. A real external pack should replace
-them with its own reviewed language data and policy tests.
+them with its own reviewed language data and policy tests, and select either
+`latin-preserving` or `cyrillic-homoglyphs` based on reviewed language policy.
 
 ## Validation
 
@@ -113,12 +116,13 @@ report. Text output remains the default for local terminal use.
 
 ## Package Entrypoint
 
-A future external package can expose a validated dictionary and a ready-to-use
-filter from its public entrypoint:
+A future external package can expose a validated dictionary, a ready-to-use
+filter, and a declarative profile from its public entrypoint:
 
 ```ts
 import {
   createProfanityFilterFromDictionary,
+  defineProfanityLanguageProfile,
   validateProfanityLanguageDictionary,
 } from "../../../src/index.js";
 
@@ -136,6 +140,11 @@ export { zzProfanityDictionary };
 export const zzProfanityFilter = createProfanityFilterFromDictionary(
   zzProfanityDictionary,
 );
+export const zzProfanityProfile = defineProfanityLanguageProfile({
+  id: "zz:default",
+  languageTag: "zz",
+  filter: zzProfanityFilter,
+});
 ```
 
 In a real external package, replace `../../../src/index.js` with

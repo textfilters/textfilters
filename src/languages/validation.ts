@@ -1,11 +1,15 @@
 import type { ProfanityCategory, ProfanitySeverity } from "../types.js";
 import { loosenInternalRuleSource } from "../matchers/internal-rules.js";
-import { languageRuleSourcePattern } from "./profanity.js";
+import {
+  languageRuleSourcePattern,
+  type ProfanityNormalizationStrategy,
+} from "./profanity.js";
 
 export type ProfanityLanguageDictionaryValidationIssueCode =
   | "invalid_dictionary"
   | "missing_language"
   | "invalid_language"
+  | "invalid_normalization"
   | "missing_rules"
   | "invalid_rules"
   | "empty_rules"
@@ -57,6 +61,11 @@ const ALLOWED_PROFANITY_SEVERITIES = new Set<unknown>([
   "soft",
 ] as const satisfies readonly ProfanitySeverity[]);
 
+const ALLOWED_NORMALIZATION_STRATEGIES = new Set<unknown>([
+  "cyrillic-homoglyphs",
+  "latin-preserving",
+] as const satisfies readonly ProfanityNormalizationStrategy[]);
+
 const ALLOWED_RULE_KEYS = new Set([
   "id",
   "category",
@@ -104,10 +113,30 @@ export const validateProfanityLanguageDictionary = (
   }
 
   validateLanguage(dictionary, issues);
+  validateNormalization(dictionary, issues);
   validateRules(dictionary, issues);
   validateGeneratedMetadata(dictionary, issues);
 
   return issues;
+};
+
+const validateNormalization = (
+  dictionary: Record<string, unknown>,
+  issues: ProfanityLanguageDictionaryValidationIssue[],
+): void => {
+  if (
+    "normalization" in dictionary &&
+    dictionary.normalization !== undefined &&
+    !ALLOWED_NORMALIZATION_STRATEGIES.has(dictionary.normalization)
+  ) {
+    issues.push(
+      issue(
+        "normalization",
+        "invalid_normalization",
+        "Dictionary normalization must be cyrillic-homoglyphs or latin-preserving.",
+      ),
+    );
+  }
 };
 
 const validateLanguage = (

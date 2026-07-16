@@ -134,6 +134,12 @@ If both `severities` and `minSeverity` are provided, the rule is intersection: a
 match must satisfy the exact severity set and the threshold. This keeps the
 current meaning of `severities` intact while allowing callers to narrow further.
 
+`composeProfanityProfiles()` uses the same intersection rule between a
+profile selection's `matchOptions` and options passed to `analyze()`, `check()`,
+or `censor()`. Category and exact-severity arrays are intersected, and the
+stronger of two `minSeverity` thresholds wins. A call cannot broaden policy
+already attached to a selected profile.
+
 ## Compatibility Constraints
 
 Threshold filtering must preserve these constraints:

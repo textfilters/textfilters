@@ -3,6 +3,7 @@ import type { ProfanityLanguageDictionary } from "../profanity.js";
 export const createReviewedEnglishProfanityDictionary = () =>
   ({
     language: "en",
+    normalization: "latin-preserving",
     rules: [
       {
         id: "en.obscene.fuck.family",

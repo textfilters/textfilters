@@ -1,4 +1,4 @@
-import type { TextCodePointRange } from "@textfilters/core";
+import { mergeRanges, type TextCodePointRange } from "@textfilters/core";
 import {
   canStreamProfanityMatches,
   filter as sharedProfanityFilter,
@@ -61,11 +61,13 @@ function scanProfanity(
   );
   const codePointIndexForUtf16Offset = (offset: number) =>
     codePointIndexByUtf16Offset[offset] ?? input.codePoints.length;
-  const ranges = matches.map(
-    (match): TextCodePointRange => [
-      codePointIndexForUtf16Offset(match[0]),
-      codePointIndexForUtf16Offset(match[1]),
-    ],
+  const ranges = mergeRanges(
+    matches.map(
+      (match): TextCodePointRange => [
+        codePointIndexForUtf16Offset(match[0]),
+        codePointIndexForUtf16Offset(match[1]),
+      ],
+    ),
   );
 
   return {

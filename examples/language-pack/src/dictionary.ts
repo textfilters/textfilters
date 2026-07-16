@@ -2,6 +2,7 @@ import type { ProfanityLanguageDictionary } from "@textfilters/profanity";
 
 export const zzProfanityDictionary = {
   language: "zz",
+  normalization: "latin-preserving",
   rules: [
     {
       id: "zz.vulgar.qwr",

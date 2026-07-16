@@ -344,6 +344,57 @@ describe("language dictionary validation", () => {
     );
   });
 
+  it("uses an explicit normalization strategy without language conditionals", () => {
+    const dictionary = {
+      language: "zz",
+      normalization: "latin-preserving",
+      rules: [
+        {
+          id: "zz.vulgar.mud",
+          category: "VULGAR",
+          severity: "low",
+          source: "муд",
+          match: { strict: {} },
+        },
+      ],
+    } as const satisfies ProfanityLanguageDictionary;
+
+    expect(createProfanityFilterFromDictionary(dictionary).check("mуд")).toBe(
+      false,
+    );
+    expect(
+      createProfanityFilterFromDictionary(dictionary, {
+        normalization: "cyrillic-homoglyphs",
+      }).check("mуд"),
+    ).toBe(true);
+    expect(compileProfanityDictionary(dictionary).normalization).toBe(
+      "latin-preserving",
+    );
+  });
+
+  it("reports unsupported dictionary normalization strategies", () => {
+    const dictionary = {
+      language: "zz",
+      normalization: "automatic",
+      rules: [
+        {
+          id: "zz.vulgar.qwr",
+          category: "VULGAR",
+          severity: "low",
+          source: "qwr",
+          match: { strict: {} },
+        },
+      ],
+    };
+
+    expect(
+      issueSummary(validateProfanityLanguageDictionary(dictionary)),
+    ).toContainEqual({
+      path: "normalization",
+      code: "invalid_normalization",
+    });
+  });
+
   it("treats undefined loose option values as absent", () => {
     const dictionary = {
       language: "zz",

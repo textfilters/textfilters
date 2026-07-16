@@ -1,5 +1,6 @@
 import {
   createProfanityFilterFromDictionary,
+  defineProfanityLanguageProfile,
   validateProfanityLanguageDictionary,
 } from "../../../src/index.js";
 
@@ -17,3 +18,8 @@ export { zzProfanityDictionary };
 export const zzProfanityFilter = createProfanityFilterFromDictionary(
   zzProfanityDictionary,
 );
+export const zzProfanityProfile = defineProfanityLanguageProfile({
+  id: "zz:default",
+  languageTag: "zz",
+  filter: zzProfanityFilter,
+});

@@ -1,5 +1,1 @@
-export {
-  createEnglishProfanityFilter,
-  englishProfanityDictionary,
-  englishProfanityFilter,
-} from "../../../src/index.js";
+export * from "../../../src/entrypoints/en.js";

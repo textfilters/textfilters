@@ -8,7 +8,11 @@ import type {
   ProfanityTermList,
 } from "../../types.js";
 
-import { createProfanityFilterFromDictionary } from "../../filter.js";
+import {
+  createProfanityFilterFromDictionary,
+  registerProfanityMatchStreamer,
+  streamProfanityMatches,
+} from "../../filter.js";
 import { normalizeLiteralTerm } from "../../matchers/literals.js";
 import { normalizeForMatchSameLenWithoutHomoglyphs } from "../../normalization/text.js";
 import { createReviewedEnglishProfanityDictionary } from "./dictionary.js";
@@ -43,40 +47,62 @@ export const createEnglishProfanityFilter = (): ProfanityFilter => {
   const runtimeStrict = new Map<string, RuntimeLiteralRecord>();
   const runtimeLoose = new Map<string, RuntimeLiteralRecord>();
 
+  const streamMatches = (
+    text: unknown,
+    options: ProfanityMatchOptions | undefined,
+    visit: (match: ProfanityMatchRange) => boolean | void,
+  ): boolean => {
+    const source = normalizeTextInput(text);
+    const normalized = normalizeForMatchSameLenWithoutHomoglyphs(source);
+    const strictSnapshot = new Map(runtimeStrict);
+    const looseSnapshot = new Map(runtimeLoose);
+    const completed = streamProfanityMatches(
+      baseFilter,
+      source,
+      undefined,
+      (match) => {
+        const selected = selectEnglishMatch(
+          normalized,
+          match,
+          options,
+          strictSnapshot,
+          looseSnapshot,
+        );
+        return selected === undefined ? true : visit(selected);
+      },
+    );
+
+    if (completed === undefined) {
+      throw new TypeError(
+        "The English profanity filter cannot stream matches.",
+      );
+    }
+
+    return completed;
+  };
+
   const analyze = (
     text: unknown,
     options?: ProfanityMatchOptions,
   ): ProfanityMatchRange[] => {
-    const source = normalizeTextInput(text);
-    const normalized = normalizeForMatchSameLenWithoutHomoglyphs(source);
-
-    return baseFilter.analyze(source).flatMap((match) => {
-      if (!isMaintainedRuleMatch(match)) {
-        return matchesTaxonomy(match, options) ? [match] : [];
-      }
-
-      const candidates: ProfanityMatchRange[] = [];
-      if (!hasExcludedMaintainedContext(normalized, match)) {
-        candidates.push(match);
-      }
-
-      const key = normalized.slice(match[0], match[1]).toLowerCase();
-      const runtimeRecord = runtimeStrict.get(key) ?? runtimeLoose.get(key);
-      if (runtimeRecord !== undefined) {
-        candidates.push(runtimeMatchFor(match, runtimeRecord));
-      }
-
-      const selected = candidates.find((candidate) =>
-        matchesTaxonomy(candidate, options),
-      );
-      return selected === undefined ? [] : [selected];
+    const matches: ProfanityMatchRange[] = [];
+    streamMatches(text, options, (match) => {
+      matches.push(match);
     });
+    return matches;
   };
 
-  return {
+  const filter: ProfanityFilter = {
     name: baseFilter.name,
     analyze,
-    check: (text, options) => analyze(text, options).length > 0,
+    check: (text, options) => {
+      let found = false;
+      streamMatches(text, options, () => {
+        found = true;
+        return false;
+      });
+      return found;
+    },
     censor: (text, options) => {
       const source = normalizeTextInput(text);
       return maskUtf16Ranges(source, analyze(source, options));
@@ -98,6 +124,37 @@ export const createEnglishProfanityFilter = (): ProfanityFilter => {
       addRuntimeLiteral(runtimeLoose, term, "loose");
     },
   };
+
+  registerProfanityMatchStreamer(filter, (text, options, visit) =>
+    streamMatches(text, options, visit),
+  );
+
+  return filter;
+};
+
+const selectEnglishMatch = (
+  normalized: string,
+  match: ProfanityMatchRange,
+  options: ProfanityMatchOptions | undefined,
+  runtimeStrict: ReadonlyMap<string, RuntimeLiteralRecord>,
+  runtimeLoose: ReadonlyMap<string, RuntimeLiteralRecord>,
+): ProfanityMatchRange | undefined => {
+  if (!isMaintainedRuleMatch(match)) {
+    return matchesTaxonomy(match, options) ? match : undefined;
+  }
+
+  const candidates: ProfanityMatchRange[] = [];
+  if (!hasExcludedMaintainedContext(normalized, match)) {
+    candidates.push(match);
+  }
+
+  const key = normalized.slice(match[0], match[1]).toLowerCase();
+  const runtimeRecord = runtimeStrict.get(key) ?? runtimeLoose.get(key);
+  if (runtimeRecord !== undefined) {
+    candidates.push(runtimeMatchFor(match, runtimeRecord));
+  }
+
+  return candidates.find((candidate) => matchesTaxonomy(candidate, options));
 };
 
 const replaceRuntimeLiterals = (

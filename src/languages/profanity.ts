@@ -3,7 +3,16 @@ import type { ProfanityCategory, ProfanitySeverity } from "../types.js";
 
 export interface ProfanityLanguageDictionary {
   readonly language: string;
+  readonly normalization?: ProfanityNormalizationStrategy;
   readonly rules: readonly ProfanityLanguageRuleDefinition[];
+}
+
+export type ProfanityNormalizationStrategy =
+  | "cyrillic-homoglyphs"
+  | "latin-preserving";
+
+export interface ProfanityDictionaryCompileOptions {
+  readonly normalization?: ProfanityNormalizationStrategy;
 }
 
 export interface ProfanityLanguageRuleDefinition {

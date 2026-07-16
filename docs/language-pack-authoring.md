@@ -18,11 +18,13 @@ shape directly, normally as JSON source dictionaries. The built-in Russian
 dictionary also exports that shape, but some package-owned Russian family files
 use internal TypeScript helpers to reduce repeated boilerplate.
 
-A dictionary has a language code and a list of rules:
+A dictionary has a language code, a same-length normalization strategy, and a
+list of rules:
 
 ```json
 {
   "language": "zz",
+  "normalization": "latin-preserving",
   "rules": [
     {
       "id": "zz.vulgar.example",
@@ -145,12 +147,21 @@ transliteration coverage should be authored as explicit reviewed dictionary
 rules with taxonomy metadata and false-positive tests, not as a global runtime
 normalization switch.
 
-English dictionaries preserve Latin letters during matching so maintained
-English sources remain readable and do not pass through the built-in Russian
-homoglyph folding step. Other language dictionaries retain the existing
-normalization behavior for compatibility. Filters created from an English
-dictionary apply the same Latin-preserving normalization to later runtime
-literal mutations.
+Language dictionaries should explicitly select `latin-preserving` or
+`cyrillic-homoglyphs`. The strategy applies both to maintained rules and later
+runtime literal mutations on filters created from the dictionary. Both
+strategies preserve UTF-16 length. Arbitrary normalization callbacks are not a
+public language-pack extension point because they could invalidate source
+ranges. Older dictionaries that omit the field retain the
+`cyrillic-homoglyphs` compatibility default.
+
+Callers may override the dictionary strategy for one compiled snapshot:
+
+```ts
+const filter = createProfanityFilterFromDictionary(dictionary, {
+  normalization: "latin-preserving",
+});
+```
 
 ## Human-Maintained JSON
 
@@ -261,6 +272,7 @@ profanity-validate-language-dictionary --format json path/to/profanity.json
 The validator checks:
 
 - the dictionary language and rules are present;
+- a declared normalization strategy is package-supported;
 - every rule has a stable explicit semantic id;
 - id language prefixes match the dictionary language;
 - id category segments match the rule category;
@@ -285,6 +297,7 @@ Common fixes:
 | Code                     | Fix                                                                  |
 | ------------------------ | -------------------------------------------------------------------- |
 | `invalid_language`       | Use a lowercase two-letter language code such as `zz`.               |
+| `invalid_normalization`  | Select `latin-preserving` or `cyrillic-homoglyphs`.                  |
 | `invalid_id`             | Rename the rule to a semantic dotted id such as `zz.vulgar.example`. |
 | `suspicious_id`          | Align the id category segment with the `category` field.             |
 | `source_not_trimmed`     | Remove leading or trailing whitespace from `source`.                 |
@@ -303,6 +316,38 @@ filters from the same dictionary can use
 is a snapshot of the source dictionary at compile time, and each created filter
 receives isolated mutable state. External packs should avoid depending on
 internal matcher modules or private matcher representations.
+
+A language package that needs to participate in multi-language composition may
+also export a `ProfanityLanguageProfile` next to its maintained dictionary. The
+entrypoint keeps data and runtime policy discoverable together. Profiles are
+declarative and reuse a ready-to-use read-only filter, so composition does not
+compile the dictionary again:
+
+```ts
+import {
+  createProfanityFilterFromDictionary,
+  defineProfanityLanguageProfile,
+  type ProfanityLanguageProfile,
+} from "@textfilters/profanity";
+import dictionary from "./profanity.json" with { type: "json" };
+
+export const filter = createProfanityFilterFromDictionary(dictionary);
+export const profile: ProfanityLanguageProfile = defineProfanityLanguageProfile(
+  {
+    id: `${dictionary.language}:default`,
+    languageTag: dictionary.language,
+    filter,
+  },
+);
+```
+
+Consumers can import that explicit language entrypoint and pass the profile to
+`composeProfanityProfiles([...])`. Stable profile ids allow multiple explicit
+profiles to share a language tag, for example a maintained default profile and
+an application extension. The root package does not maintain a global
+string-to-language registry. Dictionary `language` remains the validator's
+lowercase ISO 639-1 identifier, while `languageTag` is the runtime provenance
+field and may use a more specific BCP 47 tag when a profile has regional policy.
 
 Runtime mutations on a dictionary-backed filter still use normalized literals.
 Calls such as `setStrict`, `setLoose`, `addStrict`, and `addLoose` do not expose

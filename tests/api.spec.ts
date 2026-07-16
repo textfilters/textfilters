@@ -2,6 +2,7 @@ import { describe, expect, expectTypeOf, it } from "vitest";
 
 import {
   compileProfanityDictionary,
+  createCustomProfanityFilter,
   createProfanityFilter,
   createProfanityFilterFromCompiledDictionary,
   createProfanityFilterFromDictionary,
@@ -182,6 +183,16 @@ describe("public API", () => {
     expect(profanityFilter(["fff"], []).censor("fff ggg")).toBe("*** ggg");
   });
 
+  it("creates custom term filters through an unambiguous object factory", () => {
+    const custom = createCustomProfanityFilter({
+      strict: ["alpha"],
+      loose: ["beta"],
+    });
+
+    expect(custom.censor("alpha b-e-t-a")).toBe("***** *******");
+    expect(createCustomProfanityFilter().check("блядь")).toBe(false);
+  });
+
   it("keeps the shared default filter read-only", () => {
     const errorMessage =
       "The shared profanity filter is read-only. Use createProfanityFilter() or a dictionary factory to create a mutable filter.";
@@ -244,6 +255,7 @@ describe("public API", () => {
 
     expect(Object.keys(compiled)).toEqual([
       "language",
+      "normalization",
       "strictRuleCount",
       "looseRuleCount",
     ]);
@@ -354,6 +366,7 @@ describe("public API", () => {
 
     expect(compiled).toEqual({
       language: "zz",
+      normalization: "cyrillic-homoglyphs",
       strictRuleCount: 1,
       looseRuleCount: 1,
     });

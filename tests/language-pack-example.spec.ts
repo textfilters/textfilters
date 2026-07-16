@@ -5,7 +5,7 @@ import {
   validateProfanityLanguageDictionary,
 } from "../src";
 
-const { zzProfanityDictionary, zzProfanityFilter } =
+const { zzProfanityDictionary, zzProfanityFilter, zzProfanityProfile } =
   await import("../examples/language-pack/src/index.js");
 
 describe("language pack example", () => {
@@ -30,5 +30,10 @@ describe("language pack example", () => {
 
     expect(zzProfanityFilter.check("qwr")).toBe(true);
     expect(zzProfanityFilter.check("vnn")).toBe(true);
+    expect(zzProfanityProfile).toMatchObject({
+      id: "zz:default",
+      languageTag: "zz",
+      filter: zzProfanityFilter,
+    });
   });
 });

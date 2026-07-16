@@ -13,7 +13,9 @@ import {
 import { normalizeTermList } from "./matchers/terms.js";
 import {
   dictionaryRulesForMode,
+  type ProfanityDictionaryCompileOptions,
   type ProfanityLanguageDictionary,
+  type ProfanityNormalizationStrategy,
 } from "./languages/profanity.js";
 import {
   validateProfanityLanguageDictionary,
@@ -82,6 +84,7 @@ interface LooseCandidatePrefilter {
 
 export interface CompiledProfanityDictionary {
   readonly language: string;
+  readonly normalization: ProfanityNormalizationStrategy;
   readonly strictRuleCount: number;
   readonly looseRuleCount: number;
 }
@@ -101,6 +104,15 @@ const compiledDictionaryStates = new WeakMap<
 const COMPILED_DICTIONARY_STATE =
   "__textfiltersProfanityCompiledDictionaryState";
 const filterStates = new WeakMap<ReadonlyProfanityFilter, FilterState>();
+type ProfanityMatchStreamer = (
+  text: string,
+  options: ProfanityMatchOptions | undefined,
+  visit: (match: ProfanityMatchRange) => boolean | void,
+) => boolean;
+const profanityMatchStreamers = new WeakMap<
+  ReadonlyProfanityFilter,
+  ProfanityMatchStreamer
+>();
 
 type CompiledProfanityDictionaryWithState = CompiledProfanityDictionary & {
   readonly [COMPILED_DICTIONARY_STATE]?: CompiledDictionaryState;
@@ -108,7 +120,14 @@ type CompiledProfanityDictionaryWithState = CompiledProfanityDictionary & {
 
 export const canStreamProfanityMatches = (
   filter: ReadonlyProfanityFilter,
-): boolean => filterStates.has(filter);
+): boolean => filterStates.has(filter) || profanityMatchStreamers.has(filter);
+
+export const registerProfanityMatchStreamer = (
+  filter: ReadonlyProfanityFilter,
+  streamer: ProfanityMatchStreamer,
+): void => {
+  profanityMatchStreamers.set(filter, streamer);
+};
 
 export const createProfanityFilter = (
   strictTerms: ProfanityTermList = STRICT_BASE,
@@ -117,12 +136,18 @@ export const createProfanityFilter = (
 
 export const compileProfanityDictionary = (
   dictionary: ProfanityLanguageDictionary,
+  options: ProfanityDictionaryCompileOptions = {},
 ): CompiledProfanityDictionary => {
   assertValidProfanityLanguageDictionary(dictionary);
 
-  const state = compileDictionaryState(dictionary);
+  const normalization =
+    options.normalization ??
+    dictionary.normalization ??
+    DEFAULT_NORMALIZATION_STRATEGY;
+  const state = compileDictionaryState(dictionary, normalization);
   const compiled: CompiledProfanityDictionary = {
     language: dictionary.language,
+    normalization,
     strictRuleCount: state.strictTerms.internal.length,
     looseRuleCount: state.looseTerms.internal.length,
   };
@@ -138,9 +163,10 @@ export const compileProfanityDictionary = (
 
 export const createProfanityFilterFromDictionary = (
   dictionary: ProfanityLanguageDictionary,
+  options: ProfanityDictionaryCompileOptions = {},
 ): ProfanityFilter =>
   createProfanityFilterFromCompiledDictionary(
-    compileProfanityDictionary(dictionary),
+    compileProfanityDictionary(dictionary, options),
   );
 
 export const createProfanityFilterFromCompiledDictionary = (
@@ -292,6 +318,7 @@ function createState(
 
 function compileDictionaryState(
   dictionary: ProfanityLanguageDictionary,
+  normalization: ProfanityNormalizationStrategy,
 ): CompiledDictionaryState {
   const strictTerms = builtInRuleTerms(
     dictionaryRulesForMode(dictionary, "strict"),
@@ -301,10 +328,7 @@ function compileDictionaryState(
     dictionaryRulesForMode(dictionary, "loose"),
     "loose",
   );
-  const normalizeForMatch =
-    dictionary.language === "en"
-      ? normalizeForMatchSameLenWithoutHomoglyphs
-      : normalizeForMatchSameLen;
+  const normalizeForMatch = normalizerForStrategy(normalization);
 
   return {
     strictTerms,
@@ -314,6 +338,22 @@ function compileDictionaryState(
     normalizeForMatch,
   };
 }
+
+const DEFAULT_NORMALIZATION_STRATEGY: ProfanityNormalizationStrategy =
+  "cyrillic-homoglyphs";
+
+const normalizerForStrategy = (
+  strategy: ProfanityNormalizationStrategy,
+): LiteralNormalizer => {
+  switch (strategy) {
+    case "cyrillic-homoglyphs":
+      return normalizeForMatchSameLen;
+    case "latin-preserving":
+      return normalizeForMatchSameLenWithoutHomoglyphs;
+    default:
+      throw new TypeError(`Unsupported profanity normalization: ${strategy}`);
+  }
+};
 
 function createStateFromCompiledDictionary(
   state: CompiledDictionaryState,
@@ -570,6 +610,11 @@ export const streamProfanityMatches = (
   options: ProfanityMatchOptions | undefined,
   visit: (match: ProfanityMatchRange) => boolean | void,
 ): boolean | undefined => {
+  const customStreamer = profanityMatchStreamers.get(filter);
+  if (customStreamer !== undefined) {
+    return customStreamer(text, options, visit);
+  }
+
   const state = filterStates.get(filter);
   if (state === undefined) return undefined;
   const snapshot = snapshotFilterState(state);

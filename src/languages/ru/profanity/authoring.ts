@@ -28,6 +28,7 @@ export const russianFamilyDictionary = (
   rules: readonly ProfanityLanguageRuleDefinition[],
 ): ProfanityLanguageDictionary => ({
   language: "ru",
+  normalization: "cyrillic-homoglyphs",
   rules,
 });
 
@@ -75,6 +76,7 @@ export const russianProfileDictionary = (
 
   return {
     language: "ru",
+    normalization: "cyrillic-homoglyphs",
     rules,
   };
 };

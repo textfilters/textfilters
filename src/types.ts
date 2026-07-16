@@ -32,6 +32,11 @@ export interface ProfanityMatchRange extends Readonly<
   readonly severity?: ProfanitySeverity;
 }
 
+export interface ProfiledProfanityMatchRange extends ProfanityMatchRange {
+  readonly profileId: string;
+  readonly languageTag: string;
+}
+
 export const PROFANITY_FILTER_NAME = "profanity";
 
 export interface ReadonlyProfanityFilter {
@@ -49,6 +54,15 @@ export interface ProfanityFilter extends ReadonlyProfanityFilter {
   setLoose(list: ProfanityTermList): void;
   addStrict(term: unknown): void;
   addLoose(term: unknown): void;
+}
+
+export interface ComposedProfanityFilter extends ReadonlyProfanityFilter {
+  readonly profileIds: readonly string[];
+  readonly languageTags: readonly string[];
+  analyze(
+    text: unknown,
+    options?: ProfanityMatchOptions,
+  ): ProfiledProfanityMatchRange[];
 }
 
 export interface ProfanityScanInput {

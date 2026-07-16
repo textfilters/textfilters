@@ -30,14 +30,18 @@ A new external language pack is ready only when all of these are true:
 
 - It contains a real human-maintained dictionary for a specific language.
 - The dictionary follows the public `ProfanityLanguageDictionary` source shape.
+- The dictionary selects a reviewed package-owned normalization strategy.
 - Every rule has stable semantic ids, category metadata, severity metadata, and
   explicit strict or loose matching intent.
 - The pack validates its dictionary with
   `validateProfanityLanguageDictionary()` in tests or CI.
 - The pack has policy tests that cover expected matches, expected non-matches,
   metadata preservation, and representative false-positive risks.
-- The pack exposes a dictionary and, when useful, a ready-to-use filter created
-  with `createProfanityFilterFromDictionary()`.
+- The pack exposes symmetric `dictionary`, `filter`, `createFilter`, and
+  `profile` entrypoint names, with descriptive compatibility aliases when
+  needed.
+- The profile has a stable id, a language tag, and a ready-to-use read-only
+  filter created from the maintained dictionary policy.
 - The pack has a named maintainer or maintenance group that can review language
   changes, triage false positives, and make release decisions.
 - The pack has documentation explaining its language scope, policy boundaries,
@@ -81,9 +85,12 @@ until ongoing maintenance is credible.
 ## Current Boundaries
 
 The main package contains a reviewed English dictionary under
-`src/languages/en` and exposes it through an opt-in public API. It is not a
-separately published language package, does not change the built-in Russian
-dictionary, and does not add English rules to the shared default filter.
+`src/languages/en` and exposes it through the explicit
+`@textfilters/profanity/en` entrypoint. The bundled Russian profile is available
+from `@textfilters/profanity/ru`. These profiles can be composed without a
+global language registry. The English profile is not a separately published
+language package, does not change the built-in Russian dictionary, and does not
+add English rules to the shared default filter.
 
 A future separately published English package still requires a named maintainer
 or maintenance group that satisfies the ownership criteria above. Shipping a

@@ -35,6 +35,8 @@ npm install @textfilters/core @textfilters/profanity
 - Analyze matched ranges when a moderation decision needs categories,
   severities, or rule ids.
 - Use the shared built-in Russian filter for common read-only checks.
+- Compose explicit language profiles into one filter that analyzes the original
+  text with each profile and masks the combined ranges once.
 - Build isolated per-application, per-tenant, or per-test dictionaries when
   runtime terms need to be changed.
 - Validate maintained language dictionaries before they are used in content
@@ -45,14 +47,30 @@ npm install @textfilters/core @textfilters/profanity
 ### Quick Start
 
 ```ts
-import { createProfanityFilter, filter } from "@textfilters/profanity";
+import { createCustomProfanityFilter, filter } from "@textfilters/profanity";
 
 const safeText = filter.censor("message text");
 const hasProfanity = filter.check("message text");
 const matches = filter.analyze("message text");
 
-const tenantFilter = createProfanityFilter(["strict-term"], ["loose-term"]);
+const tenantFilter = createCustomProfanityFilter({
+  strict: ["strict-term"],
+  loose: ["loose-term"],
+});
 const tenantSafeText = tenantFilter.censor("message text");
+```
+
+For explicit multi-language filtering, import each language profile from its
+own package entrypoint:
+
+```ts
+import { composeProfanityProfiles } from "@textfilters/profanity";
+import { profile as english } from "@textfilters/profanity/en";
+import { profile as russian } from "@textfilters/profanity/ru";
+
+const profanityFilter = composeProfanityProfiles([russian, english]);
+
+const safeText = profanityFilter.censor("mixed-language message text");
 ```
 
 The default shared instance is exported as `filter` and uses the built-in strict
@@ -60,8 +78,10 @@ and loose term lists. It is read-only for shared use: `check`, `censor`, and
 `analyze` are available, while `setStrict`, `setLoose`, `addStrict`, and
 `addLoose` throw instead of mutating process-wide state.
 
-Use `createProfanityFilter(...)` when per-request, per-tenant, or test-local
-dictionaries must be mutable and isolated from the shared `filter`.
+Use `createCustomProfanityFilter({ strict, loose })` for an unambiguous
+object-based custom-term API. The positional
+`createProfanityFilter(strict, loose)` factory remains available for backward
+compatibility and for callers that need a mutable built-in dictionary instance.
 
 ### Shared Default Vs Isolated Filters
 
@@ -74,7 +94,7 @@ Do not use the shared `filter` for application-specific, tenant-specific,
 request-specific, or test-local terms. Use a factory-created filter for those
 runtime dictionaries.
 
-Use `createProfanityFilter(...)`,
+Use `createCustomProfanityFilter(...)`, `createProfanityFilter(...)`,
 `createProfanityFilterFromDictionary(dictionary)`, or
 `createProfanityFilterFromCompiledDictionary(compiled)` when runtime mutation is
 part of the workflow. Each factory call returns an isolated mutable filter, so
@@ -218,6 +238,80 @@ needed. Taxonomy options apply the same match narrowing as `analyze()`. The
 boolean path checks compiled strict ranges before falling back to loose ranges,
 so a clear strict hit does not require building the full public match list.
 
+### `composeProfanityProfiles(profiles): ComposedProfanityFilter`
+
+Creates one read-only filter from explicit language profiles. The package ships
+the Russian profile from `@textfilters/profanity/ru` and the opt-in English
+profile from `@textfilters/profanity/en`. Both entrypoints export the uniform
+name `profile` for aliased imports and a descriptive long name for discovery.
+
+```ts
+import { composeProfanityProfiles } from "@textfilters/profanity";
+import { profile as english } from "@textfilters/profanity/en";
+import { profile as russian } from "@textfilters/profanity/ru";
+
+const multilingual = composeProfanityProfiles([russian, english]);
+
+multilingual.check("mixed-language message text");
+multilingual.censor("mixed-language message text");
+```
+
+Each profile is a frozen declarative object with stable `id`, `languageTag`, and
+a ready-to-use read-only `filter`. Composition does not compile its dictionaries
+again. Distinct profile ids may use the same language tag, which allows a
+maintained default profile and an explicit application extension to coexist.
+Repeating the same profile object is idempotent; different profile objects with
+the same id are rejected.
+
+The composed filter analyzes the same original input with every selected
+profile, sorts matches by source range, and masks all accepted UTF-16 ranges
+once. `analyze()` preserves strict and loose evidence and annotates every match
+with `profileId` and `languageTag`:
+
+```ts
+const [match] = multilingual.analyze("shit");
+console.log(match.profileId, match.languageTag, match.mode);
+```
+
+Equivalent source ranges are merged only for censoring and legacy scanner range
+output. Diagnostic metadata remains available in `analyze()` and scanner
+metadata. The composed filter never feeds already masked text from one profile
+into the next profile.
+
+Per-profile taxonomy policy is intersected with call-time options:
+
+```ts
+const selected = composeProfanityProfiles([
+  russian,
+  {
+    profile: english,
+    matchOptions: { categories: ["OBSCENE_MAT"] },
+  },
+]);
+```
+
+Configured filters expose only `analyze`, `check`, and `censor`. Use a custom or
+dictionary factory when mutable runtime terms are needed.
+`createProfanityScanner({ filter: multilingual })` exposes allocation-aware
+sink streaming when every selected profile supports it. Legacy `scan(input)`
+keeps source-ordered merged ranges and full match metadata; sink streaming keeps
+profile and matcher order so it can stop before later profiles are scanned.
+
+### `createCustomProfanityFilter(options?): ProfanityFilter`
+
+Creates an isolated mutable filter from explicit strict and loose runtime terms:
+
+```ts
+const custom = createCustomProfanityFilter({
+  strict: ["blocked"],
+  loose: ["banned"],
+});
+```
+
+Omitted lists are empty. This differs from `createProfanityFilter()` without
+arguments, which keeps the existing behavior of creating a mutable filter from
+the built-in Russian dictionary.
+
 ### `createProfanityFilter(strict?, loose?): ProfanityFilter`
 
 Creates a new mutable filter instance. Without arguments it uses compiled views
@@ -247,10 +341,10 @@ import {
   compileProfanityDictionary,
   createProfanityFilterFromDictionary,
   createProfanityFilterFromCompiledDictionary,
-  russianProfanityDictionary,
   validateProfanityLanguageDictionary,
   type ProfanityLanguageDictionary,
 } from "@textfilters/profanity";
+import { russianProfanityDictionary } from "@textfilters/profanity/ru";
 
 const dictionary: ProfanityLanguageDictionary = russianProfanityDictionary;
 const issues = validateProfanityLanguageDictionary(dictionary);
@@ -280,6 +374,39 @@ dictionary at compile time; mutating the source dictionary later only affects
 future direct `createProfanityFilterFromDictionary(dictionary)` calls or a new
 explicit compilation.
 
+Language dictionaries may declare one of the package-owned same-length
+normalization strategies:
+
+```ts
+const dictionary: ProfanityLanguageDictionary = {
+  language: "zz",
+  normalization: "latin-preserving",
+  rules: [
+    {
+      id: "zz.vulgar.example",
+      category: "VULGAR",
+      severity: "low",
+      source: "example",
+      match: { strict: {} },
+    },
+  ],
+};
+```
+
+The supported values are `cyrillic-homoglyphs` and `latin-preserving`.
+Callers can override the dictionary choice for a specific compilation without
+providing an arbitrary normalization callback:
+
+```ts
+const filter = createProfanityFilterFromDictionary(dictionary, {
+  normalization: "cyrillic-homoglyphs",
+});
+```
+
+The default remains `cyrillic-homoglyphs` when an older dictionary omits the
+field. The selected strategy is included in `CompiledProfanityDictionary`
+metadata and is reused by filters created from that compiled snapshot.
+
 Dictionary-backed matches preserve semantic rule ids, categories, and
 severities in `analyze()` output, and taxonomy filters apply to those metadata
 fields. Runtime dictionary terms remain normalized literals; language
@@ -288,28 +415,32 @@ data. Runtime calls such as `setStrict`, `setLoose`, `addStrict`, and `addLoose`
 only mutate the returned filter instance; they do not change the compiled
 dictionary object or other filters created from it.
 
-The package also ships a reviewed, opt-in English language pack:
+Both built-in language entrypoints expose the same short names: `profile`,
+`filter`, `dictionary`, and `createFilter`. Descriptive compatibility aliases
+remain available. For example:
 
 ```ts
 import {
-  createEnglishProfanityFilter,
-  englishProfanityDictionary,
-  englishProfanityFilter,
-} from "@textfilters/profanity";
+  createFilter,
+  dictionary,
+  filter,
+  profile,
+} from "@textfilters/profanity/en";
 
-englishProfanityFilter.check("fucking");
-englishProfanityFilter.censor("fucking");
+filter.check("fucking");
+filter.censor("fucking");
 
-const mutableEnglishFilter = createEnglishProfanityFilter();
+const mutableEnglishFilter = createFilter();
 mutableEnglishFilter.addStrict("tenant-only-term");
 ```
 
-`englishProfanityFilter` is a shared read-only filter initialized on first use.
-`createEnglishProfanityFilter()` returns an isolated mutable filter, while
-`englishProfanityDictionary` exposes the validated source dictionary. Importing
-the package does not add English rules to `filter`; the shared default remains
-Russian-only. The English pack is intentionally limited to its reviewed audit
-vocabulary and is not a broad toxicity or hate-speech classifier.
+The English `filter` is a shared read-only filter initialized on first use.
+`createFilter()` returns an isolated mutable filter, while `dictionary` exposes
+the validated source dictionary and `profile` participates in explicit
+composition. Importing the package does not add English rules to the root
+`filter`; the shared default remains Russian-only. The English pack is
+intentionally limited to its reviewed audit vocabulary and is not a broad
+toxicity or hate-speech classifier.
 
 The Russian dictionary is maintained as split family data with an explicit rule
 order. New high-risk family rules are expected to add nearby coverage and
@@ -472,6 +603,12 @@ into different compiled matcher views.
   `check`, `censor`, and `analyze` methods for built-in Russian behavior.
 - Use factory-created mutable filters for application-specific, tenant-specific,
   request-specific, or test-local runtime dictionary changes.
+- Multi-language selection is explicit through language profiles; importing the
+  root package never enables another language automatically.
+- Composed `analyze()` output preserves overlapping profile and match-mode
+  evidence; censoring and scanner range output merge equivalent source ranges.
+- Allocation-aware composed streaming is available only when every selected
+  profile exposes the internal streaming capability.
 - Built-in corpus behavior is intentionally locked by compatibility tests.
 
 ## Compatibility And Intentional Changes
@@ -490,6 +627,12 @@ Intentional public-package changes:
 - The filter exposes `check(text): boolean` for boolean-only detection.
 - `createProfanityFilter()` without arguments creates an instance with compiled
   views of the built-in Russian dictionary.
+- `composeProfanityProfiles()` composes explicit language entrypoints, preserves
+  profile provenance and policy, and masks combined source ranges once.
+- `createCustomProfanityFilter({ strict, loose })` provides an object-based
+  mutable custom-term factory without changing the positional compatibility API.
+- Language dictionaries select an explicit package-owned normalization strategy
+  instead of deriving runtime normalization from a language-name conditional.
 - The exported `filter` is a shared read-only default; factory-created filters
   are the mutable boundary for isolated runtime mutation.
 - Masking preserves JavaScript string length for astral code points.

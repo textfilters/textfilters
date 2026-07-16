@@ -4,6 +4,10 @@ import {
   type ProfanityMatchOptions,
   type ReadonlyProfanityFilter,
 } from "../../types.js";
+import {
+  registerProfanityMatchStreamer,
+  streamProfanityMatches,
+} from "../../filter.js";
 
 import { englishProfanityDictionary } from "./dictionary.js";
 import { createEnglishProfanityFilter } from "./filter.js";
@@ -27,3 +31,23 @@ export const englishProfanityFilter: ReadonlyProfanityFilter = Object.freeze({
   censor: (text: unknown, options?: ProfanityMatchOptions) =>
     getSharedEnglishFilter().censor(text, options),
 });
+
+registerProfanityMatchStreamer(
+  englishProfanityFilter,
+  (text, options, visit) => {
+    const completed = streamProfanityMatches(
+      getSharedEnglishFilter(),
+      text,
+      options,
+      visit,
+    );
+
+    if (completed === undefined) {
+      throw new TypeError(
+        "The shared English profanity filter cannot stream matches.",
+      );
+    }
+
+    return completed;
+  },
+);

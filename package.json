@@ -36,6 +36,14 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./ru": {
+      "types": "./dist/entrypoints/ru.d.ts",
+      "import": "./dist/entrypoints/ru.js"
+    },
+    "./en": {
+      "types": "./dist/entrypoints/en.d.ts",
+      "import": "./dist/entrypoints/en.js"
     }
   },
   "scripts": {

@@ -58,6 +58,8 @@ flowchart LR
   RuntimeAPI["createProfanityFilter(strict, loose)"] --> RuntimeTerms["runtime terms"]
   RuntimeTerms --> LiteralCompiler["matchers/literals"]
   LiteralCompiler --> Matchers
+  ProfileAPI["composeProfanityProfiles(profiles)"] --> Profiles["explicit language profiles"]
+  Profiles --> Matchers
   Matchers --> PublicAPI["filter API"]
   PublicAPI --> Ranges["ranges/strict and ranges/loose"]
 ```
@@ -96,9 +98,31 @@ pairings, and source formatting mistakes before the dictionary reaches compiled
 runtime views. The CLI is a thin JSON-file wrapper around that same validator;
 it does not compile matchers or change runtime behavior.
 
-The source tree is prepared for language profiles, but this package does not
-implement multi-language selection, external language packs, or a public pack API
-yet. The only built-in profile is Russian.
+Dictionary compilation selects a package-owned same-length normalization
+strategy from dictionary metadata or explicit compile options. The supported
+strategies are `cyrillic-homoglyphs` and `latin-preserving`; runtime code does
+not infer normalization by checking for a specific language code. Older
+dictionaries that omit the field retain the Cyrillic-homoglyph compatibility
+default.
+
+Multi-language selection is explicit rather than automatic. The package exports
+the bundled Russian and English profiles from `@textfilters/profanity/ru` and
+`@textfilters/profanity/en`. A profile is a declarative `id`, `languageTag`, and
+ready-to-use read-only filter rather than a filter factory. Composition therefore
+does not compile maintained dictionaries again.
+
+`composeProfanityProfiles()` runs every selected profile on the original source,
+annotates matches with profile provenance, preserves overlapping strict and loose
+evidence for analysis, and masks the merged UTF-16 ranges once. Distinct profile
+ids may share a language tag. Per-profile taxonomy options are intersected with
+call-time options, so local profile policy can only be narrowed by a caller.
+
+The composed filter registers a streaming capability when every child profile
+supports sink streaming. Legacy scanner output remains source-ordered and merges
+equivalent ranges while preserving full match metadata. Sink streaming keeps
+profile and matcher order so early stop can avoid scanning later profiles. The
+root shared `filter` remains Russian-only, and this package still does not
+publish external language packs.
 
 ## Strict And Loose Matching
 
@@ -151,7 +175,11 @@ The implementation is split by reading level:
 
 ```mermaid
 flowchart TD
-  API["filter.ts: public API and mutable state"] --> Terms["matchers/terms.ts: input cleanup"]
+  Factory["factory.ts: legacy and custom mutable factories"] --> API["filter.ts: matcher lifecycle and mutable state"]
+  Composer["composition.ts: read-only profile composition"] --> Profiles["languages/profile.ts: profile contract"]
+  Composer --> API
+  Profiles --> Languages
+  API --> Terms["matchers/terms.ts: input cleanup"]
   API --> Languages["languages/ru: built-in Russian dictionary profile"]
   Languages --> TermsLoaders["terms/*.ts: compatibility matcher views"]
   Terms --> Build["matchers/build.ts: combine internal rules and literals"]
@@ -171,6 +199,10 @@ range modules decide what parts of text can be masked.
 | File                                      | Responsibility                                                        |
 | ----------------------------------------- | --------------------------------------------------------------------- |
 | `src/filter.ts`                           | Public API lifecycle and orchestration.                               |
+| `src/factory.ts`                          | Backward-compatible and object-based mutable filter factories.        |
+| `src/composition.ts`                      | Read-only profile composition, provenance, policy, and streaming.     |
+| `src/languages/profile.ts`                | Public declarative language profile and selection contracts.          |
+| `src/entrypoints/ru.ts`, `en.ts`          | Explicit built-in language subpath entrypoints.                       |
 | `src/normalization/text.ts`               | Same-length normalization and code-point helpers.                     |
 | `src/constants/latin-to-cyr.ts`           | Shared homoglyph map used by normalization.                           |
 | `src/matchers/terms.ts`                   | Runtime term cleanup and deduplication.                               |

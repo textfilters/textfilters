@@ -63,6 +63,19 @@ interface ProfanityMatchRange {
 }
 ```
 
+Composed filters return the additive `ProfiledProfanityMatchRange` shape:
+
+```ts
+interface ProfiledProfanityMatchRange extends ProfanityMatchRange {
+  readonly profileId: string;
+  readonly languageTag: string;
+}
+```
+
+Profile provenance identifies the configured policy that produced the match.
+It is intentionally separate from `ruleId`: multiple profiles can reuse one
+language tag, and a custom profile can add runtime literals without rule ids.
+
 The tuple positions are UTF-16 offsets into the original input. The internal
 collector may still group ranges by mode, but public output is a single list of
 accepted match ranges with explicit metadata.
@@ -156,6 +169,14 @@ terms and future taxonomy-backed corpus rules can carry metadata, and tests
 enforce that any taxonomy-backed built-in rule uses a valid category and
 severity.
 
+## Composition Evidence
+
+Composition preserves every accepted child match, including strict and loose
+matches that cover the same source span. `mode`, `profileId`, and `languageTag`
+remain diagnostic evidence. Source ranges are sorted for `analyze()`, then
+equivalent ranges are merged only for masking and legacy scanner range output.
+Scanner metadata keeps the unmerged matches.
+
 ## Open Questions
 
 Future taxonomy-driven filtering still needs product and implementation
@@ -173,5 +194,3 @@ decisions:
 - Should public matches expose normalization details beyond `normalizedValue`,
   such as whether homoglyph folding or separator tolerance contributed to the
   match?
-- How should overlapping strict and loose matches for the same underlying rule be
-  merged, ranked, or reported?
