@@ -1,6 +1,6 @@
 {
   "name": "@textfilters/url",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "type": "module",
   "description": "TypeScript URL and obfuscated link detector for content moderation, defanged domains, hxxp links, TLD matching, and safe censoring.",
   "license": "MIT",

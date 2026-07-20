@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0](https://github.com/textfilters/url/compare/v0.2.1...v0.3.0) (2026-07-20)
+
+
+### Features
+
+* add configurable URL domain allowlist ([#33](https://github.com/textfilters/url/issues/33)) ([c3bfc7b](https://github.com/textfilters/url/commit/c3bfc7bc9e75ed7f8eb4bdc6db605c2359bce45e))
+
 ## [0.2.1](https://github.com/textfilters/url/compare/v0.2.0...v0.2.1) (2026-07-14)
 
 
