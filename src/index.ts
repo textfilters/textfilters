@@ -28,7 +28,10 @@ export {
 } from "./scanner.js";
 
 export function createUrlFilter(config: UrlFilterConfig = {}): UrlFilter {
-  const scanner = createUrlScanner({ tlds: normalizeTlds(config.tlds) });
+  const scanner = createUrlScanner({
+    tlds: normalizeTlds(config.tlds),
+    allowedDomains: config.allowedDomains,
+  });
   const maskChar = config.maskChar ?? "*";
 
   return {

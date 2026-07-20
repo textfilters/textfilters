@@ -1,5 +1,6 @@
 import { mergeCodePointRanges } from "@textfilters/core";
 
+import { EMPTY_ALLOWED_DOMAINS, isAllowedDomain } from "./allowed-domains.js";
 import { parseDot } from "./dots.js";
 import { parseDomain } from "./domain.js";
 import { parseExplicitUrlTarget } from "./explicit-authority.js";
@@ -88,11 +89,18 @@ export const collectRanges = (
   meta: TextMeta,
   tldSet: ReadonlySet<string>,
   tldSkeletonSet: ReadonlySet<string>,
+  allowedDomainSet: ReadonlySet<string> = EMPTY_ALLOWED_DOMAINS,
 ): readonly CodePointRange[] => {
   const ranges: CodePointRange[] = [];
-  collectRangeMatches(meta, tldSet, tldSkeletonSet, (range) => {
-    ranges.push(range);
-  });
+  collectRangeMatches(
+    meta,
+    tldSet,
+    tldSkeletonSet,
+    allowedDomainSet,
+    (range) => {
+      ranges.push(range);
+    },
+  );
   return mergeCodePointRanges(ranges);
 };
 
@@ -100,23 +108,43 @@ export const collectRangeMatches = (
   meta: TextMeta,
   tldSet: ReadonlySet<string>,
   tldSkeletonSet: ReadonlySet<string>,
+  allowedDomainSet: ReadonlySet<string>,
   sink: UrlRangeSink,
 ): boolean => {
-  const ranges: CodePointRange[] = [];
+  const consumedRanges: CodePointRange[] = [];
   for (let i = 0; i < meta.codePoints.length; i++) {
     const scheme = canStartScheme(meta, i) ? parseSchemePrefix(meta, i) : null;
     if (scheme) {
-      const target =
-        parseExplicitUrlTarget(meta, scheme.pos, tldSet, tldSkeletonSet) ??
-        parseDomain(meta, scheme.pos, tldSet, tldSkeletonSet, {
-          allowUnknownTld: true,
-        });
+      const explicitTarget = parseExplicitUrlTarget(
+        meta,
+        scheme.pos,
+        tldSet,
+        tldSkeletonSet,
+      );
+      const fallbackDomain = explicitTarget
+        ? null
+        : parseDomain(meta, scheme.pos, tldSet, tldSkeletonSet, {
+            allowUnknownTld: true,
+          });
+      const target = explicitTarget ?? fallbackDomain;
       if (target) {
         const start = scheme.start;
         const end = target.end;
         if (hasExplicitBoundary(meta, start, end, target.pos)) {
-          if (sink([start, end]) === false) return false;
-          ranges.push([start, end]);
+          const domain = explicitTarget?.domain ?? fallbackDomain;
+          if (
+            !domain ||
+            allowedDomainSet.size === 0 ||
+            !isAllowedDomain(
+              meta,
+              domain,
+              allowedDomainSet,
+              explicitTarget?.domainStart ?? domain.start,
+            )
+          ) {
+            if (sink([start, end]) === false) return false;
+          }
+          consumedRanges.push([start, end]);
           i = Math.max(i, end - 1, target.pos - 1);
           continue;
         }
@@ -127,9 +155,14 @@ export const collectRangeMatches = (
     const domain = parseDomain(meta, i, tldSet, tldSkeletonSet);
     if (!domain) continue;
     const start = maybeExpandBareSplitPrefix(meta, domain);
-    if (!hasBareBoundary(meta, start, domain.end, ranges)) continue;
-    if (sink([start, domain.end]) === false) return false;
-    ranges.push([start, domain.end]);
+    if (!hasBareBoundary(meta, start, domain.end, consumedRanges)) continue;
+    if (
+      allowedDomainSet.size === 0 ||
+      !isAllowedDomain(meta, domain, allowedDomainSet, start)
+    ) {
+      if (sink([start, domain.end]) === false) return false;
+    }
+    consumedRanges.push([start, domain.end]);
     i = Math.max(i, domain.end - 1);
   }
   return true;

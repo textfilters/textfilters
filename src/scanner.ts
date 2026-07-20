@@ -17,12 +17,17 @@ import {
   type UrlRangeScanner,
   type UrlScanInput,
 } from "./contracts.js";
+import {
+  EMPTY_ALLOWED_DOMAINS,
+  normalizeAllowedDomains,
+} from "./allowed-domains.js";
 import { createMeta, toSkeleton } from "./meta.js";
 import { collectRangeMatches, collectRanges } from "./ranges.js";
 import { DEFAULT_TLDS, normalizeTlds } from "./tlds.js";
 
 export interface UrlScannerConfig {
   readonly tlds?: readonly string[];
+  readonly allowedDomains?: readonly string[];
 }
 
 export function createUrlScanner(
@@ -31,24 +36,36 @@ export function createUrlScanner(
   const tlds = normalizeTlds(config.tlds);
   const tldSet = new Set(tlds);
   const tldSkeletonSet = new Set(tlds.map((tld) => toSkeleton(tld)));
+  const allowedDomainSet = normalizeAllowedDomains(config.allowedDomains);
 
   function scan(input: UrlScanInput): { ranges: readonly TextCodePointRange[] };
   function scan(input: UrlScanInput, sink: UrlRangeMatchSink): boolean;
   function scan(input: UrlScanInput, sink?: UrlRangeMatchSink) {
     if (sink === undefined) {
       return {
-        ranges: scanUrlRanges(input.text, tldSet, tldSkeletonSet),
+        ranges: scanUrlRanges(
+          input.text,
+          tldSet,
+          tldSkeletonSet,
+          allowedDomainSet,
+        ),
       };
     }
 
-    return scanUrlRangeMatches(input, sink, tldSet, tldSkeletonSet);
+    return scanUrlRangeMatches(
+      input,
+      sink,
+      tldSet,
+      tldSkeletonSet,
+      allowedDomainSet,
+    );
   }
 
   return {
     name: URL_FILTER_NAME,
     allocationAware: true,
     check(input) {
-      return checkUrlRanges(input, tldSet, tldSkeletonSet);
+      return checkUrlRanges(input, tldSet, tldSkeletonSet, allowedDomainSet);
     },
     scan,
   };
@@ -60,12 +77,13 @@ export function scanUrlRanges(
   tldSkeletonSet: ReadonlySet<string> = new Set(
     Array.from(tldSet, (tld) => toSkeleton(tld)),
   ),
+  allowedDomainSet: ReadonlySet<string> = EMPTY_ALLOWED_DOMAINS,
 ): readonly TextCodePointRange[] {
   const source = String(text ?? "");
   if (!source || !hasUrlCandidate(source)) return [];
 
   const meta = createMeta(source);
-  return collectRanges(meta, tldSet, tldSkeletonSet);
+  return collectRanges(meta, tldSet, tldSkeletonSet, allowedDomainSet);
 }
 
 export function checkUrlRanges(
@@ -74,12 +92,13 @@ export function checkUrlRanges(
   tldSkeletonSet: ReadonlySet<string> = new Set(
     Array.from(tldSet, (tld) => toSkeleton(tld)),
   ),
+  allowedDomainSet: ReadonlySet<string> = EMPTY_ALLOWED_DOMAINS,
 ): boolean {
   if (!hasUrlCandidateInput(input)) return false;
 
   const meta = createMeta(input.text);
   let found = false;
-  collectRangeMatches(meta, tldSet, tldSkeletonSet, () => {
+  collectRangeMatches(meta, tldSet, tldSkeletonSet, allowedDomainSet, () => {
     found = true;
     return false;
   });
@@ -93,12 +112,17 @@ export function scanUrlRangeMatches(
   tldSkeletonSet: ReadonlySet<string> = new Set(
     Array.from(tldSet, (tld) => toSkeleton(tld)),
   ),
+  allowedDomainSet: ReadonlySet<string> = EMPTY_ALLOWED_DOMAINS,
 ): boolean {
   if (!hasUrlCandidateInput(input)) return true;
 
   const meta = createMeta(input.text);
-  return collectRangeMatches(meta, tldSet, tldSkeletonSet, (range) =>
-    sink({ range }),
+  return collectRangeMatches(
+    meta,
+    tldSet,
+    tldSkeletonSet,
+    allowedDomainSet,
+    (range) => sink({ range }),
   );
 }
 

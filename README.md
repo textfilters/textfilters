@@ -44,6 +44,32 @@ const urlFilter = createUrlFilter({ tlds: ["com", "org"], maskChar: "#" });
 const safeText = urlFilter.censor("visit example[.]com");
 ```
 
+Use `allowedDomains` when an application has already loaded a trusted domain
+snapshot from configuration or an external service:
+
+```ts
+import { createUrlFilter } from "@textfilters/url";
+
+const response = await fetch("https://config.example/url-allowlist");
+const { domains } = (await response.json()) as { domains: string[] };
+const urlFilter = createUrlFilter({ allowedDomains: domains });
+
+const safeText = urlFilter.censor(
+  "trusted.com stays visible while example.org is masked",
+);
+```
+
+Allowed domains use case-insensitive exact-host matching. `trusted.com` does
+not allow `www.trusted.com`, `nottrusted.com`, or `trusted.com.evil.test`.
+Schemes, userinfo, ports, paths, queries, and recognized defanged dots do not
+change the hostname decision. Cross-script lookalikes remain distinct.
+Unicode and punycode spellings must be listed separately.
+
+The package does not fetch or cache external configuration. Build a new filter
+or scanner from each validated snapshot and replace the active instance
+atomically. If refresh fails, keep the previous valid instance or use an empty
+allowlist for fail-closed behavior.
+
 The default shared instance is exported as `filter` with `name: "url"`. The
 package also exports `urlFilter()` as an alias for `createUrlFilter()`.
 
@@ -90,6 +116,10 @@ The filter masks:
 - `http`, `https`, and `hxxp` scheme forms, including split-letter obfuscation;
 - explicit-scheme hosts with ports, IPv6 literals, userinfo, IDN/emoji hosts, and unknown TLDs;
 - glued prose around explicit authorities while keeping trailing punctuation outside the masked range.
+
+Configured `allowedDomains` are removed from filter and scanner results after
+parsing. They do not add new TLD detection rules, and subdomains must be listed
+explicitly.
 
 `censor()` preserves the original JavaScript string length and is idempotent.
 

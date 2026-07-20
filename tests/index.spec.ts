@@ -334,6 +334,130 @@ describe("compatibility behavior", () => {
       `go ${mask("example.internal/path?x=1#y")}.`,
     );
   });
+
+  it("allows exact configured domains across URL forms", () => {
+    const f = createUrlFilter({ allowedDomains: [" TRUSTED.COM. "] });
+
+    expect(f.censor("visit trusted.com/path now")).toBe(
+      "visit trusted.com/path now",
+    );
+    expect(f.censor("visit https://trusted.com:443/path?q=1 now")).toBe(
+      "visit https://trusted.com:443/path?q=1 now",
+    );
+    expect(f.censor("visit https://user:pass@trusted.com/path now")).toBe(
+      "visit https://user:pass@trusted.com/path now",
+    );
+    expect(f.censor("visit hxxp[:]//trusted[.]com/path now")).toBe(
+      "visit hxxp[:]//trusted[.]com/path now",
+    );
+    expect(f.censor("visit https://trusted [.] com/path now")).toBe(
+      "visit https://trusted [.] com/path now",
+    );
+    expect(f.censor("visit https://trusted . com/path now")).toBe(
+      "visit https://trusted . com/path now",
+    );
+    expect(f.censor("visit trusted dot com now")).toBe(
+      "visit trusted dot com now",
+    );
+    expect(f.censor("visit trusted d o t com now")).toBe(
+      "visit trusted d o t com now",
+    );
+    expect(
+      f.censor("visit trusted \u0442\u043e\u0447\u043a\u0430 com now"),
+    ).toBe("visit trusted \u0442\u043e\u0447\u043a\u0430 com now");
+    expect(f.censor("visit trusted\u3002com now")).toBe(
+      "visit trusted\u3002com now",
+    );
+    expect(f.censor("visit https://tru\u200bsted.com/path now")).toBe(
+      "visit https://tru\u200bsted.com/path now",
+    );
+    expect(f.censor("visit https://tru\ufb06ed.com/path now")).toBe(
+      "visit https://tru\ufb06ed.com/path now",
+    );
+    expect(f.censor("visit trusted.com./admin now")).toBe(
+      "visit trusted.com./admin now",
+    );
+
+    const split = createUrlFilter({
+      allowedDomains: ["example.com", "example.ai"],
+    });
+    expect(split.censor("visit exa mple.com now")).toBe(
+      "visit exa mple.com now",
+    );
+    expect(split.censor("visit ex ample dot com now")).toBe(
+      "visit ex ample dot com now",
+    );
+    expect(split.censor("visit https://exa mple.ai/path now")).toBe(
+      "visit https://exa mple.ai/path now",
+    );
+  });
+
+  it("keeps domain allowlists exact and hostname-based", () => {
+    const f = createUrlFilter({ allowedDomains: ["trusted.com"] });
+    const homograph = "https://tru\u0455ted.com/path";
+
+    expect(f.censor("www.trusted.com")).toBe(mask("www.trusted.com"));
+    expect(f.censor("nottrusted.com")).toBe(mask("nottrusted.com"));
+    expect(f.censor("trusted.com.evil.com")).toBe(mask("trusted.com.evil.com"));
+    expect(f.censor("https://trusted.com@evil.com/path")).toBe(
+      mask("https://trusted.com@evil.com/path"),
+    );
+    expect(f.censor("https://evil.com@trusted.com/path")).toBe(
+      "https://evil.com@trusted.com/path",
+    );
+    expect(f.censor(homograph)).toBe(mask(homograph));
+  });
+
+  it("normalizes Unicode allowed domains without broadening scripts", () => {
+    const f = createUrlFilter({
+      allowedDomains: [
+        " \u041f\u0420\u0418\u041c\u0415\u0420\u3002\u0420\u0424. ",
+      ],
+    });
+
+    expect(
+      f.censor(
+        "visit \u043f\u0440\u0438\u043c\u0435\u0440.\u0440\u0444/path now",
+      ),
+    ).toBe("visit \u043f\u0440\u0438\u043c\u0435\u0440.\u0440\u0444/path now");
+    expect(f.censor("visit primer.\u0440\u0444/path now")).toBe(
+      `visit ${mask("primer.\u0440\u0444/path")} now`,
+    );
+    expect(f.censor("visit xn--e1afmkfd.xn--p1ai now")).toBe(
+      `visit ${mask("xn--e1afmkfd.xn--p1ai")} now`,
+    );
+  });
+
+  it("ignores invalid allowed-domain entries and masks mixed blocked URLs", () => {
+    const invalid = createUrlFilter({
+      allowedDomains: [
+        "",
+        "*.trusted.com",
+        "https://trusted.com",
+        "trusted-.com",
+        "127.0.0.1",
+        "localhost",
+      ],
+    });
+    expect(invalid.censor("trusted.com")).toBe(mask("trusted.com"));
+    expect(invalid.censor("https://trusted-.com/path")).toBe(
+      mask("https://trusted-.com/path"),
+    );
+    expect(invalid.censor("https://127.0.0.1/path")).toBe(
+      mask("https://127.0.0.1/path"),
+    );
+    expect(invalid.censor("http://localhost:3000/path")).toBe(
+      mask("http://localhost:3000/path"),
+    );
+
+    const f = createUrlFilter({ allowedDomains: ["trusted.com"] });
+    expect(f.censor("trusted.com and example.org")).toBe(
+      `trusted.com and ${mask("example.org")}`,
+    );
+    expect(f.censor("https://trusted.com:80example.org")).toBe(
+      `https://trusted.com:80${mask("example.org")}`,
+    );
+  });
 });
 
 describe("URL scanner", () => {
@@ -471,6 +595,39 @@ describe("URL scanner", () => {
     ]);
     expect(scanUrlRanges("go svc.internal")).toEqual([]);
     expect(scanUrlRanges("go example.com", new Set(["internal"]))).toEqual([]);
+  });
+
+  it("keeps allowlist behavior aligned across scanner APIs", () => {
+    const scanner = createUrlScanner({ allowedDomains: ["trusted.com"] });
+    const allowedText = "visit trusted.com/path now";
+    const mixedText = "visit trusted.com/path and https://blocked.org/path now";
+    const blocked = "https://blocked.org/path";
+    const blockedStart = Array.from(
+      mixedText.slice(0, mixedText.indexOf(blocked)),
+    ).length;
+    const blockedEnd = blockedStart + Array.from(blocked).length;
+    const mixedInput = { text: mixedText, codePoints: Array.from(mixedText) };
+    const seen: Array<readonly [number, number]> = [];
+
+    expect(
+      scanner.scan({ text: allowedText, codePoints: Array.from(allowedText) }),
+    ).toEqual({ ranges: [] });
+    expect(
+      scanner.check({
+        text: allowedText,
+        codePoints: Array.from(allowedText),
+      }),
+    ).toBe(false);
+    expect(scanner.scan(mixedInput)).toEqual({
+      ranges: [[blockedStart, blockedEnd]],
+    });
+    expect(scanner.check(mixedInput)).toBe(true);
+    expect(
+      scanner.scan(mixedInput, (match) => {
+        seen.push(match.range);
+      }),
+    ).toBe(true);
+    expect(seen).toEqual([[blockedStart, blockedEnd]]);
   });
 
   it("returns no ranges for clearly clean text", () => {

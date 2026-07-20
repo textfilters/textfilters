@@ -12,6 +12,11 @@ interface ExplicitHostLabel extends Label {
   readonly hasNonAsciiSymbol: boolean;
 }
 
+export interface ExplicitUrlTargetMatch extends Match {
+  readonly domain: DomainMatch | null;
+  readonly domainStart: number | null;
+}
+
 const parsePort = (
   meta: TextMeta,
   start: number,
@@ -583,7 +588,7 @@ export const parseExplicitUrlTarget = (
   start: number,
   tldSet: ReadonlySet<string>,
   tldSkeletonSet: ReadonlySet<string>,
-): Match | null => {
+): ExplicitUrlTargetMatch | null => {
   let pos = start;
   let skippedAuthorityWhitespace = false;
   while (
@@ -642,11 +647,14 @@ export const parseExplicitUrlTarget = (
   }
   if (hostStart >= authorityEnd) return null;
 
+  let hostDomain: DomainMatch | null = null;
+  let parsedDomain: DomainMatch | null = null;
   let hostEnd = parseBracketedIpv6Host(meta, hostStart, authorityEnd);
   if (hostEnd < 0) {
     const domain = parseDomain(meta, hostStart, tldSet, tldSkeletonSet, {
       allowUnknownTld: true,
     });
+    parsedDomain = domain;
     if (domain) {
       const boundedLabels = domain.labels.filter(
         (label) => label.end <= authorityEnd,
@@ -655,6 +663,15 @@ export const parseExplicitUrlTarget = (
       // prose; do not reuse label ends that crossed that trimmed boundary.
       if (boundedLabels.length >= 2) {
         hostEnd = boundedLabels[boundedLabels.length - 1]?.end ?? -1;
+        hostDomain =
+          boundedLabels.length === domain.labels.length
+            ? domain
+            : {
+                start: boundedLabels[0]?.start ?? hostStart,
+                end: hostEnd,
+                pos: hostEnd,
+                labels: boundedLabels,
+              };
       }
     }
 
@@ -668,7 +685,10 @@ export const parseExplicitUrlTarget = (
         const explicitHostEnd =
           explicitHostDomain.labels[explicitHostDomain.labels.length - 1]
             ?.end ?? -1;
-        if (explicitHostEnd > hostEnd) hostEnd = explicitHostEnd;
+        if (explicitHostEnd > hostEnd) {
+          hostEnd = explicitHostEnd;
+          hostDomain = explicitHostDomain;
+        }
       }
     }
 
@@ -686,10 +706,21 @@ export const parseExplicitUrlTarget = (
             startsWithShortSpacedLabelContinuation(meta, authorityEnd)),
       );
       if (label && label.end <= authorityEnd && spacedHostContinuation) {
+        const continuedDomain =
+          parsedDomain ??
+          parseDomain(
+            meta,
+            spacedHostContinuation.start,
+            tldSet,
+            tldSkeletonSet,
+            { allowUnknownTld: true },
+          );
         return {
           start: pos,
           end: spacedHostContinuation.end,
           pos: spacedHostContinuation.pos,
+          domain: continuedDomain,
+          domainStart: continuedDomain ? hostStart : null,
         };
       }
       hostEnd = label && label.end <= authorityEnd ? label.end : -1;
@@ -734,5 +765,11 @@ export const parseExplicitUrlTarget = (
     scanResumeEnd = pathTail.pos;
   }
 
-  return { start: pos, end, pos: Math.max(end, scanResumeEnd) };
+  return {
+    start: pos,
+    end,
+    pos: Math.max(end, scanResumeEnd),
+    domain: hostDomain,
+    domainStart: hostDomain?.start ?? null,
+  };
 };

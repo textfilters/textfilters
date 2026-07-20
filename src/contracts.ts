@@ -5,6 +5,7 @@ import type { TextCodePointRange } from "@textfilters/core";
 export interface UrlFilterConfig {
   readonly tlds?: readonly string[];
   readonly maskChar?: string;
+  readonly allowedDomains?: readonly string[];
 }
 
 export const URL_FILTER_NAME = "url";
