@@ -7,6 +7,12 @@ import {
 } from "./matchers/build.js";
 import type { CompiledPattern } from "./matchers/compile.js";
 import {
+  buildLooseCandidateIndex,
+  collectInputScanFacts,
+  looseCandidatePatterns,
+  type LooseCandidateIndex,
+} from "./matchers/loose-candidates.js";
+import {
   createBuiltInProfanityRules,
   type InternalProfanityRuleDefinition,
 } from "./matchers/internal-rules.js";
@@ -63,7 +69,7 @@ interface FilterState {
   looseTerms: MatcherTerms;
   strictPatterns: StrictPatternSet;
   loosePatterns: CompiledPattern[];
-  looseCandidatePrefilter: LooseCandidatePrefilter;
+  looseCandidateIndex: LooseCandidateIndex;
   strictBasePatterns?: StrictPatternSet;
   looseBasePatterns?: readonly CompiledPattern[];
   normalizeForMatch: LiteralNormalizer;
@@ -73,14 +79,9 @@ type FilterStateSnapshot = Pick<
   FilterState,
   | "strictPatterns"
   | "loosePatterns"
-  | "looseCandidatePrefilter"
+  | "looseCandidateIndex"
   | "normalizeForMatch"
 >;
-
-interface LooseCandidatePrefilter {
-  readonly alwaysCandidate: boolean;
-  readonly firstChars: ReadonlySet<string>;
-}
 
 export interface CompiledProfanityDictionary {
   readonly language: string;
@@ -306,7 +307,7 @@ function createState(
       phrase: [],
     },
     loosePatterns: [],
-    looseCandidatePrefilter: createLooseCandidatePrefilter([]),
+    looseCandidateIndex: buildLooseCandidateIndex([]),
     normalizeForMatch: normalizeForMatchSameLen,
   };
 
@@ -363,7 +364,7 @@ function createStateFromCompiledDictionary(
     looseTerms: cloneMatcherTerms(state.looseTerms),
     strictPatterns: cloneStrictPatternSet(state.strictPatterns),
     loosePatterns: [...state.loosePatterns],
-    looseCandidatePrefilter: createLooseCandidatePrefilter(state.loosePatterns),
+    looseCandidateIndex: buildLooseCandidateIndex(state.loosePatterns),
     strictBasePatterns: cloneStrictPatternSet(state.strictPatterns),
     looseBasePatterns: [...state.loosePatterns],
     normalizeForMatch: state.normalizeForMatch,
@@ -412,9 +413,7 @@ function rebuildLoose(state: FilterState): void {
             state.normalizeForMatch,
           ),
         ];
-  state.looseCandidatePrefilter = createLooseCandidatePrefilter(
-    state.loosePatterns,
-  );
+  state.looseCandidateIndex = buildLooseCandidateIndex(state.loosePatterns);
 }
 
 function appendStrictLiteralPatterns(
@@ -572,16 +571,21 @@ const hasProfanity = (
     return true;
   }
 
-  if (!hasLooseCandidate(normalized, state.looseCandidatePrefilter)) {
+  const looseCandidates = looseCandidatePatterns(
+    state.looseCandidateIndex,
+    collectInputScanFacts(normalized, state.looseCandidateIndex),
+  );
+  if (looseCandidates.length === 0) {
     return false;
   }
 
   return hasLooseRange(
     normalized,
     text,
-    state.loosePatterns,
+    looseCandidates,
     state.strictPatterns,
     matchesTaxonomy,
+    state.loosePatterns,
   );
 };
 
@@ -629,7 +633,7 @@ export const streamProfanityMatches = (
 const snapshotFilterState = (state: FilterState): FilterStateSnapshot => ({
   strictPatterns: state.strictPatterns,
   loosePatterns: state.loosePatterns,
-  looseCandidatePrefilter: state.looseCandidatePrefilter,
+  looseCandidateIndex: state.looseCandidateIndex,
   normalizeForMatch: state.normalizeForMatch,
 });
 
@@ -649,15 +653,20 @@ function* iterateProfanityMatches(
     }
   }
 
-  if (!hasLooseCandidate(normalized, state.looseCandidatePrefilter)) {
+  const looseCandidates = looseCandidatePatterns(
+    state.looseCandidateIndex,
+    collectInputScanFacts(normalized, state.looseCandidateIndex),
+  );
+  if (looseCandidates.length === 0) {
     return;
   }
 
   for (const range of iterateLooseRanges(
     normalized,
     text,
-    state.loosePatterns,
+    looseCandidates,
     state.strictPatterns,
+    state.loosePatterns,
   )) {
     const match = matchRangeForMode(range, PROFANITY_MATCH_MODE.LOOSE);
     if (matchesTaxonomy(match)) {
@@ -686,40 +695,6 @@ const collectedRangeMatchesTaxonomy = (
 
   return (range) =>
     rangeMatchesTaxonomy(range, categories, severities, minSeverity);
-};
-
-const createLooseCandidatePrefilter = (
-  patterns: readonly CompiledPattern[],
-): LooseCandidatePrefilter => {
-  const firstChars = new Set<string>();
-
-  for (const pattern of patterns) {
-    if (pattern.scanFirstChars === undefined) {
-      return { alwaysCandidate: true, firstChars: new Set() };
-    }
-
-    for (const char of pattern.scanFirstChars) {
-      firstChars.add(char);
-    }
-  }
-
-  return { alwaysCandidate: false, firstChars };
-};
-
-const hasLooseCandidate = (
-  normalized: string,
-  prefilter: LooseCandidatePrefilter,
-): boolean => {
-  if (prefilter.alwaysCandidate) return true;
-  if (prefilter.firstChars.size === 0) return false;
-
-  for (const char of normalized) {
-    if (prefilter.firstChars.has(char)) {
-      return true;
-    }
-  }
-
-  return false;
 };
 
 const rangeMatchesTaxonomy = (

@@ -28,12 +28,14 @@ export const collectLooseRanges = (
   loosePatterns: readonly CompiledPattern[],
   strictPatterns: StrictPatternSet,
   ranges: CollectedProfanityRange[],
+  allLoosePatterns: readonly CompiledPattern[] = loosePatterns,
 ): void => {
   for (const range of iterateLooseRanges(
     normalized,
     source,
     loosePatterns,
     strictPatterns,
+    allLoosePatterns,
   )) {
     ranges.push(range);
   }
@@ -44,8 +46,9 @@ export function* iterateLooseRanges(
   source: string,
   loosePatterns: readonly CompiledPattern[],
   strictPatterns: StrictPatternSet,
+  allLoosePatterns: readonly CompiledPattern[] = loosePatterns,
 ): IterableIterator<CollectedProfanityRange> {
-  const patterns = { loose: loosePatterns, strict: strictPatterns };
+  const patterns = { loose: allLoosePatterns, strict: strictPatterns };
 
   for (const { start, end, pattern } of iteratePatternMatches(
     normalized,
@@ -65,8 +68,9 @@ export const hasLooseRange = (
   loosePatterns: readonly CompiledPattern[],
   strictPatterns: StrictPatternSet,
   predicate: CollectedRangePredicate,
+  allLoosePatterns: readonly CompiledPattern[] = loosePatterns,
 ): boolean => {
-  const patterns = { loose: loosePatterns, strict: strictPatterns };
+  const patterns = { loose: allLoosePatterns, strict: strictPatterns };
 
   return somePatternMatch(normalized, loosePatterns, (start, end, pattern) => {
     const range = looseRange(normalized, source, start, end, pattern, patterns);
