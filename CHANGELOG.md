@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.16.1](https://github.com/textfilters/profanity/compare/v0.16.0...v0.16.1) (2026-07-22)
+
+
+### Bug Fixes
+
+* close reviewed profanity coverage and boundary gaps ([7f451ff](https://github.com/textfilters/profanity/commit/7f451ff48bf4d82c3c6ad14e90d61aba24339cff))
+
 ## [0.16.0](https://github.com/textfilters/profanity/compare/v0.15.3...v0.16.0) (2026-07-16)
 
 
