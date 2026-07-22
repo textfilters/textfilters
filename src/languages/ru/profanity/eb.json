@@ -229,8 +229,8 @@
       "category": "OBSCENE_MAT",
       "severity": "high",
       "source": [
-        "(?<!\\p{L})(?:[св][ъь]е[б](?:ал|али|ало|ать|у|ут|ем|ешь|ете|ись|ну|нуть|нулся|ывай(?:те)?)?|",
-        "[св]е[б](?:ал|али|ало|ать|у|ут|ем|ешь|ете|ись|ну|нуть|нулся|ывай(?:те)?))(?:[а-яё]+)?"
+        "(?<!\\p{L})(?:(?:с|в)[ъь]е[б](?:ал|али|ало|ать|у|ут|ем|ешь|ете|ись|ну|нуть|нулся|ывай(?:те)?)?|",
+        "(?:с|в)е[б](?:ал|али|ало|ать|у|ут|ем|ешь|ете|ись|ну|нуть|нулся|ывай(?:те)?))(?:[а-яё]+)?"
       ],
       "match": {
         "strict": {},
@@ -306,6 +306,33 @@
       "source": "(?<!\\p{L})(?![eе][\\s._-]+[bьв][eе][tт](?:[tт]ing)?(?!\\p{L}))(?:z[aа]j?)?(?:[yу]?[eе]|j[eе]|[yу][oо]|j[oо])[bьв6][eе][tт](?!\\p{L})",
       "match": {
         "loose": {}
+      }
+    },
+    {
+      "id": "ru.obscene.eb.compound.sharoebilo",
+      "category": "OBSCENE_MAT",
+      "severity": "high",
+      "source": "шаро[её]бил(?:[а-яё]+)?",
+      "match": {
+        "strict": {}
+      }
+    },
+    {
+      "id": "ru.obscene.eb.translit.daebanarot",
+      "category": "OBSCENE_MAT",
+      "severity": "high",
+      "source": "d[aа][eе][bьв6][aа]n[aа]r[oо][tт]",
+      "match": {
+        "loose": {}
+      }
+    },
+    {
+      "id": "ru.obscene.eb.translit.ibatsya",
+      "category": "OBSCENE_MAT",
+      "severity": "high",
+      "source": "i[bьв6][aа][tт]s[yу][aа]",
+      "match": {
+        "strict": {}
       }
     },
     {

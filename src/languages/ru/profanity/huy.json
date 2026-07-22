@@ -270,12 +270,30 @@
       }
     },
     {
+      "id": "ru.vulgar.nehuy.family",
+      "category": "VULGAR",
+      "severity": "medium",
+      "source": "(?<!\\p{L})неху[йяиёею](?:[а-яё]+)?(?!\\p{L})",
+      "match": {
+        "strict": {}
+      }
+    },
+    {
       "id": "ru.vulgar.nahuy.family",
       "category": "VULGAR",
       "severity": "medium",
       "source": "(?<!\\p{L})(?:[нз]а|по)ху[йяиёею](?:[\\p{L}-]+)?(?!\\p{L})",
       "match": {
         "strict": {}
+      }
+    },
+    {
+      "id": "ru.vulgar.nahuy.translit.nahoy",
+      "category": "VULGAR",
+      "severity": "medium",
+      "source": "n[aа][hн][oо][yу]",
+      "match": {
+        "loose": {}
       }
     },
     {

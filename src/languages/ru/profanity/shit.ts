@@ -934,7 +934,7 @@ export default russianFamilyDictionary([
     id: "ru.vulgar.srat.family",
     category: "VULGAR",
     severity: "medium",
-    source: String.raw`ср(?:ать|ал(?:а|и|о)?|али)`,
+    source: String.raw`(?:вы|по|за)?ср(?:ать|ал(?:а|и|о)?|али)`,
     match: "strict",
   }),
   russianRule({
@@ -956,7 +956,7 @@ export default russianFamilyDictionary([
     id: "ru.vulgar.sru.family",
     category: "VULGAR",
     severity: "medium",
-    source: String.raw`ср(?:у|ут)`,
+    source: String.raw`(?:вы|по|за)?ср(?:у|ут)`,
     match: "strict",
   }),
   russianRule({

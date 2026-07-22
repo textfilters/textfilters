@@ -9,7 +9,7 @@ export const createReviewedEnglishProfanityDictionary = () =>
         id: "en.obscene.fuck.family",
         category: "OBSCENE_MAT",
         severity: "high",
-        source: "fuck(?:ed|ing)?",
+        source: "(?:f[uυ]ck(?:ed|[iι]ng|en)?|f[aα]ck|f[iι]ck)",
         match: { strict: {}, loose: {} },
       },
       {
@@ -23,7 +23,7 @@ export const createReviewedEnglishProfanityDictionary = () =>
         id: "en.vulgar.dick",
         category: "VULGAR",
         severity: "medium",
-        source: "dick",
+        source: "d[iι]ck(?:heads?)?",
         match: { strict: {} },
       },
       {
@@ -44,7 +44,7 @@ export const createReviewedEnglishProfanityDictionary = () =>
         id: "en.insult.bitch",
         category: "STRONG_INSULT",
         severity: "medium",
-        source: "bitch",
+        source: "b[iι]t?ch",
         match: { strict: {}, loose: {} },
       },
       {
@@ -65,7 +65,7 @@ export const createReviewedEnglishProfanityDictionary = () =>
         id: "en.vulgar.suck",
         category: "VULGAR",
         severity: "medium",
-        source: "suck",
+        source: "s[uυ]ck(?:ed|[iι]ng)?",
         match: { strict: {}, loose: {} },
       },
       {
@@ -79,8 +79,15 @@ export const createReviewedEnglishProfanityDictionary = () =>
         id: "en.insult.faggot",
         category: "STRONG_INSULT",
         severity: "high",
-        source: "faggot",
+        source: "f[aα]ggots?",
         match: { strict: {}, loose: {} },
+      },
+      {
+        id: "en.insult.asshole",
+        category: "STRONG_INSULT",
+        severity: "high",
+        source: "[aα]ssholes?",
+        match: { strict: {} },
       },
       {
         id: "en.insult.bastard",

@@ -5,9 +5,11 @@ lives in `src/languages/en` and is included in the published distribution. This
 private example re-exports that implementation so repository examples exercise
 the same code as package consumers.
 
-The pack covers only `fuck`, `fucking`, `fucked`, `shit`, `dick`,
+The pack covers reviewed forms of `fuck`, `shit`, `dick`,
 `motherfucker` (including detection before a possessive suffix), `cock`,
-`bitch`, `whore`, `nigga`, `suck`, `fag`, `faggot`, and `bastard`. It does not
+`bitch`, `whore`, `nigga`, `suck`, `fag`, `faggot`, `asshole`, and `bastard`.
+Reviewed inflections, common misspellings, and narrow mixed-script homoglyph
+forms are included. The pack does not
 attempt broad toxicity, comprehensive hate-speech or slur detection, or
 contextual moderation.
 

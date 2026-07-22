@@ -570,6 +570,10 @@ describe("Russian coverage audit", () => {
       "дерьмами",
       "дерьмах",
       "срать",
+      "высрать",
+      "посрать",
+      "засрал",
+      "засрут",
       "срёт",
       "срет",
       "срём",
@@ -1419,6 +1423,54 @@ describe("Russian coverage audit", () => {
         expected: {
           ruleId: "ru.insult.zasranec.family",
           category: "STRONG_INSULT",
+          severity: "medium",
+        },
+      },
+      {
+        input: "шароёбило",
+        expected: {
+          ruleId: "ru.obscene.eb.compound.sharoebilo",
+          category: "OBSCENE_MAT",
+          severity: "high",
+        },
+      },
+      {
+        input: "daebanarot",
+        expected: {
+          ruleId: "ru.obscene.eb.translit.daebanarot",
+          category: "OBSCENE_MAT",
+          severity: "high",
+        },
+      },
+      {
+        input: "ibatsya",
+        expected: {
+          ruleId: "ru.obscene.eb.translit.ibatsya",
+          category: "OBSCENE_MAT",
+          severity: "high",
+        },
+      },
+      {
+        input: "нехуй",
+        expected: {
+          ruleId: "ru.vulgar.nehuy.family",
+          category: "VULGAR",
+          severity: "medium",
+        },
+      },
+      {
+        input: "nahoy",
+        expected: {
+          ruleId: "ru.vulgar.nahuy.translit.nahoy",
+          category: "VULGAR",
+          severity: "medium",
+        },
+      },
+      {
+        input: "посрать",
+        expected: {
+          ruleId: "ru.vulgar.srat.family",
+          category: "VULGAR",
           severity: "medium",
         },
       },
