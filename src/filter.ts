@@ -9,7 +9,9 @@ import type { CompiledPattern } from "./matchers/compile.js";
 import {
   buildLooseCandidateIndex,
   collectInputScanFacts,
+  createInputScanFactCollector,
   looseCandidatePatterns,
+  type InputScanFacts,
   type LooseCandidateIndex,
 } from "./matchers/loose-candidates.js";
 import {
@@ -36,6 +38,9 @@ import { normalizeTextInput } from "@textfilters/core";
 import {
   normalizeForMatchSameLen,
   normalizeForMatchSameLenWithoutHomoglyphs,
+  prepareForMatchSameLen,
+  prepareForMatchSameLenWithoutHomoglyphs,
+  type MatchInputPreparer,
 } from "./normalization/text.js";
 import { hasLooseRange, iterateLooseRanges } from "./ranges/loose.js";
 import { hasStrictRange, iterateStrictRanges } from "./ranges/strict.js";
@@ -73,6 +78,7 @@ interface FilterState {
   strictBasePatterns?: StrictPatternSet;
   looseBasePatterns?: readonly CompiledPattern[];
   normalizeForMatch: LiteralNormalizer;
+  prepareForMatch: MatchInputPreparer;
 }
 
 type FilterStateSnapshot = Pick<
@@ -81,6 +87,7 @@ type FilterStateSnapshot = Pick<
   | "loosePatterns"
   | "looseCandidateIndex"
   | "normalizeForMatch"
+  | "prepareForMatch"
 >;
 
 export interface CompiledProfanityDictionary {
@@ -96,6 +103,7 @@ interface CompiledDictionaryState {
   readonly strictPatterns: StrictPatternSet;
   readonly loosePatterns: readonly CompiledPattern[];
   readonly normalizeForMatch: LiteralNormalizer;
+  readonly prepareForMatch: MatchInputPreparer;
 }
 
 const compiledDictionaryStates = new WeakMap<
@@ -309,6 +317,7 @@ function createState(
     loosePatterns: [],
     looseCandidateIndex: buildLooseCandidateIndex([]),
     normalizeForMatch: normalizeForMatchSameLen,
+    prepareForMatch: prepareForMatchSameLen,
   };
 
   rebuildStrict(state);
@@ -329,7 +338,8 @@ function compileDictionaryState(
     dictionaryRulesForMode(dictionary, "loose"),
     "loose",
   );
-  const normalizeForMatch = normalizerForStrategy(normalization);
+  const { normalizeForMatch, prepareForMatch } =
+    normalizersForStrategy(normalization);
 
   return {
     strictTerms,
@@ -337,20 +347,30 @@ function compileDictionaryState(
     strictPatterns: buildStrictPatterns(strictTerms, normalizeForMatch),
     loosePatterns: buildLoosePatterns(looseTerms, normalizeForMatch),
     normalizeForMatch,
+    prepareForMatch,
   };
 }
 
 const DEFAULT_NORMALIZATION_STRATEGY: ProfanityNormalizationStrategy =
   "cyrillic-homoglyphs";
 
-const normalizerForStrategy = (
+const normalizersForStrategy = (
   strategy: ProfanityNormalizationStrategy,
-): LiteralNormalizer => {
+): {
+  readonly normalizeForMatch: LiteralNormalizer;
+  readonly prepareForMatch: MatchInputPreparer;
+} => {
   switch (strategy) {
     case "cyrillic-homoglyphs":
-      return normalizeForMatchSameLen;
+      return {
+        normalizeForMatch: normalizeForMatchSameLen,
+        prepareForMatch: prepareForMatchSameLen,
+      };
     case "latin-preserving":
-      return normalizeForMatchSameLenWithoutHomoglyphs;
+      return {
+        normalizeForMatch: normalizeForMatchSameLenWithoutHomoglyphs,
+        prepareForMatch: prepareForMatchSameLenWithoutHomoglyphs,
+      };
     default:
       throw new TypeError(`Unsupported profanity normalization: ${strategy}`);
   }
@@ -368,6 +388,7 @@ function createStateFromCompiledDictionary(
     strictBasePatterns: cloneStrictPatternSet(state.strictPatterns),
     looseBasePatterns: [...state.loosePatterns],
     normalizeForMatch: state.normalizeForMatch,
+    prepareForMatch: state.prepareForMatch,
   };
 }
 
@@ -563,7 +584,9 @@ const hasProfanity = (
   text: string,
   options?: ProfanityMatchOptions,
 ): boolean => {
-  // Normalization is same-length, so collected ranges stay source-compatible.
+  // Keep boolean checks strict-first: measured eager fact collection makes a
+  // late strict hit slower, while strict misses still use the compatibility
+  // collector over the same normalized representation.
   const normalized = state.normalizeForMatch(text);
   const matchesTaxonomy = collectedRangeMatchesTaxonomy(options);
 
@@ -635,6 +658,7 @@ const snapshotFilterState = (state: FilterState): FilterStateSnapshot => ({
   loosePatterns: state.loosePatterns,
   looseCandidateIndex: state.looseCandidateIndex,
   normalizeForMatch: state.normalizeForMatch,
+  prepareForMatch: state.prepareForMatch,
 });
 
 function* iterateProfanityMatches(
@@ -642,8 +666,7 @@ function* iterateProfanityMatches(
   text: string,
   options?: ProfanityMatchOptions,
 ): IterableIterator<ProfanityMatchRange> {
-  // Normalization is same-length, so yielded ranges stay source-compatible.
-  const normalized = state.normalizeForMatch(text);
+  const { normalized, facts } = prepareInput(state, text);
   const matchesTaxonomy = collectedRangeMatchesTaxonomy(options);
 
   for (const range of iterateStrictRanges(normalized, state.strictPatterns)) {
@@ -655,7 +678,7 @@ function* iterateProfanityMatches(
 
   const looseCandidates = looseCandidatePatterns(
     state.looseCandidateIndex,
-    collectInputScanFacts(normalized, state.looseCandidateIndex),
+    facts,
   );
   if (looseCandidates.length === 0) {
     return;
@@ -674,6 +697,17 @@ function* iterateProfanityMatches(
     }
   }
 }
+
+const prepareInput = (
+  state: FilterStateSnapshot,
+  text: string,
+): { readonly normalized: string; readonly facts: InputScanFacts } => {
+  const collector = createInputScanFactCollector(state.looseCandidateIndex);
+  // Normalization and loose candidate facts share one same-length UTF-16 pass,
+  // so every collected position stays source-compatible.
+  const normalized = state.prepareForMatch(text, collector.visit);
+  return { normalized, facts: collector.finish() };
+};
 
 const hasTaxonomyFilters = (options: ProfanityMatchOptions): boolean =>
   options.categories !== undefined ||

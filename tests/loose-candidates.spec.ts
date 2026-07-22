@@ -7,10 +7,15 @@ import { compilePatternDefinitions } from "../src/matchers/compile.js";
 import {
   buildLooseCandidateIndex,
   collectInputScanFacts,
+  createInputScanFactCollector,
   looseCandidatePatterns,
 } from "../src/matchers/loose-candidates.js";
 import { createBuiltInProfanityRules } from "../src/matchers/internal-rules.js";
-import { normalizeForMatchSameLen } from "../src/normalization/text.js";
+import {
+  normalizeForMatchSameLen,
+  prepareForMatchSameLen,
+  prepareForMatchSameLenWithoutHomoglyphs,
+} from "../src/normalization/text.js";
 import { collectLooseRanges } from "../src/ranges/loose.js";
 import { LOOSE_BASE } from "../src/terms/loose-base.js";
 import { STRICT_BASE } from "../src/terms/strict-base.js";
@@ -93,6 +98,29 @@ describe("loose candidate index", () => {
     expect(
       looseCandidatePatterns(index, collectInputScanFacts("b-a", index)),
     ).toEqual(patterns);
+  });
+
+  it("keeps fused candidate facts aligned with the compatibility collector", () => {
+    const sources = [
+      "🙂ｐ-и-z-д-е-ц",
+      "х\u200Bу\u200Bй",
+      "Ａ plain eё text",
+      " bbb-a 𐐀",
+    ];
+
+    for (const prepare of [
+      prepareForMatchSameLen,
+      prepareForMatchSameLenWithoutHomoglyphs,
+    ]) {
+      for (const source of sources) {
+        const collector = createInputScanFactCollector(looseCandidateIndex);
+        const normalized = prepare(source, collector.visit);
+
+        expect(collector.finish(), source).toEqual(
+          collectInputScanFacts(normalized, looseCandidateIndex),
+        );
+      }
+    }
   });
 
   it("matches the exhaustive path across maintained and generated cases", () => {

@@ -1,8 +1,54 @@
 import { describe, expect, it } from "vitest";
 
 import { createProfanityFilter, filter } from "../src";
+import {
+  normalizeForMatchSameLen,
+  normalizeForMatchSameLenWithoutHomoglyphs,
+  prepareForMatchSameLen,
+  prepareForMatchSameLenWithoutHomoglyphs,
+} from "../src/normalization/text.js";
 
 describe("normalization", () => {
+  it("keeps fused preparation byte-compatible with both normalization strategies", () => {
+    const samples = [
+      "plain ASCII",
+      "ёЁ еЕ",
+      "Ａｚ１２！ fullwidth",
+      "Aexy BHMOPT",
+      "\u200B\u200C\u200D\uFEFF\u2060",
+      "🙂𐐀🔥",
+      "e\u0301 combining",
+      "🙂Ａeё\u200BＺ mixed",
+    ];
+    const strategies = [
+      {
+        normalize: normalizeForMatchSameLen,
+        prepare: prepareForMatchSameLen,
+      },
+      {
+        normalize: normalizeForMatchSameLenWithoutHomoglyphs,
+        prepare: prepareForMatchSameLenWithoutHomoglyphs,
+      },
+    ];
+
+    for (const strategy of strategies) {
+      for (const source of samples) {
+        const visited: Array<{ char: string; position: number }> = [];
+        const prepared = strategy.prepare(source, (char, position) => {
+          visited.push({ char, position });
+        });
+
+        expect(prepared, source).toBe(strategy.normalize(source));
+        expect(prepared.length, source).toBe(source.length);
+        expect(visited.map(({ char }) => char).join(""), source).toBe(prepared);
+        expect(
+          visited.map(({ position }) => position),
+          source,
+        ).toEqual(codePointPositions(source));
+      }
+    }
+  });
+
   it("handles latin homoglyphs and fullwidth ASCII in strict matching", () => {
     expect(filter.censor("Ебaть смешно")).toBe("***** смешно");
     expect(filter.censor("Bыеб")).toBe("****");
@@ -54,3 +100,14 @@ describe("normalization", () => {
     expect(filter.censor("пи\u200Bздец")).toBe("*******");
   });
 });
+
+const codePointPositions = (value: string): number[] => {
+  const positions: number[] = [];
+
+  for (let position = 0; position < value.length; ) {
+    positions.push(position);
+    position += (value.codePointAt(position) ?? 0) > 0xffff ? 2 : 1;
+  }
+
+  return positions;
+};

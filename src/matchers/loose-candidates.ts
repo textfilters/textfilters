@@ -26,6 +26,11 @@ export interface InputScanFacts {
   readonly looseCandidateStartPositions: readonly number[];
 }
 
+export interface InputScanFactCollector {
+  readonly visit: (normalizedChar: string, sourcePosition: number) => void;
+  readonly finish: () => InputScanFacts;
+}
+
 const BIT_WORD_SIZE = 32;
 const SCAN_PREFIX_LETTER_RE = /\p{L}/u;
 const SCAN_WORD_CHAR_RE = /[\p{L}\p{N}]/u;
@@ -77,18 +82,15 @@ export const buildLooseCandidateIndex = (
   };
 };
 
-export const collectInputScanFacts = (
-  normalized: string,
+export const createInputScanFactCollector = (
   index: LooseCandidateIndex,
-): InputScanFacts => {
+): InputScanFactCollector => {
   const looseCandidateBits = new Uint32Array(index.fallbackBits);
   const pendingSecondCharBits = new Uint32Array(index.bitWordCount);
   const looseCandidateStartPositions: number[] = [];
   let previous = "";
 
-  for (let position = 0; position < normalized.length; ) {
-    const end = nextCodePointEnd(normalized, position);
-    const char = normalized.slice(position, end);
+  const visit = (char: string, position: number): void => {
     const firstMasks = index.firstCharMasks.get(char);
     const secondMask = index.secondCharMasks.get(char);
     const isWordChar = SCAN_WORD_CHAR_RE.test(char);
@@ -130,10 +132,27 @@ export const collectInputScanFacts = (
     }
 
     previous = char;
+  };
+
+  return {
+    visit,
+    finish: () => ({ looseCandidateBits, looseCandidateStartPositions }),
+  };
+};
+
+export const collectInputScanFacts = (
+  normalized: string,
+  index: LooseCandidateIndex,
+): InputScanFacts => {
+  const collector = createInputScanFactCollector(index);
+
+  for (let position = 0; position < normalized.length; ) {
+    const end = nextCodePointEnd(normalized, position);
+    collector.visit(normalized.slice(position, end), position);
     position = end;
   }
 
-  return { looseCandidateBits, looseCandidateStartPositions };
+  return collector.finish();
 };
 
 export const looseCandidatePatterns = (
