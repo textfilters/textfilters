@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.16.2](https://github.com/textfilters/profanity/compare/v0.16.1...v0.16.2) (2026-07-23)
+
+
+### Performance Improvements
+
+* cached repeated strict token lookups per input ([b67b031](https://github.com/textfilters/profanity/commit/b67b031ecf5c8f4c471d713e62a30f1b77f2510e)), closes [#172](https://github.com/textfilters/profanity/issues/172)
+* eliminated strict lookup allocations and sorting ([8e61e12](https://github.com/textfilters/profanity/commit/8e61e12be19489d09a4b3a50f0b5e4162196e523)), closes [#171](https://github.com/textfilters/profanity/issues/171)
+* fused normalization and input fact collection ([4b25b29](https://github.com/textfilters/profanity/commit/4b25b29c886ed1236c7176f89cf148f5c14f11d3)), closes [#170](https://github.com/textfilters/profanity/issues/170)
+* indexed loose candidates before full pattern scans ([735614f](https://github.com/textfilters/profanity/commit/735614fb1f46cac51df3a9bfaaa9742ad7b537e0)), closes [#168](https://github.com/textfilters/profanity/issues/168)
+* indexed loose rules by mandatory signatures ([8c4ecbd](https://github.com/textfilters/profanity/commit/8c4ecbdb34bc3cf065863f9799f1748b6644b9b3))
+* reused prepared input across scanners and profiles ([ff288c2](https://github.com/textfilters/profanity/commit/ff288c2d2045abf237d8a5e83f47a2561a2a055a)), closes [#173](https://github.com/textfilters/profanity/issues/173)
+
 ## [0.16.1](https://github.com/textfilters/profanity/compare/v0.16.0...v0.16.1) (2026-07-22)
 
 
