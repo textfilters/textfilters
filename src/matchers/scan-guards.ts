@@ -5,15 +5,39 @@ import { splitTopLevelAlternatives } from "./rule-scanner.js";
 export interface PatternScanGuards {
   readonly scanFirstChars?: readonly string[];
   readonly scanSecondChars?: readonly string[];
+  readonly scanSignatures?: readonly string[];
   readonly scanFirstCharRequiresNonLetterPrefix?: boolean;
 }
 
-export const scanGuardsForSource = (source: string): PatternScanGuards => ({
-  scanFirstChars: firstRequiredChars(source),
-  scanSecondChars: secondRequiredChars(source),
-  scanFirstCharRequiresNonLetterPrefix:
-    source.startsWith(NON_LETTER_PREFIX_ASSERTION) || undefined,
-});
+const SCAN_GUARD_CACHE_LIMIT = 512;
+const scanGuardCache = new Map<string, PatternScanGuards>();
+
+export const scanGuardsForSource = (
+  source: string,
+  includeSignatures = false,
+): PatternScanGuards => {
+  const cacheKey = `${includeSignatures ? "signature" : "prefix"}:${source}`;
+  const existing = scanGuardCache.get(cacheKey);
+  if (existing !== undefined) return existing;
+
+  const leadingSets = leadingSignatureSets(source);
+  const guards = {
+    scanFirstChars: firstRequiredChars(source),
+    scanSecondChars: secondRequiredChars(leadingSets),
+    scanSignatures: includeSignatures
+      ? signaturesFromLeadingSets(leadingSets)
+      : undefined,
+    scanFirstCharRequiresNonLetterPrefix:
+      source.startsWith(NON_LETTER_PREFIX_ASSERTION) || undefined,
+  };
+
+  if (scanGuardCache.size >= SCAN_GUARD_CACHE_LIMIT) {
+    const oldest = scanGuardCache.keys().next().value;
+    if (oldest !== undefined) scanGuardCache.delete(oldest);
+  }
+  scanGuardCache.set(cacheKey, guards);
+  return guards;
+};
 
 export const patternMayStartIn = (
   pattern: PatternScanGuards,
@@ -147,8 +171,10 @@ const firstRequiredChars = (source: string): readonly string[] | undefined => {
     : [...caseInsensitiveChars(chars)];
 };
 
-const secondRequiredChars = (source: string): readonly string[] | undefined => {
-  const [, chars] = leadingRequiredWordCharSets(source, 2) ?? [];
+const secondRequiredChars = (
+  leadingSets: readonly Set<string>[] | null,
+): readonly string[] | undefined => {
+  const [, chars] = leadingSets ?? [];
   return chars === undefined || chars.size === 0
     ? undefined
     : [...caseInsensitiveChars(chars)];
@@ -158,6 +184,19 @@ const NON_LETTER_PREFIX_ASSERTION = String.raw`(?<!\p{L})`;
 const SCAN_PREFIX_LETTER_RE = /\p{L}/u;
 const SCAN_WORD_CHAR_RE = /[\p{L}\p{N}]/u;
 const SCAN_DIGIT_RE = /\p{N}/u;
+const SIGNATURE_LENGTHS = [3, 2] as const;
+const MAX_SIGNATURE_VARIANTS = 64;
+
+const leadingSignatureSets = (
+  source: string,
+): readonly Set<string>[] | null => {
+  for (const length of SIGNATURE_LENGTHS) {
+    const sets = leadingRequiredWordCharSets(source, length);
+    if (sets !== null && sets.length >= length) return sets;
+  }
+
+  return null;
+};
 
 const leadingLookaheadBackreferenceFirstChars = (
   atoms: ReturnType<typeof readRuleAtoms>,
@@ -201,13 +240,22 @@ const isSkippableSeparatorAtom = ({
   base,
   source,
 }: ReturnType<typeof readRuleAtoms>[number]): boolean =>
-  source === `${base}*` &&
-  (base.startsWith(String.raw`[^\p{L}\p{N}`) || base === "[-._]");
+  source === `${base}*` && isNonWordSeparatorBase(base);
 
 const leadingRequiredWordCharSets = (
   source: string,
   limit: number,
 ): readonly Set<string>[] | null => {
+  const alternatives = splitTopLevelAlternatives(source);
+  if (alternatives.length > 1) {
+    return mergeLeadingWordCharSets(
+      alternatives.map((alternative) =>
+        leadingRequiredWordCharSets(alternative, limit),
+      ),
+      limit,
+    );
+  }
+
   const result: Set<string>[] = [];
 
   for (const atom of readRuleAtoms(source)) {
@@ -252,12 +300,22 @@ const wordCharSetsFromAtom = (
 const groupedLeadingWordCharSets = (
   source: string,
   limit: number,
-): readonly Set<string>[] | null => {
-  const alternatives = splitTopLevelAlternatives(source).map((alternative) =>
-    leadingRequiredWordCharSets(alternative, limit),
+): readonly Set<string>[] | null =>
+  mergeLeadingWordCharSets(
+    splitTopLevelAlternatives(source).map((alternative) =>
+      leadingRequiredWordCharSets(alternative, limit),
+    ),
+    limit,
   );
 
-  if (alternatives.some((sets) => sets === null || sets.length < limit)) {
+const mergeLeadingWordCharSets = (
+  alternatives: readonly (readonly Set<string>[] | null)[],
+  limit: number,
+): readonly Set<string>[] | null => {
+  if (
+    alternatives.length === 0 ||
+    alternatives.some((sets) => sets === null || sets.length < limit)
+  ) {
     return null;
   }
 
@@ -277,12 +335,66 @@ const groupedLeadingWordCharSets = (
   return result;
 };
 
+const signatureVariants = (
+  sets: readonly Set<string>[],
+): readonly string[] | null => {
+  let variants = [""];
+
+  for (const [index, set] of sets.entries()) {
+    const hasNonLetter = [...set].some(
+      (char) => !SCAN_PREFIX_LETTER_RE.test(char),
+    );
+    if (index === 0 && hasNonLetter) {
+      return null;
+    }
+
+    const chars = [
+      ...new Set(
+        [...set]
+          .map((char) => char.toLowerCase())
+          .filter(
+            (char) =>
+              Array.from(char).length === 1 && SCAN_PREFIX_LETTER_RE.test(char),
+          ),
+      ),
+    ];
+    if (hasNonLetter) chars.push("");
+    if (
+      chars.length === 0 ||
+      variants.length * chars.length > MAX_SIGNATURE_VARIANTS
+    ) {
+      return null;
+    }
+
+    variants = variants.flatMap((prefix) => chars.map((char) => prefix + char));
+  }
+
+  const unique = [...new Set(variants)];
+  return unique.some((signature) => Array.from(signature).length < 2)
+    ? null
+    : unique;
+};
+
+const signaturesFromLeadingSets = (
+  sets: readonly Set<string>[] | null,
+): readonly string[] | undefined => {
+  if (sets === null || sets.length < 2) return undefined;
+
+  const signatures = signatureVariants(sets);
+  return signatures === null || signatures.length === 0
+    ? undefined
+    : signatures;
+};
+
 const isRequiredWordSeparatorAtom = ({
   base,
   source,
 }: ReturnType<typeof readRuleAtoms>[number]): boolean =>
   (source === `${base}+` || source === `${base}*`) &&
-  (base.startsWith("[^") || base === "[-._]");
+  isNonWordSeparatorBase(base);
+
+const isNonWordSeparatorBase = (base: string): boolean =>
+  base.startsWith(String.raw`[^\p{L}\p{N}`) || base === "[-._]";
 
 const isSkippableRepeatedWordAtom = ({
   base,

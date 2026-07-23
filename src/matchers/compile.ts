@@ -69,7 +69,7 @@ const compilePattern = (
         definition.source,
         wholeToken ? ANCHORED_UNICODE_FLAGS : GLOBAL_UNICODE_FLAGS,
       ),
-      ...scanGuardsForSource(definition.scanSource),
+      ...scanGuardsForSource(definition.scanSource, !wholeToken),
       trimHyphenTail: definition.trimHyphenTail,
       trimHyphenTailMin: definition.trimHyphenTailMin,
       ...ruleIdentityMetadata(definition),

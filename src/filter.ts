@@ -10,7 +10,7 @@ import {
   buildLooseCandidateIndex,
   collectInputScanFacts,
   createInputScanFactCollector,
-  looseCandidatePatterns,
+  loosePatternCandidates,
   type InputScanFacts,
   type LooseCandidateIndex,
 } from "./matchers/loose-candidates.js";
@@ -42,7 +42,10 @@ import {
   prepareForMatchSameLenWithoutHomoglyphs,
   type MatchInputPreparer,
 } from "./normalization/text.js";
-import { hasLooseRange, iterateLooseRanges } from "./ranges/loose.js";
+import {
+  hasLooseCandidateRange,
+  iterateLooseCandidateRanges,
+} from "./ranges/loose.js";
 import { hasStrictRange, iterateStrictRanges } from "./ranges/strict.js";
 import { maskProfanityRanges } from "./token-ranges.js";
 import { LOOSE_BASE } from "./terms/loose-base.js";
@@ -680,7 +683,7 @@ const hasProfanity = (
   }
 
   const facts = scanFactsForPreparedInput(state, input, normalized);
-  const looseCandidates = looseCandidatePatterns(
+  const looseCandidates = loosePatternCandidates(
     state.looseCandidateIndex,
     facts,
   );
@@ -688,7 +691,7 @@ const hasProfanity = (
     return false;
   }
 
-  return hasLooseRange(
+  return hasLooseCandidateRange(
     normalized,
     input.text,
     looseCandidates,
@@ -805,7 +808,7 @@ function* iterateProfanityMatches(
     }
   }
 
-  const looseCandidates = looseCandidatePatterns(
+  const looseCandidates = loosePatternCandidates(
     state.looseCandidateIndex,
     facts,
   );
@@ -813,7 +816,7 @@ function* iterateProfanityMatches(
     return;
   }
 
-  for (const range of iterateLooseRanges(
+  for (const range of iterateLooseCandidateRanges(
     normalized,
     input.text,
     looseCandidates,

@@ -8,6 +8,13 @@ import {
 } from "../dist/index.js";
 import { profile as englishProfile } from "../dist/entrypoints/en.js";
 import { profile as russianProfile } from "../dist/entrypoints/ru.js";
+import { buildLoosePatterns } from "../dist/matchers/build.js";
+import {
+  buildLooseCandidateIndex,
+  looseCandidateIndexStats,
+} from "../dist/matchers/loose-candidates.js";
+import { createBuiltInProfanityRules } from "../dist/matchers/internal-rules.js";
+import { LOOSE_BASE } from "../dist/terms/loose-base.js";
 
 const ITERATIONS = 1_000;
 const SETUP_ITERATIONS = 100;
@@ -50,6 +57,12 @@ function printResults(results) {
 }
 
 const filter = createProfanityFilter();
+const loosePatterns = buildLoosePatterns({
+  internal: createBuiltInProfanityRules(LOOSE_BASE, "loose"),
+  literals: [],
+});
+const looseCandidateIndex = buildLooseCandidateIndex(loosePatterns);
+const looseCandidateStats = looseCandidateIndexStats(looseCandidateIndex);
 const scanner = createProfanityScanner({ filter });
 const multilingualFilter = composeProfanityProfiles([
   russianProfile,
@@ -113,6 +126,11 @@ printResults([
   bench(
     "createProfanityFilter()",
     () => createProfanityFilter(),
+    SETUP_ITERATIONS,
+  ),
+  bench(
+    "build loose signature index",
+    () => buildLooseCandidateIndex(loosePatterns),
     SETUP_ITERATIONS,
   ),
   bench(
@@ -206,5 +224,23 @@ printResults([
     filter.check(SHORT_MATCH, { minSeverity: "high" }),
   ),
 ]);
+
+console.log("\nloose signature index");
+console.log(`patterns: ${looseCandidateStats.patternCount}`);
+console.log(
+  `signature indexed: ${looseCandidateStats.signatureIndexedPatternCount}`,
+);
+console.log(
+  `global scan fallback: ${looseCandidateStats.globalScanPatternCount}`,
+);
+console.log(`signatures: ${looseCandidateStats.signatureCount}`);
+console.log(`automaton nodes: ${looseCandidateStats.automatonNodeCount}`);
+console.log(
+  `automaton transitions: ${looseCandidateStats.automatonTransitionCount}`,
+);
+console.log(`automaton outputs: ${looseCandidateStats.automatonOutputCount}`);
+console.log(
+  `tracked signature and bitset bytes: ${looseCandidateStats.trackedByteLength}`,
+);
 
 console.log("\nbenchmark complete\n");

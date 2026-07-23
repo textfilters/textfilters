@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   buildLoosePatterns,
   buildStrictPatterns,
@@ -8,7 +8,9 @@ import {
   buildLooseCandidateIndex,
   collectInputScanFacts,
   createInputScanFactCollector,
+  looseCandidateIndexStats,
   looseCandidatePatterns,
+  loosePatternCandidates,
 } from "../src/matchers/loose-candidates.js";
 import { createBuiltInProfanityRules } from "../src/matchers/internal-rules.js";
 import {
@@ -17,6 +19,8 @@ import {
   prepareForMatchSameLenWithoutHomoglyphs,
 } from "../src/normalization/text.js";
 import { collectLooseRanges } from "../src/ranges/loose.js";
+import { iterateLooseCandidateRanges } from "../src/ranges/loose.js";
+import { iteratePatternCandidateMatches } from "../src/ranges/patterns.js";
 import { LOOSE_BASE } from "../src/terms/loose-base.js";
 import { STRICT_BASE } from "../src/terms/strict-base.js";
 
@@ -51,7 +55,7 @@ describe("loose candidate index", () => {
     );
   });
 
-  it("uses first and second characters conservatively in one UTF-16 scan", () => {
+  it("records complete signatures and UTF-16 candidate starts in one scan", () => {
     const [pattern] = compilePatternDefinitions(
       [{ source: String.raw`b[^\p{L}\p{N}]*a` }],
       false,
@@ -60,10 +64,13 @@ describe("loose candidate index", () => {
     const unrelated = collectInputScanFacts("🙂b-x", index);
     const matching = collectInputScanFacts("🙂b---a", index);
 
-    expect(unrelated.looseCandidateStartPositions).toEqual([2]);
+    expect(unrelated.looseCandidateStartPositions).toEqual([]);
     expect(looseCandidatePatterns(index, unrelated)).toEqual([]);
     expect(matching.looseCandidateStartPositions).toEqual([2]);
     expect(looseCandidatePatterns(index, matching)).toEqual([pattern]);
+    expect(loosePatternCandidates(index, matching)).toEqual([
+      { pattern, startPositions: [2] },
+    ]);
   });
 
   it("applies non-letter prefix guards without losing repeated starts", () => {
@@ -98,6 +105,126 @@ describe("loose candidate index", () => {
     expect(
       looseCandidatePatterns(index, collectInputScanFacts("b-a", index)),
     ).toEqual(patterns);
+  });
+
+  it("uses three-character signatures and keeps unsafe prefixes on fallback", () => {
+    const [indexed, fallback] = compilePatternDefinitions(
+      [
+        { source: String.raw`b[^\p{L}\p{N}]*a[^\p{L}\p{N}]*d` },
+        { source: String.raw`(?:x)?b[^\p{L}\p{N}]*a` },
+      ],
+      false,
+    );
+    const mixedSymbol = compilePatternDefinitions(
+      [{ source: String.raw`b[^\p{L}\p{N}]*[a@]` }],
+      false,
+    )[0]!;
+    const index = buildLooseCandidateIndex([indexed!, fallback!, mixedSymbol]);
+    const stats = looseCandidateIndexStats(index);
+
+    expect(indexed!.scanSignatures).toEqual(["bad"]);
+    expect(fallback!.scanSignatures).toBeUndefined();
+    expect(mixedSymbol.scanSignatures).toBeUndefined();
+    expect(stats).toMatchObject({
+      patternCount: 3,
+      signatureIndexedPatternCount: 1,
+      globalScanPatternCount: 2,
+      signatureCount: 1,
+    });
+    expect(stats.automatonNodeCount).toBeGreaterThan(1);
+    expect(stats.trackedByteLength).toBeGreaterThan(0);
+  });
+
+  it("preserves Unicode case-fold matches in signature indexing", () => {
+    for (const [source, normalized] of [
+      ["ßa", "ẞa"],
+      ["σa", "ςa"],
+      ["ka", "Ka"],
+    ]) {
+      const [pattern] = compilePatternDefinitions([{ source }], false);
+      const index = buildLooseCandidateIndex([pattern!]);
+      const candidates = loosePatternCandidates(
+        index,
+        collectInputScanFacts(normalized, index),
+      );
+
+      expect(pattern!.scanSignatures, source).toBeDefined();
+      expect(candidates, source).toEqual([{ pattern, startPositions: [0] }]);
+      expect(
+        [...iteratePatternCandidateMatches(normalized, candidates)].map(
+          ({ start, end }) => [start, end],
+        ),
+        source,
+      ).toEqual([[0, normalized.length]]);
+    }
+  });
+
+  it("keeps negated classes that can consume letters off the signature path", () => {
+    const [pattern] = compilePatternDefinitions(
+      [{ source: String.raw`b[^\s]*a` }],
+      false,
+    );
+    const index = buildLooseCandidateIndex([pattern!]);
+    const candidates = loosePatternCandidates(
+      index,
+      collectInputScanFacts("bxa", index),
+    );
+
+    expect(pattern!.scanSignatures).toBeUndefined();
+    expect(candidates).toEqual([{ pattern }]);
+    expect(
+      [...iteratePatternCandidateMatches("bxa", candidates)].map(
+        ({ start, end }) => [start, end],
+      ),
+    ).toEqual([[0, 3]]);
+  });
+
+  it("validates indexed rules only at anchored candidate positions", () => {
+    const [pattern] = compilePatternDefinitions(
+      [
+        {
+          source: String.raw`b(?:[^\p{L}\p{N}]*b)*[^\p{L}\p{N}]*a`,
+        },
+      ],
+      false,
+    );
+    const index = buildLooseCandidateIndex([pattern!]);
+    const normalized = "🙂bb-a xx b--a";
+    const candidates = loosePatternCandidates(
+      index,
+      collectInputScanFacts(normalized, index),
+    );
+    const globalExec = vi.spyOn(pattern!.re, "exec");
+
+    expect(candidates).toEqual([{ pattern, startPositions: [2, 3, 10] }]);
+    expect(
+      [...iteratePatternCandidateMatches(normalized, candidates)].map(
+        ({ start, end }) => [start, end],
+      ),
+    ).toEqual([
+      [2, 6],
+      [10, 14],
+    ]);
+    expect(globalExec).not.toHaveBeenCalled();
+  });
+
+  it("keeps unindexable rules on the global compatibility path", () => {
+    const [pattern] = compilePatternDefinitions(
+      [{ source: String.raw`\p{L}+` }],
+      false,
+    );
+    const index = buildLooseCandidateIndex([pattern!]);
+    const candidates = loosePatternCandidates(
+      index,
+      collectInputScanFacts("plain text", index),
+    );
+    const globalExec = vi.spyOn(pattern!.re, "exec");
+
+    expect(candidates).toEqual([{ pattern }]);
+    expect([
+      ...iteratePatternCandidateMatches("plain text", candidates),
+    ]).toHaveLength(2);
+    expect(globalExec).toHaveBeenCalled();
   });
 
   it("keeps fused candidate facts aligned with the compatibility collector", () => {
@@ -136,34 +263,36 @@ describe("loose candidate index", () => {
       "х\u200bу\u200bй",
       "xyй",
       "пи3дец",
+      "п1и1д1о1р",
+      "еб@ть",
       "бля текст",
       "привет хуй и мир",
       "𐐀bad𐐀",
       "💬 привет хуй и мир",
     ];
     const generatedCases = ["пиздец", "хуй", "блядь", "ебал"].flatMap((term) =>
-      [" ", "-", ".", "_", "/", "*", "\u200b", "🙂"].map((separator) =>
+      [" ", "-", ".", "_", "/", "*", "1", "\u200b", "🙂"].map((separator) =>
         Array.from(term).join(separator),
       ),
     );
 
     for (const source of [...maintainedCases, ...generatedCases]) {
       const normalized = normalizeForMatchSameLen(source);
-      const candidates = looseCandidatePatterns(
+      const candidates = loosePatternCandidates(
         looseCandidateIndex,
         collectInputScanFacts(normalized, looseCandidateIndex),
       );
-      const indexedRanges: CollectedLooseRanges = [];
+      const indexedRanges: CollectedLooseRanges = [
+        ...iterateLooseCandidateRanges(
+          normalized,
+          source,
+          candidates,
+          strictPatterns,
+          loosePatterns,
+        ),
+      ];
       const exhaustiveRanges: CollectedLooseRanges = [];
 
-      collectLooseRanges(
-        normalized,
-        source,
-        candidates,
-        strictPatterns,
-        indexedRanges,
-        loosePatterns,
-      );
       collectLooseRanges(
         normalized,
         source,

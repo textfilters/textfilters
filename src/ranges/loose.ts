@@ -1,6 +1,7 @@
 import type { TextRange } from "@textfilters/core";
 import type { StrictPatternSet } from "../matchers/build.js";
 import type { CompiledPattern } from "../matchers/compile.js";
+import type { LoosePatternCandidate } from "../matchers/loose-candidates.js";
 import type { CollectedProfanityRange } from "../matches/ranges.js";
 import { nextCodePointEnd } from "../normalization/text.js";
 import {
@@ -13,7 +14,12 @@ import {
 import { boundaryCheckedRange } from "./boundary.js";
 import { collectedRangeForPattern } from "./collected.js";
 import { knownHyphenatedSuffixRange } from "./hyphen-tail.js";
-import { iteratePatternMatches, somePatternMatch } from "./patterns.js";
+import {
+  iteratePatternCandidateMatches,
+  iteratePatternMatches,
+  somePatternCandidateMatch,
+  somePatternMatch,
+} from "./patterns.js";
 
 interface LooseRangePatterns {
   readonly loose: readonly CompiledPattern[];
@@ -79,6 +85,57 @@ export const hasLooseRange = (
       range !== null && predicate(collectedRangeForPattern(range, pattern))
     );
   });
+};
+
+export function* iterateLooseCandidateRanges(
+  normalized: string,
+  source: string,
+  candidates: readonly LoosePatternCandidate[],
+  strictPatterns: StrictPatternSet,
+  allLoosePatterns: readonly CompiledPattern[],
+): IterableIterator<CollectedProfanityRange> {
+  const patterns = { loose: allLoosePatterns, strict: strictPatterns };
+
+  for (const { start, end, pattern } of iteratePatternCandidateMatches(
+    normalized,
+    candidates,
+  )) {
+    const range = looseRange(normalized, source, start, end, pattern, patterns);
+
+    if (range !== null) {
+      yield collectedRangeForPattern(range, pattern);
+    }
+  }
+}
+
+export const hasLooseCandidateRange = (
+  normalized: string,
+  source: string,
+  candidates: readonly LoosePatternCandidate[],
+  strictPatterns: StrictPatternSet,
+  predicate: CollectedRangePredicate,
+  allLoosePatterns: readonly CompiledPattern[],
+): boolean => {
+  const patterns = { loose: allLoosePatterns, strict: strictPatterns };
+
+  return somePatternCandidateMatch(
+    normalized,
+    candidates,
+    (start, end, pattern) => {
+      const range = looseRange(
+        normalized,
+        source,
+        start,
+        end,
+        pattern,
+        patterns,
+      );
+
+      return (
+        range !== null && predicate(collectedRangeForPattern(range, pattern))
+      );
+    },
+  );
 };
 
 const looseRange = (
