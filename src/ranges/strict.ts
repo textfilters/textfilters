@@ -65,25 +65,23 @@ function* iterateWordRanges(
 ): IterableIterator<CollectedProfanityRange> {
   if (patterns.token.length === 0) return;
 
-  const lookupScratch = createTokenLookupScratch();
+  const lookupState = createTokenLookupState();
 
   // Strict terms must own the whole word token; embedded prefixes are rejected by
   // boundaryCheckedRange before they become mask ranges.
   for (const match of normalized.matchAll(WORD_RE)) {
+    const value = match[0];
+    const occurrenceEnd = match.index + value.length;
     const pattern = findMatchingIndexedTokenPattern(
       patterns,
-      match[0],
-      lookupScratch,
+      value,
+      lookupState,
     );
     if (pattern === null) {
       continue;
     }
 
-    const range = boundaryCheckedRange(
-      normalized,
-      match.index,
-      match.index + match[0].length,
-    );
+    const range = boundaryCheckedRange(normalized, match.index, occurrenceEnd);
     if (range !== null) {
       yield collectedRangeForPattern(range, pattern);
     }
@@ -97,23 +95,21 @@ const hasWordRange = (
 ): boolean => {
   if (patterns.token.length === 0) return false;
 
-  const lookupScratch = createTokenLookupScratch();
+  const lookupState = createTokenLookupState();
 
   for (const match of normalized.matchAll(WORD_RE)) {
+    const value = match[0];
+    const occurrenceEnd = match.index + value.length;
     const pattern = findMatchingIndexedTokenPattern(
       patterns,
-      match[0],
-      lookupScratch,
+      value,
+      lookupState,
     );
     if (pattern === null) {
       continue;
     }
 
-    const range = boundaryCheckedRange(
-      normalized,
-      match.index,
-      match.index + match[0].length,
-    );
+    const range = boundaryCheckedRange(normalized, match.index, occurrenceEnd);
     if (range !== null && predicate(collectedRangeForPattern(range, pattern))) {
       return true;
     }
@@ -250,12 +246,17 @@ const hasStrictPatterns = (patterns: StrictPatternSet): boolean =>
   patterns.symbolToken.length > 0 ||
   patterns.phrase.length > 0;
 
-interface TokenLookupScratch {
+interface TokenLookupState {
   readonly buckets: (readonly IndexedTokenPattern[])[];
   readonly positions: number[];
+  firstValue?: string;
+  firstPattern?: CompiledPattern | null;
+  secondValue?: string;
+  secondPattern?: CompiledPattern | null;
+  cache?: Record<string, CompiledPattern | null>;
 }
 
-const createTokenLookupScratch = (): TokenLookupScratch => ({
+const createTokenLookupState = (): TokenLookupState => ({
   buckets: [],
   positions: [],
 });
@@ -263,22 +264,75 @@ const createTokenLookupScratch = (): TokenLookupScratch => ({
 const findMatchingIndexedTokenPattern = (
   patterns: StrictPatternSet,
   value: string,
-  scratch: TokenLookupScratch,
+  state: TokenLookupState,
 ): CompiledPattern | null => {
-  resetTokenLookupScratch(scratch);
-  addTokenIndexBucket(scratch, patterns.tokenIndex.fallback);
-  addTokenIndexLookupBuckets(scratch, patterns.tokenIndex, value);
+  const cache = state.cache;
+  if (cache !== undefined) {
+    const cached = cache[value];
+    if (cached !== undefined) {
+      return cached;
+    }
+
+    const pattern = lookupIndexedTokenPattern(patterns, value, state);
+    cache[value] = pattern;
+    return pattern;
+  }
+
+  if (state.firstValue === value) {
+    return state.firstPattern ?? null;
+  }
+  if (state.secondValue === value) {
+    return state.secondPattern ?? null;
+  }
+
+  const pattern = lookupIndexedTokenPattern(patterns, value, state);
+
+  if (state.firstValue === undefined) {
+    state.firstValue = value;
+    state.firstPattern = pattern;
+    return pattern;
+  }
+
+  if (state.secondValue === undefined) {
+    state.secondValue = value;
+    state.secondPattern = pattern;
+    return pattern;
+  }
+
+  // Keep one- and two-token inputs on an allocation-minimal inline path. The
+  // dictionary promotes only after a third distinct token and stays
+  // bounded by the unique normalized tokens in this invocation.
+  state.cache = Object.create(null) as Record<string, CompiledPattern | null>;
+  state.cache[state.firstValue] = state.firstPattern ?? null;
+  state.cache[state.secondValue] = state.secondPattern ?? null;
+  state.firstValue = undefined;
+  state.firstPattern = undefined;
+  state.secondValue = undefined;
+  state.secondPattern = undefined;
+
+  state.cache[value] = pattern;
+  return pattern;
+};
+
+const lookupIndexedTokenPattern = (
+  patterns: StrictPatternSet,
+  value: string,
+  state: TokenLookupState,
+): CompiledPattern | null => {
+  resetTokenLookupScratch(state);
+  addTokenIndexBucket(state, patterns.tokenIndex.fallback);
+  addTokenIndexLookupBuckets(state, patterns.tokenIndex, value);
 
   while (true) {
     let nextCandidate: IndexedTokenPattern | undefined;
 
     for (
       let bucketIndex = 0;
-      bucketIndex < scratch.buckets.length;
+      bucketIndex < state.buckets.length;
       bucketIndex++
     ) {
-      const bucket = scratch.buckets[bucketIndex]!;
-      const candidate = bucket[scratch.positions[bucketIndex]!];
+      const bucket = state.buckets[bucketIndex]!;
+      const candidate = bucket[state.positions[bucketIndex]!];
       if (
         candidate !== undefined &&
         (nextCandidate === undefined || candidate.order < nextCandidate.order)
@@ -294,14 +348,14 @@ const findMatchingIndexedTokenPattern = (
     // numeric order de-duplicates without a per-token Set or candidate sort.
     for (
       let bucketIndex = 0;
-      bucketIndex < scratch.buckets.length;
+      bucketIndex < state.buckets.length;
       bucketIndex++
     ) {
-      const bucket = scratch.buckets[bucketIndex]!;
-      let position = scratch.positions[bucketIndex]!;
+      const bucket = state.buckets[bucketIndex]!;
+      let position = state.positions[bucketIndex]!;
       if (bucket[position]?.order === nextCandidate.order) {
         position++;
-        scratch.positions[bucketIndex] = position;
+        state.positions[bucketIndex] = position;
       }
     }
 
@@ -311,20 +365,20 @@ const findMatchingIndexedTokenPattern = (
   }
 };
 
-const resetTokenLookupScratch = (scratch: TokenLookupScratch): void => {
-  scratch.buckets.length = 0;
-  scratch.positions.length = 0;
+const resetTokenLookupScratch = (state: TokenLookupState): void => {
+  state.buckets.length = 0;
+  state.positions.length = 0;
 };
 
 const addTokenIndexLookupBuckets = (
-  scratch: TokenLookupScratch,
+  state: TokenLookupState,
   index: TokenPatternIndex,
   value: string,
 ): void => {
   const firstEnd = nextCodePointEnd(value, 0);
   const first = value.slice(0, firstEnd);
 
-  addTokenIndexLookupCharBuckets(scratch, index, first);
+  addTokenIndexLookupCharBuckets(state, index, first);
 
   if (!SPLIT_TOKEN_CHAR_RE.test(first)) {
     return;
@@ -332,52 +386,52 @@ const addTokenIndexLookupBuckets = (
 
   for (let position = firstEnd; position < value.length; ) {
     const end = nextCodePointEnd(value, position);
-    addTokenIndexLookupCharBuckets(scratch, index, value.slice(position, end));
+    addTokenIndexLookupCharBuckets(state, index, value.slice(position, end));
     position = end;
   }
 };
 
 const addTokenIndexLookupCharBuckets = (
-  scratch: TokenLookupScratch,
+  state: TokenLookupState,
   index: TokenPatternIndex,
   char: string,
 ): void => {
-  addTokenIndexBucketForChar(scratch, index, char);
+  addTokenIndexBucketForChar(state, index, char);
 
   const lower = char.toLowerCase();
   if (lower !== char) {
-    addTokenIndexBucketForChar(scratch, index, lower);
+    addTokenIndexBucketForChar(state, index, lower);
   }
 
   const upper = char.toUpperCase();
   if (upper !== char && upper !== lower) {
-    addTokenIndexBucketForChar(scratch, index, upper);
+    addTokenIndexBucketForChar(state, index, upper);
   }
 };
 
 const addTokenIndexBucketForChar = (
-  scratch: TokenLookupScratch,
+  state: TokenLookupState,
   index: TokenPatternIndex,
   char: string,
 ): void => {
   const bucket = index.byFirstChar.get(char);
   if (bucket !== undefined) {
-    addTokenIndexBucket(scratch, bucket);
+    addTokenIndexBucket(state, bucket);
   }
 };
 
 const addTokenIndexBucket = (
-  scratch: TokenLookupScratch,
+  state: TokenLookupState,
   bucket: readonly IndexedTokenPattern[],
 ): void => {
   if (bucket.length === 0) return;
 
-  for (const existing of scratch.buckets) {
+  for (const existing of state.buckets) {
     if (existing === bucket) return;
   }
 
-  scratch.buckets.push(bucket);
-  scratch.positions.push(0);
+  state.buckets.push(bucket);
+  state.positions.push(0);
 };
 
 const findMatchingPatternInList = (

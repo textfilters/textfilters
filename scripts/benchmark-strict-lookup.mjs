@@ -7,10 +7,21 @@ const UNIQUE_CLEAN = Array.from(
   (_, index) => `ordinary${index}`,
 ).join(" ");
 const REPEATED_CLEAN = Array.from({ length: 300 }, () => "ordinary").join(" ");
+const REPEATED_MATCH = Array.from({ length: 300 }, () => DEFAULT_MATCH).join(
+  " ",
+);
 const STRICT_EARLY_MATCH = `${DEFAULT_MATCH} ${UNIQUE_CLEAN}`;
 const STRICT_LATE_MATCH = `${UNIQUE_CLEAN} ${DEFAULT_MATCH}`;
+const REPEATED_INSTRUMENTED_MATCH = Array.from(
+  { length: 300 },
+  () => "blocked",
+).join(" ");
 
 const filter = createProfanityFilter();
+const instrumentedFilter = createProfanityFilter(
+  ["ordinarypattern", "blocked"],
+  [],
+);
 
 const benchmark = (label, fn, iterations) => {
   for (let index = 0; index < Math.min(100, iterations); index++) fn();
@@ -57,7 +68,27 @@ const countLookupWork = (fn) => {
   return { setConstructions, arraySorts };
 };
 
-const cases = [
+const countIndexedPatternEvaluations = (fn) => {
+  const nativeTest = RegExp.prototype.test;
+  let evaluations = 0;
+
+  RegExp.prototype.test = function (...args) {
+    if (this.source.startsWith("^(?:") && this.source.endsWith(")$")) {
+      evaluations++;
+    }
+    return nativeTest.apply(this, args);
+  };
+
+  try {
+    fn();
+  } finally {
+    RegExp.prototype.test = nativeTest;
+  }
+
+  return evaluations;
+};
+
+const timingCases = [
   {
     label: "check unique clean tokens",
     fn: () => filter.check(UNIQUE_CLEAN),
@@ -66,6 +97,11 @@ const cases = [
   {
     label: "check repeated clean tokens",
     fn: () => filter.check(REPEATED_CLEAN),
+    iterations: 200,
+  },
+  {
+    label: "analyze repeated matches",
+    fn: () => filter.analyze(REPEATED_MATCH),
     iterations: 200,
   },
   {
@@ -80,9 +116,26 @@ const cases = [
   },
 ];
 
+const instrumentationCases = [
+  {
+    label: "unique clean indexed evaluations",
+    fn: () => instrumentedFilter.check(UNIQUE_CLEAN),
+  },
+  {
+    label: "repeated clean indexed evaluations",
+    fn: () => instrumentedFilter.check(REPEATED_CLEAN),
+  },
+  {
+    label: "repeated match indexed evaluations",
+    fn: () => instrumentedFilter.analyze(REPEATED_INSTRUMENTED_MATCH),
+  },
+];
+
 const results = [
   benchmark("createProfanityFilter()", () => createProfanityFilter(), 100),
-  ...cases.map(({ label, fn, iterations }) => benchmark(label, fn, iterations)),
+  ...timingCases.map(({ label, fn, iterations }) =>
+    benchmark(label, fn, iterations),
+  ),
 ];
 
 console.log("\nstrict token lookup benchmark");
@@ -93,11 +146,16 @@ for (const result of results) {
 }
 
 console.log("\nstrict token lookup instrumentation");
-for (const { label, fn } of cases) {
+for (const { label, fn } of timingCases) {
   const counts = countLookupWork(fn);
   console.log(
     `${label}: ${counts.setConstructions} Set constructions/call, ${counts.arraySorts} Array sorts/call`,
   );
+}
+
+console.log("\nstrict token cache instrumentation");
+for (const { label, fn } of instrumentationCases) {
+  console.log(`${label}: ${countIndexedPatternEvaluations(fn)} per call`);
 }
 
 console.log("\nstrict token lookup benchmark complete\n");

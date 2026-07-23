@@ -85,18 +85,66 @@ describe("strict token index", () => {
     expect(right.next().done).toBe(true);
   });
 
+  it("evaluates repeated positive and negative tokens once per invocation", () => {
+    const positive = compiledPattern("bad", "positive", ["b", "B"]);
+    const negative = compiledPattern("ordinarypattern", "negative", ["o", "O"]);
+    const positiveSpy = vi.spyOn(positive.re, "test");
+    const negativeSpy = vi.spyOn(negative.re, "test");
+    const patterns = strictPatternSet([positive, negative]);
+
+    expect([...iterateStrictRanges("bad bad bad", patterns)]).toHaveLength(3);
+    expect(positiveSpy).toHaveBeenCalledOnce();
+
+    expect(
+      hasStrictRange("ordinary ordinary ordinary", patterns, () => true),
+    ).toBe(false);
+    expect(negativeSpy).toHaveBeenCalledOnce();
+  });
+
+  it("promotes three distinct tokens without repeating indexed evaluation", () => {
+    const alpha = compiledPattern("alpha", "alpha", ["a", "A"]);
+    const beta = compiledPattern("beta", "beta", ["b", "B"]);
+    const gamma = compiledPattern("gamma", "gamma", ["g", "G"]);
+    const spies = [alpha, beta, gamma].map((pattern) =>
+      vi.spyOn(pattern.re, "test"),
+    );
+    const ranges = [
+      ...iterateStrictRanges(
+        "alpha beta gamma alpha beta gamma",
+        strictPatternSet([alpha, beta, gamma]),
+      ),
+    ];
+
+    expect(ranges).toHaveLength(6);
+    for (const spy of spies) {
+      expect(spy).toHaveBeenCalledOnce();
+    }
+  });
+
+  it("reuses token lookup while checking every occurrence boundary", () => {
+    const indexed = compiledPattern("bad", "indexed", ["b", "B"]);
+    const testSpy = vi.spyOn(indexed.re, "test");
+    const ranges = [
+      ...iterateStrictRanges("\u0301bad bad", strictPatternSet([indexed])),
+    ];
+
+    expect(ranges.map((range) => [range[0], range[1]])).toEqual([[5, 8]]);
+    expect(testSpy).toHaveBeenCalledOnce();
+  });
+
   it("rebuilds independent indexes after runtime dictionary mutation", () => {
     const left = createProfanityFilter(["alpha"], []);
     const right = createProfanityFilter(["beta"], []);
 
+    expect(left.check("gamma gamma")).toBe(false);
     left.setStrict(["gamma"]);
     left.addStrict("delta");
 
     expect(left.check("alpha")).toBe(false);
-    expect(left.check("gamma delta")).toBe(true);
-    expect(left.censor("gamma delta")).toBe("***** *****");
+    expect(left.check("gamma gamma delta")).toBe(true);
+    expect(left.censor("gamma gamma delta")).toBe("***** ***** *****");
     expect(right.check("beta")).toBe(true);
-    expect(right.check("gamma delta")).toBe(false);
+    expect(right.check("gamma gamma delta")).toBe(false);
   });
 
   it("keeps public UTF-16 ranges and scanner early-stop behavior compatible", () => {
@@ -107,25 +155,28 @@ describe("strict token index", () => {
           category: "OBSCENE_MAT",
           severity: "high",
         },
-        "evil",
       ],
       [],
     );
     const scanner = createProfanityScanner({ filter });
-    const text = "😀 bad evil";
+    const text = "😀 bad bad";
     const matches = filter.analyze(text);
     const seen: (readonly [number, number])[] = [];
 
     expect(filter.check(text)).toBe(true);
-    expect(filter.censor(text)).toBe("😀 *** ****");
+    expect(filter.censor(text)).toBe("😀 *** ***");
     expect(matches.map((match) => [match[0], match[1]])).toEqual([
       [3, 6],
-      [7, 11],
+      [7, 10],
     ]);
-    expect(matches[0]).toMatchObject({
-      category: "OBSCENE_MAT",
-      severity: "high",
-    });
+    for (const match of matches) {
+      expect(match).toMatchObject({
+        category: "OBSCENE_MAT",
+        severity: "high",
+      });
+    }
+    expect(filter.analyze(text, { categories: ["VULGAR"] })).toEqual([]);
+    expect(filter.analyze(text, { minSeverity: "high" })).toHaveLength(2);
 
     const completed = scanner.scan(
       { text, codePoints: Array.from(text) },
