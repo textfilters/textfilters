@@ -55,7 +55,8 @@
     "smoke:dist": "npm run build && tsc --ignoreConfig --noEmit --target ES2024 --module NodeNext --moduleResolution NodeNext --strict --skipLibCheck tests/dist-public-api-smoke.ts && node tests/dist-public-api-smoke.mjs",
     "pack:dry-run": "npm pack --dry-run",
     "check": "npm run lint && npm test && npm run smoke:dist && npm run pack:dry-run",
-    "benchmark:profanity": "npm run build && node scripts/benchmark-profanity.mjs"
+    "benchmark:profanity": "npm run build && node scripts/benchmark-profanity.mjs",
+    "benchmark:strict-lookup": "npm run build && node scripts/benchmark-strict-lookup.mjs"
   },
   "dependencies": {
     "@textfilters/core": "^0.4.0"

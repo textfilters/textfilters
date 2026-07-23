@@ -67,6 +67,8 @@ export const buildTokenPatternIndex = (
   const fallback: IndexedTokenPattern[] = [];
   const byFirstChar = new Map<string, IndexedTokenPattern[]>();
 
+  // Pattern order is the strict precedence contract. Visiting the compiled
+  // list once keeps every fallback and character bucket ordered by numeric id.
   patterns.forEach((pattern, order) => {
     const indexed = { order, pattern };
     if (pattern.scanFirstChars === undefined) {
