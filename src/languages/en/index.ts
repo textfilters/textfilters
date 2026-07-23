@@ -5,8 +5,10 @@ import {
   type ReadonlyProfanityFilter,
 } from "../../types.js";
 import {
+  analyzePreparedProfanity,
   registerProfanityMatchStreamer,
-  streamProfanityMatches,
+  registerProfanityPreparedAnalyzer,
+  streamPreparedProfanityMatches,
 } from "../../filter.js";
 
 import { englishProfanityDictionary } from "./dictionary.js";
@@ -34,10 +36,10 @@ export const englishProfanityFilter: ReadonlyProfanityFilter = Object.freeze({
 
 registerProfanityMatchStreamer(
   englishProfanityFilter,
-  (text, options, visit) => {
-    const completed = streamProfanityMatches(
+  (input, options, visit) => {
+    const completed = streamPreparedProfanityMatches(
       getSharedEnglishFilter(),
-      text,
+      input,
       options,
       visit,
     );
@@ -51,3 +53,17 @@ registerProfanityMatchStreamer(
     return completed;
   },
 );
+
+registerProfanityPreparedAnalyzer(englishProfanityFilter, (input, options) => {
+  const matches = analyzePreparedProfanity(
+    getSharedEnglishFilter(),
+    input,
+    options,
+  );
+
+  if (matches === undefined) {
+    throw new TypeError("The shared English profanity filter cannot analyze.");
+  }
+
+  return matches;
+});

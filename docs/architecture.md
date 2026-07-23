@@ -28,7 +28,8 @@ Intentional public-package changes:
 
 ```mermaid
 flowchart TD
-  Input["Input text"] --> Normalize["normalizeForMatchSameLen"]
+  Input["Input text"] --> Prepared["internal prepared input"]
+  Prepared --> Normalize["one same-length view per normalization strategy"]
   Normalize --> Strict["ranges/strict"]
   Normalize --> Loose["ranges/loose"]
   Strict --> Boundary["ranges/boundary"]
@@ -43,6 +44,26 @@ The matcher works on a normalized copy of the text, but all match ranges are
 kept as UTF-16 offsets into the original string. Normalization must remain
 same-length; see [invariants.md](invariants.md) for the maintained transform
 list.
+
+## Prepared Input Reuse
+
+Each public filter call or scanner operation creates one invocation-local
+prepared context. Package-owned filters store same-length normalized views in
+that context by normalization strategy, so composed profiles with the same
+strategy reuse the view while mixed strategies remain separate.
+
+Loose candidate facts are tied to the current candidate index rather than only
+to the normalization strategy. The context therefore caches those facts by
+index. Runtime dictionary mutation replaces the affected index, which forces
+new facts without invalidating the compatible normalized view.
+
+The scanner carries source text, code points, and optional generic hints from
+the shared prepared input. Length and empty-input hints are corroborated against
+the actual source before an optimization can skip work. Missing or incomplete
+hints preserve behavior. Filters without the package-owned capability continue
+through their public `check()` and `analyze()` methods.
+
+The context is never stored globally or reused across messages.
 
 ## Dictionary Boundary
 
@@ -112,10 +133,12 @@ ready-to-use read-only filter rather than a filter factory. Composition therefor
 does not compile maintained dictionaries again.
 
 `composeProfanityProfiles()` runs every selected profile on the original source,
-annotates matches with profile provenance, preserves overlapping strict and loose
-evidence for analysis, and masks the merged UTF-16 ranges once. Distinct profile
-ids may share a language tag. Per-profile taxonomy options are intersected with
-call-time options, so local profile policy can only be narrowed by a caller.
+reuses prepared views only for profiles with the same normalization strategy,
+annotates matches with profile provenance, preserves overlapping strict and
+loose evidence for analysis, and masks the merged UTF-16 ranges once. Distinct
+profile ids may share a language tag. Per-profile taxonomy options are
+intersected with call-time options, so local profile policy can only be narrowed
+by a caller.
 
 The composed filter registers a streaming capability when every child profile
 supports sink streaming. Legacy scanner output remains source-ordered and merges
@@ -165,9 +188,10 @@ actually covers the relevant token span.
 
 Boolean checks run strict matching first and only enter loose matching when the
 loose candidate prefilter indicates a viable input. The scanner adapter delegates
-its `check(input)` path to that fast boolean API, while sink-based scanning keeps
-range emission compatible with shared range pipelines and can stop after the
-first emitted match.
+its `check(input)` path to the internal prepared equivalent when available,
+while sink-based scanning keeps range emission compatible with shared range
+pipelines and can stop after the first emitted match. Custom filters retain the
+public API fallback.
 
 ## Why The Code Is Split This Way
 

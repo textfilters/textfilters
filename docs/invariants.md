@@ -20,6 +20,22 @@ must be implemented and reviewed inside this package; dictionary authors cannot
 inject arbitrary normalization callbacks. Older dictionaries that omit the
 strategy keep the Cyrillic-homoglyph compatibility default.
 
+## Invocation-Local Prepared Input
+
+Prepared normalized views may be reused only within one top-level filter or
+scanner operation and only by filters declaring the same package-owned
+normalization strategy. Do not add a global or cross-message normalized-text
+cache.
+
+Loose candidate facts are valid only for the candidate index that collected
+them. Rebuilding matcher state after runtime mutation must use a new index and
+must not reuse stale facts.
+
+Scanner hints are optional optimization evidence. Missing, partial, or
+conflicting hints must not change whether a match is found. Any skip based on a
+length or empty-input hint must first corroborate that fact against the actual
+source.
+
 ## UTF-16 Source Ranges
 
 All ranges are UTF-16 offsets into the original source string. This is why

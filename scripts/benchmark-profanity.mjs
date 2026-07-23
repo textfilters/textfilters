@@ -1,8 +1,10 @@
 import { performance } from "node:perf_hooks";
+import { createPreparedText } from "@textfilters/core";
 import {
   composeProfanityProfiles,
   createProfanityFilter,
   createProfanityScanner,
+  defineProfanityLanguageProfile,
 } from "../dist/index.js";
 import { profile as englishProfile } from "../dist/entrypoints/en.js";
 import { profile as russianProfile } from "../dist/entrypoints/ru.js";
@@ -20,6 +22,7 @@ const LONG_LATE_MATCH =
   "The quick brown fox jumps over the lazy dog. ".repeat(50) + DEFAULT_MATCH;
 const MIXED_CLEAN = "Hello, это обычный bilingual message";
 const MIXED_MATCH = `hello shit ${DEFAULT_MATCH}`;
+const PREPARED_MATCH = `${LONG_CLEAN} beta`;
 
 function bench(label, fn, iterations = ITERATIONS) {
   for (let i = 0; i < Math.min(100, iterations); i++) fn();
@@ -55,7 +58,45 @@ const multilingualFilter = composeProfanityProfiles([
 const multilingualScanner = createProfanityScanner({
   filter: multilingualFilter,
 });
+const firstPreparedFilter = createProfanityFilter(["alpha"], []);
+const secondPreparedFilter = createProfanityFilter(["beta"], []);
+const preparedProfiles = [
+  defineProfanityLanguageProfile({
+    id: "benchmark:first",
+    languageTag: "zz",
+    filter: firstPreparedFilter,
+  }),
+  defineProfanityLanguageProfile({
+    id: "benchmark:second",
+    languageTag: "zz",
+    filter: secondPreparedFilter,
+  }),
+];
+const fallbackFilter = (activeFilter) => ({
+  name: activeFilter.name,
+  analyze: (text, options) => activeFilter.analyze(text, options),
+  check: (text, options) => activeFilter.check(text, options),
+  censor: (text, options) => activeFilter.censor(text, options),
+});
+const repeatedProfiles = preparedProfiles.map((profile) =>
+  defineProfanityLanguageProfile({
+    ...profile,
+    id: `${profile.id}:fallback`,
+    filter: fallbackFilter(profile.filter),
+  }),
+);
+const preparedComposition = composeProfanityProfiles(preparedProfiles);
+const repeatedComposition = composeProfanityProfiles(repeatedProfiles);
+const preparedCompositionScanner = createProfanityScanner({
+  filter: preparedComposition,
+});
+const repeatedCompositionScanner = createProfanityScanner({
+  filter: repeatedComposition,
+});
 const input = (text) => ({ text, codePoints: Array.from(text) });
+const preparedLongCleanInput = createPreparedText(LONG_CLEAN);
+const preparedLongLateMatchInput = createPreparedText(LONG_LATE_MATCH);
+const preparedMatchInput = createPreparedText(PREPARED_MATCH);
 const hintedEmptyInput = {
   text: "",
   codePoints: [],
@@ -90,6 +131,17 @@ printResults([
   bench("check short match", () => filter.check(SHORT_MATCH)),
   bench("check loose match", () => filter.check(LOOSE_MATCH)),
   bench("check long late match", () => filter.check(LONG_LATE_MATCH)),
+  bench("analyze long late match", () => filter.analyze(LONG_LATE_MATCH)),
+  bench("censor long late match", () => filter.censor(LONG_LATE_MATCH)),
+  bench("scanner check long clean", () =>
+    scanner.check(preparedLongCleanInput),
+  ),
+  bench("scanner check long late match", () =>
+    scanner.check(preparedLongLateMatchInput),
+  ),
+  bench("scanner scan long late match", () =>
+    scanner.scan(preparedLongLateMatchInput),
+  ),
   bench("scanner check short clean", () => scanner.check(input(SHORT_CLEAN))),
   bench("scanner check hinted empty", () => scanner.check(hintedEmptyInput)),
   bench("scanner check short match", () => scanner.check(input(SHORT_MATCH))),
@@ -113,6 +165,42 @@ printResults([
   ),
   bench("multilingual scanner scan", () =>
     multilingualScanner.scan(input(MIXED_MATCH)),
+  ),
+  bench("composed reused check long clean", () =>
+    preparedComposition.check(LONG_CLEAN),
+  ),
+  bench("composed repeated check long clean", () =>
+    repeatedComposition.check(LONG_CLEAN),
+  ),
+  bench("composed reused check match", () =>
+    preparedComposition.check(PREPARED_MATCH),
+  ),
+  bench("composed repeated check match", () =>
+    repeatedComposition.check(PREPARED_MATCH),
+  ),
+  bench("composed reused analyze match", () =>
+    preparedComposition.analyze(PREPARED_MATCH),
+  ),
+  bench("composed repeated analyze match", () =>
+    repeatedComposition.analyze(PREPARED_MATCH),
+  ),
+  bench("composed reused censor match", () =>
+    preparedComposition.censor(PREPARED_MATCH),
+  ),
+  bench("composed repeated censor match", () =>
+    repeatedComposition.censor(PREPARED_MATCH),
+  ),
+  bench("composed reused scanner check", () =>
+    preparedCompositionScanner.check(preparedMatchInput),
+  ),
+  bench("composed repeated scanner check", () =>
+    repeatedCompositionScanner.check(preparedMatchInput),
+  ),
+  bench("composed reused scanner scan", () =>
+    preparedCompositionScanner.scan(preparedMatchInput),
+  ),
+  bench("composed repeated scanner scan", () =>
+    repeatedCompositionScanner.scan(preparedMatchInput),
   ),
   bench("check minSeverity high", () =>
     filter.check(SHORT_MATCH, { minSeverity: "high" }),

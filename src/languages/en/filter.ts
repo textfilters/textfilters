@@ -9,9 +9,13 @@ import type {
 } from "../../types.js";
 
 import {
+  createPreparedProfanityInput,
   createProfanityFilterFromDictionary,
+  normalizedTextForPreparedProfanityInput,
   registerProfanityMatchStreamer,
-  streamProfanityMatches,
+  registerProfanityPreparedAnalyzer,
+  streamPreparedProfanityMatches,
+  type PreparedProfanityInput,
 } from "../../filter.js";
 import { normalizeLiteralTerm } from "../../matchers/literals.js";
 import { normalizeForMatchSameLenWithoutHomoglyphs } from "../../normalization/text.js";
@@ -47,20 +51,23 @@ export const createEnglishProfanityFilter = (): ProfanityFilter => {
   const runtimeStrict = new Map<string, RuntimeLiteralRecord>();
   const runtimeLoose = new Map<string, RuntimeLiteralRecord>();
 
-  const streamMatches = (
-    text: unknown,
+  const streamPreparedMatches = (
+    input: PreparedProfanityInput,
     options: ProfanityMatchOptions | undefined,
     visit: (match: ProfanityMatchRange) => boolean | void,
   ): boolean => {
-    const source = normalizeTextInput(text);
-    const normalized = normalizeForMatchSameLenWithoutHomoglyphs(source);
     const strictSnapshot = new Map(runtimeStrict);
     const looseSnapshot = new Map(runtimeLoose);
-    const completed = streamProfanityMatches(
+    const completed = streamPreparedProfanityMatches(
       baseFilter,
-      source,
+      input,
       undefined,
       (match) => {
+        const normalized = normalizedTextForPreparedProfanityInput(
+          input,
+          "latin-preserving",
+          normalizeForMatchSameLenWithoutHomoglyphs,
+        );
         const selected = selectEnglishMatch(
           normalized,
           match,
@@ -81,31 +88,45 @@ export const createEnglishProfanityFilter = (): ProfanityFilter => {
     return completed;
   };
 
-  const analyze = (
-    text: unknown,
+  const analyzePrepared = (
+    input: PreparedProfanityInput,
     options?: ProfanityMatchOptions,
   ): ProfanityMatchRange[] => {
     const matches: ProfanityMatchRange[] = [];
-    streamMatches(text, options, (match) => {
+    streamPreparedMatches(input, options, (match) => {
       matches.push(match);
     });
     return matches;
   };
+
+  const analyze = (
+    text: unknown,
+    options?: ProfanityMatchOptions,
+  ): ProfanityMatchRange[] =>
+    analyzePrepared(
+      createPreparedProfanityInput(normalizeTextInput(text)),
+      options,
+    );
 
   const filter: ProfanityFilter = {
     name: baseFilter.name,
     analyze,
     check: (text, options) => {
       let found = false;
-      streamMatches(text, options, () => {
-        found = true;
-        return false;
-      });
+      streamPreparedMatches(
+        createPreparedProfanityInput(normalizeTextInput(text)),
+        options,
+        () => {
+          found = true;
+          return false;
+        },
+      );
       return found;
     },
     censor: (text, options) => {
       const source = normalizeTextInput(text);
-      return maskUtf16Ranges(source, analyze(source, options));
+      const input = createPreparedProfanityInput(source);
+      return maskUtf16Ranges(source, analyzePrepared(input, options));
     },
     setStrict: (list) => {
       baseFilter.setStrict(list);
@@ -125,9 +146,10 @@ export const createEnglishProfanityFilter = (): ProfanityFilter => {
     },
   };
 
-  registerProfanityMatchStreamer(filter, (text, options, visit) =>
-    streamMatches(text, options, visit),
+  registerProfanityMatchStreamer(filter, (input, options, visit) =>
+    streamPreparedMatches(input, options, visit),
   );
+  registerProfanityPreparedAnalyzer(filter, analyzePrepared);
 
   return filter;
 };

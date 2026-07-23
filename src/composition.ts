@@ -1,9 +1,14 @@
 import { normalizeTextInput } from "@textfilters/core";
 
 import {
+  analyzePreparedProfanity,
   canStreamProfanityMatches,
+  checkPreparedProfanity,
+  createPreparedProfanityInput,
   registerProfanityMatchStreamer,
-  streamProfanityMatches,
+  registerProfanityPreparedAnalyzer,
+  streamPreparedProfanityMatches,
+  type PreparedProfanityInput,
 } from "./filter.js";
 import {
   isReadonlyProfanityFilter,
@@ -33,18 +38,33 @@ export const composeProfanityProfiles = (
 ): ComposedProfanityFilter => {
   const selections = normalizeProfileSelections(profiles);
 
+  const analyzePrepared = (
+    input: PreparedProfanityInput,
+    matchOptions?: ProfanityMatchOptions,
+  ): ProfiledProfanityMatchRange[] => {
+    return selections
+      .flatMap(({ profile, matchOptions: profileOptions }) =>
+        (
+          analyzePreparedProfanity(
+            profile.filter,
+            input,
+            intersectMatchOptions(profileOptions, matchOptions),
+          ) ??
+          profile.filter.analyze(
+            input.text,
+            intersectMatchOptions(profileOptions, matchOptions),
+          )
+        ).map((match) => matchWithProfile(match, profile)),
+      )
+      .sort(compareMatchesBySource);
+  };
+
   const analyze = (
     text: unknown,
     matchOptions?: ProfanityMatchOptions,
   ): ProfiledProfanityMatchRange[] => {
     const source = normalizeTextInput(text);
-    return selections
-      .flatMap(({ profile, matchOptions: profileOptions }) =>
-        profile.filter
-          .analyze(source, intersectMatchOptions(profileOptions, matchOptions))
-          .map((match) => matchWithProfile(match, profile)),
-      )
-      .sort(compareMatchesBySource);
+    return analyzePrepared(createPreparedProfanityInput(source), matchOptions);
   };
 
   const composedFilter: ComposedProfanityFilter = Object.freeze({
@@ -56,16 +76,24 @@ export const composeProfanityProfiles = (
     analyze,
     check: (text: unknown, matchOptions?: ProfanityMatchOptions) => {
       const source = normalizeTextInput(text);
-      return selections.some(({ profile, matchOptions: profileOptions }) =>
-        profile.filter.check(
-          source,
-          intersectMatchOptions(profileOptions, matchOptions),
-        ),
-      );
+      const input = createPreparedProfanityInput(source);
+      return selections.some(({ profile, matchOptions: profileOptions }) => {
+        const selectedOptions = intersectMatchOptions(
+          profileOptions,
+          matchOptions,
+        );
+        return (
+          checkPreparedProfanity(profile.filter, input, selectedOptions) ??
+          profile.filter.check(source, selectedOptions)
+        );
+      });
     },
     censor: (text: unknown, matchOptions?: ProfanityMatchOptions) => {
       const source = normalizeTextInput(text);
-      const matches = analyze(source, matchOptions);
+      const matches = analyzePrepared(
+        createPreparedProfanityInput(source),
+        matchOptions,
+      );
       return maskProfanityRanges(
         source,
         textRangesForMode(matches, PROFANITY_MATCH_MODE.STRICT),
@@ -74,18 +102,18 @@ export const composeProfanityProfiles = (
     },
   });
 
+  registerProfanityPreparedAnalyzer(composedFilter, analyzePrepared);
+
   if (
     selections.every(({ profile }) => canStreamProfanityMatches(profile.filter))
   ) {
     registerProfanityMatchStreamer(
       composedFilter,
-      (text, matchOptions, visit) => {
-        const source = normalizeTextInput(text);
-
+      (input, matchOptions, visit) => {
         for (const { profile, matchOptions: profileOptions } of selections) {
-          const completed = streamProfanityMatches(
+          const completed = streamPreparedProfanityMatches(
             profile.filter,
-            source,
+            input,
             intersectMatchOptions(profileOptions, matchOptions),
             (match) => visit(matchWithProfile(match, profile)),
           );

@@ -52,6 +52,7 @@ import {
   type ProfanityFilter,
   type ProfanityMatchOptions,
   type ProfanityMatchRange,
+  type ProfanityScanHints,
   type ProfanitySeverity,
   type ProfanityTermList,
   type ReadonlyProfanityFilter,
@@ -77,6 +78,7 @@ interface FilterState {
   looseCandidateIndex: LooseCandidateIndex;
   strictBasePatterns?: StrictPatternSet;
   looseBasePatterns?: readonly CompiledPattern[];
+  normalization: ProfanityNormalizationStrategy;
   normalizeForMatch: LiteralNormalizer;
   prepareForMatch: MatchInputPreparer;
 }
@@ -86,6 +88,7 @@ type FilterStateSnapshot = Pick<
   | "strictPatterns"
   | "loosePatterns"
   | "looseCandidateIndex"
+  | "normalization"
   | "normalizeForMatch"
   | "prepareForMatch"
 >;
@@ -102,8 +105,24 @@ interface CompiledDictionaryState {
   readonly looseTerms: MatcherTerms;
   readonly strictPatterns: StrictPatternSet;
   readonly loosePatterns: readonly CompiledPattern[];
+  readonly normalization: ProfanityNormalizationStrategy;
   readonly normalizeForMatch: LiteralNormalizer;
   readonly prepareForMatch: MatchInputPreparer;
+}
+
+interface PreparedNormalizationView {
+  readonly normalized: string;
+  readonly scanFacts: WeakMap<LooseCandidateIndex, InputScanFacts>;
+}
+
+export interface PreparedProfanityInput {
+  readonly text: string;
+  readonly codePoints?: readonly string[];
+  readonly hints?: ProfanityScanHints;
+  readonly normalizedViews: Map<
+    ProfanityNormalizationStrategy,
+    PreparedNormalizationView
+  >;
 }
 
 const compiledDictionaryStates = new WeakMap<
@@ -114,13 +133,21 @@ const COMPILED_DICTIONARY_STATE =
   "__textfiltersProfanityCompiledDictionaryState";
 const filterStates = new WeakMap<ReadonlyProfanityFilter, FilterState>();
 type ProfanityMatchStreamer = (
-  text: string,
+  input: PreparedProfanityInput,
   options: ProfanityMatchOptions | undefined,
   visit: (match: ProfanityMatchRange) => boolean | void,
 ) => boolean;
+type ProfanityPreparedAnalyzer = (
+  input: PreparedProfanityInput,
+  options: ProfanityMatchOptions | undefined,
+) => ProfanityMatchRange[];
 const profanityMatchStreamers = new WeakMap<
   ReadonlyProfanityFilter,
   ProfanityMatchStreamer
+>();
+const profanityPreparedAnalyzers = new WeakMap<
+  ReadonlyProfanityFilter,
+  ProfanityPreparedAnalyzer
 >();
 
 type CompiledProfanityDictionaryWithState = CompiledProfanityDictionary & {
@@ -131,11 +158,56 @@ export const canStreamProfanityMatches = (
   filter: ReadonlyProfanityFilter,
 ): boolean => filterStates.has(filter) || profanityMatchStreamers.has(filter);
 
+export const createPreparedProfanityInput = (
+  text: string,
+  scanInput?: {
+    readonly codePoints?: readonly string[];
+    readonly hints?: ProfanityScanHints;
+  },
+): PreparedProfanityInput => {
+  const codePoints = scanInput?.codePoints;
+  // Preserve generic hints as optional evidence, but derive length facts from
+  // the actual invocation input before package-owned code can use them.
+  const hints =
+    scanInput?.hints === undefined
+      ? undefined
+      : {
+          ...scanInput.hints,
+          textLength: text.length,
+          ...(codePoints === undefined
+            ? {}
+            : { codePointLength: codePoints.length }),
+          isEmpty: text.length === 0,
+        };
+
+  return {
+    text,
+    ...(codePoints === undefined ? {} : { codePoints }),
+    ...(hints === undefined ? {} : { hints }),
+    normalizedViews: new Map(),
+  };
+};
+
+export const normalizedTextForPreparedProfanityInput = (
+  input: PreparedProfanityInput,
+  normalization: ProfanityNormalizationStrategy,
+  normalizeForMatch: LiteralNormalizer,
+): string =>
+  normalizedViewForPreparedInput(input, normalization, normalizeForMatch)
+    .normalized;
+
 export const registerProfanityMatchStreamer = (
   filter: ReadonlyProfanityFilter,
   streamer: ProfanityMatchStreamer,
 ): void => {
   profanityMatchStreamers.set(filter, streamer);
+};
+
+export const registerProfanityPreparedAnalyzer = (
+  filter: ReadonlyProfanityFilter,
+  analyzer: ProfanityPreparedAnalyzer,
+): void => {
+  profanityPreparedAnalyzers.set(filter, analyzer);
 };
 
 export const createProfanityFilter = (
@@ -228,12 +300,18 @@ function formatValidationIssues(
 function createFilter(state: FilterState): ProfanityFilter {
   const filter: ProfanityFilter = {
     name: PROFANITY_FILTER_NAME,
-    analyze: (text, options) =>
-      collectProfanityMatches(state, normalizeTextInput(text), options),
-    check: (text, options) =>
-      hasProfanity(state, normalizeTextInput(text), options),
-    censor: (text, options) =>
-      censorText(state, normalizeTextInput(text), options),
+    analyze: (text, options) => {
+      const input = createPreparedProfanityInput(normalizeTextInput(text));
+      return collectProfanityMatches(state, input, options);
+    },
+    check: (text, options) => {
+      const input = createPreparedProfanityInput(normalizeTextInput(text));
+      return hasProfanity(state, input, options);
+    },
+    censor: (text, options) => {
+      const input = createPreparedProfanityInput(normalizeTextInput(text));
+      return censorText(state, input, options);
+    },
     setStrict: (list) => {
       state.strictTerms = runtimeLiteralTerms(list, state.normalizeForMatch);
       state.strictBasePatterns = undefined;
@@ -316,6 +394,7 @@ function createState(
     },
     loosePatterns: [],
     looseCandidateIndex: buildLooseCandidateIndex([]),
+    normalization: DEFAULT_NORMALIZATION_STRATEGY,
     normalizeForMatch: normalizeForMatchSameLen,
     prepareForMatch: prepareForMatchSameLen,
   };
@@ -346,6 +425,7 @@ function compileDictionaryState(
     looseTerms,
     strictPatterns: buildStrictPatterns(strictTerms, normalizeForMatch),
     loosePatterns: buildLoosePatterns(looseTerms, normalizeForMatch),
+    normalization,
     normalizeForMatch,
     prepareForMatch,
   };
@@ -387,6 +467,7 @@ function createStateFromCompiledDictionary(
     looseCandidateIndex: buildLooseCandidateIndex(state.loosePatterns),
     strictBasePatterns: cloneStrictPatternSet(state.strictPatterns),
     looseBasePatterns: [...state.loosePatterns],
+    normalization: state.normalization,
     normalizeForMatch: state.normalizeForMatch,
     prepareForMatch: state.prepareForMatch,
   };
@@ -580,23 +661,28 @@ const literalDefinition = (term: unknown): LiteralTermDefinition | null => {
 };
 
 const hasProfanity = (
-  state: FilterState,
-  text: string,
+  state: FilterStateSnapshot,
+  input: PreparedProfanityInput,
   options?: ProfanityMatchOptions,
 ): boolean => {
   // Keep boolean checks strict-first: measured eager fact collection makes a
   // late strict hit slower, while strict misses still use the compatibility
   // collector over the same normalized representation.
-  const normalized = state.normalizeForMatch(text);
+  const normalized = normalizedTextForPreparedProfanityInput(
+    input,
+    state.normalization,
+    state.normalizeForMatch,
+  );
   const matchesTaxonomy = collectedRangeMatchesTaxonomy(options);
 
   if (hasStrictRange(normalized, state.strictPatterns, matchesTaxonomy)) {
     return true;
   }
 
+  const facts = scanFactsForPreparedInput(state, input, normalized);
   const looseCandidates = looseCandidatePatterns(
     state.looseCandidateIndex,
-    collectInputScanFacts(normalized, state.looseCandidateIndex),
+    facts,
   );
   if (looseCandidates.length === 0) {
     return false;
@@ -604,7 +690,7 @@ const hasProfanity = (
 
   return hasLooseRange(
     normalized,
-    text,
+    input.text,
     looseCandidates,
     state.strictPatterns,
     matchesTaxonomy,
@@ -613,60 +699,103 @@ const hasProfanity = (
 };
 
 const censorText = (
-  state: FilterState,
-  text: string,
+  state: FilterStateSnapshot,
+  input: PreparedProfanityInput,
   options?: ProfanityMatchOptions,
 ): string => {
-  const matches = collectProfanityMatches(state, text, options);
+  const matches = collectProfanityMatches(state, input, options);
   return maskProfanityRanges(
-    text,
+    input.text,
     textRangesForMode(matches, PROFANITY_MATCH_MODE.STRICT),
     textRangesForMode(matches, PROFANITY_MATCH_MODE.LOOSE),
   );
 };
 
 const collectProfanityMatches = (
-  state: FilterState,
-  text: string,
+  state: FilterStateSnapshot,
+  input: PreparedProfanityInput,
   options?: ProfanityMatchOptions,
-): ProfanityMatchRange[] => [...iterateProfanityMatches(state, text, options)];
+): ProfanityMatchRange[] => [...iterateProfanityMatches(state, input, options)];
 
-export const streamProfanityMatches = (
+export const streamPreparedProfanityMatches = (
   filter: ReadonlyProfanityFilter,
-  text: string,
+  input: PreparedProfanityInput,
   options: ProfanityMatchOptions | undefined,
   visit: (match: ProfanityMatchRange) => boolean | void,
 ): boolean | undefined => {
   const customStreamer = profanityMatchStreamers.get(filter);
   if (customStreamer !== undefined) {
-    return customStreamer(text, options, visit);
+    return customStreamer(input, options, visit);
   }
 
   const state = filterStates.get(filter);
   if (state === undefined) return undefined;
   const snapshot = snapshotFilterState(state);
 
-  for (const match of iterateProfanityMatches(snapshot, text, options)) {
+  for (const match of iterateProfanityMatches(snapshot, input, options)) {
     if (visit(match) === false) return false;
   }
 
   return true;
 };
 
+export const analyzePreparedProfanity = (
+  filter: ReadonlyProfanityFilter,
+  input: PreparedProfanityInput,
+  options?: ProfanityMatchOptions,
+): ProfanityMatchRange[] | undefined => {
+  const state = filterStates.get(filter);
+  if (state !== undefined) {
+    return collectProfanityMatches(snapshotFilterState(state), input, options);
+  }
+
+  const analyzer = profanityPreparedAnalyzers.get(filter);
+  if (analyzer !== undefined) {
+    return analyzer(input, options);
+  }
+
+  if (!profanityMatchStreamers.has(filter)) return undefined;
+  const matches: ProfanityMatchRange[] = [];
+  streamPreparedProfanityMatches(filter, input, options, (match) => {
+    matches.push(match);
+  });
+  return matches;
+};
+
+export const checkPreparedProfanity = (
+  filter: ReadonlyProfanityFilter,
+  input: PreparedProfanityInput,
+  options?: ProfanityMatchOptions,
+): boolean | undefined => {
+  const state = filterStates.get(filter);
+  if (state !== undefined) {
+    return hasProfanity(snapshotFilterState(state), input, options);
+  }
+
+  if (!profanityMatchStreamers.has(filter)) return undefined;
+  let found = false;
+  streamPreparedProfanityMatches(filter, input, options, () => {
+    found = true;
+    return false;
+  });
+  return found;
+};
+
 const snapshotFilterState = (state: FilterState): FilterStateSnapshot => ({
   strictPatterns: state.strictPatterns,
   loosePatterns: state.loosePatterns,
   looseCandidateIndex: state.looseCandidateIndex,
+  normalization: state.normalization,
   normalizeForMatch: state.normalizeForMatch,
   prepareForMatch: state.prepareForMatch,
 });
 
 function* iterateProfanityMatches(
   state: FilterStateSnapshot,
-  text: string,
+  input: PreparedProfanityInput,
   options?: ProfanityMatchOptions,
 ): IterableIterator<ProfanityMatchRange> {
-  const { normalized, facts } = prepareInput(state, text);
+  const { normalized, facts } = prepareInput(state, input);
   const matchesTaxonomy = collectedRangeMatchesTaxonomy(options);
 
   for (const range of iterateStrictRanges(normalized, state.strictPatterns)) {
@@ -686,7 +815,7 @@ function* iterateProfanityMatches(
 
   for (const range of iterateLooseRanges(
     normalized,
-    text,
+    input.text,
     looseCandidates,
     state.strictPatterns,
     state.loosePatterns,
@@ -700,13 +829,62 @@ function* iterateProfanityMatches(
 
 const prepareInput = (
   state: FilterStateSnapshot,
-  text: string,
+  input: PreparedProfanityInput,
 ): { readonly normalized: string; readonly facts: InputScanFacts } => {
+  const existing = input.normalizedViews.get(state.normalization);
+  if (existing !== undefined) {
+    const facts =
+      existing.scanFacts.get(state.looseCandidateIndex) ??
+      collectInputScanFacts(existing.normalized, state.looseCandidateIndex);
+    existing.scanFacts.set(state.looseCandidateIndex, facts);
+    return { normalized: existing.normalized, facts };
+  }
+
   const collector = createInputScanFactCollector(state.looseCandidateIndex);
   // Normalization and loose candidate facts share one same-length UTF-16 pass,
   // so every collected position stays source-compatible.
-  const normalized = state.prepareForMatch(text, collector.visit);
-  return { normalized, facts: collector.finish() };
+  const normalized = state.prepareForMatch(input.text, collector.visit);
+  const facts = collector.finish();
+  const view: PreparedNormalizationView = {
+    normalized,
+    scanFacts: new WeakMap([[state.looseCandidateIndex, facts]]),
+  };
+  input.normalizedViews.set(state.normalization, view);
+  return { normalized, facts };
+};
+
+const normalizedViewForPreparedInput = (
+  input: PreparedProfanityInput,
+  normalization: ProfanityNormalizationStrategy,
+  normalizeForMatch: LiteralNormalizer,
+): PreparedNormalizationView => {
+  const existing = input.normalizedViews.get(normalization);
+  if (existing !== undefined) return existing;
+
+  const created: PreparedNormalizationView = {
+    normalized: normalizeForMatch(input.text),
+    scanFacts: new WeakMap(),
+  };
+  input.normalizedViews.set(normalization, created);
+  return created;
+};
+
+const scanFactsForPreparedInput = (
+  state: FilterStateSnapshot,
+  input: PreparedProfanityInput,
+  normalized: string,
+): InputScanFacts => {
+  const view = input.normalizedViews.get(state.normalization);
+  if (view === undefined) {
+    throw new TypeError("Expected a prepared profanity normalization view.");
+  }
+
+  const existing = view.scanFacts.get(state.looseCandidateIndex);
+  if (existing !== undefined) return existing;
+
+  const created = collectInputScanFacts(normalized, state.looseCandidateIndex);
+  view.scanFacts.set(state.looseCandidateIndex, created);
+  return created;
 };
 
 const hasTaxonomyFilters = (options: ProfanityMatchOptions): boolean =>

@@ -1,8 +1,12 @@
 import { mergeRanges, type TextCodePointRange } from "@textfilters/core";
 import {
+  analyzePreparedProfanity,
   canStreamProfanityMatches,
+  checkPreparedProfanity,
+  createPreparedProfanityInput,
   filter as sharedProfanityFilter,
-  streamProfanityMatches,
+  streamPreparedProfanityMatches,
+  type PreparedProfanityInput,
 } from "./filter.js";
 import { PROFANITY_FILTER_NAME } from "./types.js";
 import type {
@@ -27,19 +31,37 @@ export function createProfanityScanner(
     sink: ProfanityRangeMatchSink,
   ): boolean;
   function scan(input: ProfanityScanInput, sink?: ProfanityRangeMatchSink) {
+    const prepared = createPreparedProfanityInput(input.text, input);
     if (sink === undefined) {
-      return scanProfanity(activeFilter, input, matchOptions);
+      return scanProfanity(activeFilter, input, prepared, matchOptions);
     }
 
-    return scanProfanityMatches(activeFilter, input, matchOptions, sink);
+    return scanProfanityMatches(
+      activeFilter,
+      input,
+      prepared,
+      matchOptions,
+      sink,
+    );
   }
 
   const scanner: ProfanityScanner = {
     name: PROFANITY_FILTER_NAME,
-    check: (input) =>
-      allocationAware && input.hints?.textLength === 0
-        ? false
-        : activeFilter.check(input.text, matchOptions),
+    check: (input) => {
+      if (
+        allocationAware &&
+        input.text.length === 0 &&
+        input.hints?.textLength === 0
+      ) {
+        return false;
+      }
+
+      const prepared = createPreparedProfanityInput(input.text, input);
+      return (
+        checkPreparedProfanity(activeFilter, prepared, matchOptions) ??
+        activeFilter.check(input.text, matchOptions)
+      );
+    },
     scan,
   };
 
@@ -53,9 +75,12 @@ export function createProfanityScanner(
 function scanProfanity(
   filter: ReadonlyProfanityFilter,
   input: ProfanityScanInput,
+  prepared: PreparedProfanityInput,
   matchOptions: ProfanityScannerOptions["matchOptions"],
 ): ProfanityScannerOutput {
-  const matches = filter.analyze(input.text, matchOptions);
+  const matches =
+    analyzePreparedProfanity(filter, prepared, matchOptions) ??
+    filter.analyze(input.text, matchOptions);
   const codePointIndexByUtf16Offset = createCodePointIndexByUtf16Offset(
     input.codePoints,
   );
@@ -81,15 +106,16 @@ function scanProfanity(
 function scanProfanityMatches(
   filter: ReadonlyProfanityFilter,
   input: ProfanityScanInput,
+  prepared: PreparedProfanityInput,
   matchOptions: ProfanityScannerOptions["matchOptions"],
   sink: ProfanityRangeMatchSink,
 ): boolean {
   const codePointIndexByUtf16Offset = createUtf16OffsetToCodePointIndex(
     input.codePoints,
   );
-  const streamed = streamProfanityMatches(
+  const streamed = streamPreparedProfanityMatches(
     filter,
-    input.text,
+    prepared,
     matchOptions,
     (match) => {
       const range = matchToCodePointRange(match, codePointIndexByUtf16Offset);

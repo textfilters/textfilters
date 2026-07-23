@@ -38,11 +38,12 @@ describe("profanity scanner adapter", () => {
     expect(scanner.allocationAware).toBe(true);
   });
 
-  it("returns ranges and analyzer metadata from the public analyzer", () => {
+  it("returns ranges and analyzer metadata without re-entering public analyze", () => {
     const filter = createProfanityFilter(
       [{ source: "alpha", category: "OBSCENE_MAT", severity: "high" }],
       [],
     );
+    const analyzeSpy = vi.spyOn(filter, "analyze");
     const scanner = createProfanityScanner({ filter });
     const text = "ok alpha beta";
     const result = scanner.scan({ text, codePoints: Array.from(text) });
@@ -55,10 +56,12 @@ describe("profanity scanner adapter", () => {
       category: "OBSCENE_MAT",
       severity: "high",
     });
+    expect(analyzeSpy).not.toHaveBeenCalled();
   });
 
   it("checks through the filter fast path without collecting scanner output", () => {
     const filter = createProfanityFilter(["alpha"], []);
+    const checkSpy = vi.spyOn(filter, "check");
     const scanner = createProfanityScanner({ filter });
     const text = "ok alpha beta";
 
@@ -69,6 +72,7 @@ describe("profanity scanner adapter", () => {
         codePoints: Array.from("clean text"),
       }),
     ).toBe(false);
+    expect(checkSpy).not.toHaveBeenCalled();
   });
 
   it("uses shared text-length hints to skip package-owned empty checks", () => {
@@ -84,6 +88,36 @@ describe("profanity scanner adapter", () => {
       }),
     ).toBe(false);
     expect(checkSpy).not.toHaveBeenCalled();
+  });
+
+  it("treats missing, partial, and conflicting hints as optional evidence", () => {
+    const filter = createProfanityFilter(["alpha"], []);
+    const scanner = createProfanityScanner({ filter });
+    const text = "alpha";
+    const codePoints = Array.from(text);
+
+    expect(scanner.check({ text, codePoints })).toBe(true);
+    expect(
+      scanner.check({
+        text,
+        codePoints,
+        hints: { textLength: text.length },
+      }),
+    ).toBe(true);
+    expect(
+      scanner.check({
+        text,
+        codePoints,
+        hints: { textLength: 0, isEmpty: true },
+      }),
+    ).toBe(true);
+    expect(
+      scanner.check({
+        text: "",
+        codePoints: [],
+        hints: { textLength: text.length, isEmpty: false },
+      }),
+    ).toBe(false);
   });
 
   it("streams ranges into a sink and supports early stop", () => {

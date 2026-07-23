@@ -101,6 +101,11 @@ part of the workflow. Each factory call returns an isolated mutable filter, so
 its runtime dictionary changes do not affect the shared default filter or other
 factory-created filters.
 
+Construct the selected shared, factory-created, or composed filter once and
+reuse it across messages. Filter construction compiles dictionaries and matcher
+indexes, so creating a new filter in each request or message handler can cost
+more than checking the prepared input.
+
 ## API
 
 ### `filter.analyze(text, options?): ProfanityMatchRange[]`
@@ -175,10 +180,12 @@ The taxonomy filtering contract is:
 ### `createProfanityScanner(options?)`
 
 Creates a range scanner adapter for callers that combine multiple detectors and
-mask collected ranges once. The adapter uses the public filter APIs, supports
-`check(input)` for boolean checks, and supports `scan(input, sink)` for
-allocation-aware range streaming with early stop. Legacy `scan(input)` returns
-taxonomy metadata alongside the range list without exposing matcher internals:
+mask collected ranges once. The adapter supports `check(input)` for boolean
+checks and `scan(input, sink)` for allocation-aware range streaming with early
+stop. Package-owned filters consume an internal prepared-input capability;
+custom filters keep the compatible public API fallback. Legacy `scan(input)`
+returns taxonomy metadata alongside the range list without exposing matcher
+internals:
 
 ```ts
 import {
@@ -207,6 +214,13 @@ scanner.scan({ text, codePoints: Array.from(text) }, (match) => {
 console.log(result.ranges);
 console.log(result.metadata.matches[0]?.category);
 ```
+
+Inputs created by `createPreparedText()` from `@textfilters/core` are accepted
+directly. The scanner reuses their source text, code points, and corroborated
+length hints while keeping profanity-specific normalized views internal. Missing
+or partial hints remain compatible, and custom filters that do not expose the
+package-owned capability continue through the public `check()` and `analyze()`
+fallback.
 
 For taxonomy-backed rules, runtime match output includes the available metadata:
 
@@ -272,6 +286,11 @@ with `profileId` and `languageTag`:
 const [match] = multilingual.analyze("shit");
 console.log(match.profileId, match.languageTag, match.mode);
 ```
+
+Within one top-level call, package-owned profiles reuse one same-length
+normalized view for each distinct normalization strategy. Profiles with
+different strategies remain isolated, and custom profile filters use the
+conservative public API fallback.
 
 Equivalent source ranges are merged only for censoring and legacy scanner range
 output. Diagnostic metadata remains available in `analyze()` and scanner
@@ -591,6 +610,19 @@ matcher ordering are owned by the generic compilation layer.
 Generated built-in rule ids are diagnostic metadata, not stable policy or
 allowlist keys. They may change when the package-owned corpus is reorganized
 into different compiled matcher views.
+
+## Performance Guidance
+
+Keep filter construction outside the per-message hot path. Reuse the exported
+read-only filter, a factory-created filter, or one composed filter until its
+runtime dictionary intentionally changes. For repeated dictionary-backed
+construction, compile once with `compileProfanityDictionary()` and create
+isolated filters from that compiled snapshot.
+
+Run `npm run benchmark:profanity` for same-machine comparisons. The benchmark
+keeps filter-construction cost visible and compares direct single-profile work,
+prepared scanner paths, and same-strategy composed reuse against the compatible
+public fallback for long clean and matching inputs.
 
 ## Known Limitations And Behavior Notes
 

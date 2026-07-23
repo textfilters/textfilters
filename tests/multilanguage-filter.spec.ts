@@ -143,14 +143,18 @@ describe("configured multi-language profanity filter", () => {
     ]);
     const scanner = createProfanityScanner({ filter: configured });
     const text = "shit бля";
+    const result = scanner.scan({ text, codePoints: Array.from(text) });
 
     expect(scanner.allocationAware).toBe(true);
-    expect(scanner.scan({ text, codePoints: Array.from(text) }).ranges).toEqual(
-      [
-        [0, 4],
-        [5, 8],
-      ],
-    );
+    expect(result.ranges).toEqual([
+      [0, 4],
+      [5, 8],
+    ]);
+    expect(
+      result.metadata.matches.map((match) =>
+        "profileId" in match ? match.profileId : undefined,
+      ),
+    ).toEqual(["en:default", "en:default", "ru:default", "ru:default"]);
   });
 
   it("keeps built-in profiles declarative and exposes stable composition metadata", () => {
