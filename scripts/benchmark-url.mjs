@@ -9,6 +9,9 @@ const LONG_CLEAN = "The quick brown fox jumps over the lazy dog. ".repeat(50);
 const DIRECT_URL = "Visit https://example.com/path?q=1 for details";
 const BARE_DOMAIN = "Visit example.com/path for details";
 const OBFUSCATED_URL = "Visit hxxp[:]//example[.]com for details";
+const ALLOWLISTED_URL = "Visit https://trusted.example/path for details";
+const ALLOWLIST_MISS = "Visit https://blocked.example/path for details";
+const ALLOWED_DOMAINS = ["trusted.example"];
 const LATE_MATCH =
   "Lorem ipsum dolor sit amet, consectetur adipiscing elit. ".repeat(40) +
   "Check https://spam.example.com/promo now!";
@@ -40,6 +43,8 @@ function printResults(results) {
 
 const filter = createUrlFilter();
 const scanner = createUrlScanner();
+const allowlistFilter = createUrlFilter({ allowedDomains: ALLOWED_DOMAINS });
+const allowlistScanner = createUrlScanner({ allowedDomains: ALLOWED_DOMAINS });
 const input = (text) => ({ text, codePoints: Array.from(text) });
 const hintedInput = (text) => ({
   text,
@@ -55,6 +60,16 @@ const hintedInput = (text) => ({
 printResults([
   bench("createUrlFilter()", () => createUrlFilter(), SETUP_ITERATIONS),
   bench("createUrlScanner()", () => createUrlScanner(), SETUP_ITERATIONS),
+  bench(
+    "createUrlFilter() with allowlist",
+    () => createUrlFilter({ allowedDomains: ALLOWED_DOMAINS }),
+    SETUP_ITERATIONS,
+  ),
+  bench(
+    "createUrlScanner() with allowlist",
+    () => createUrlScanner({ allowedDomains: ALLOWED_DOMAINS }),
+    SETUP_ITERATIONS,
+  ),
   bench("check short clean", () => scanner.check(input(SHORT_CLEAN))),
   bench("check hinted short clean", () =>
     scanner.check(hintedInput(SHORT_CLEAN)),
@@ -65,12 +80,20 @@ printResults([
   ),
   bench("check direct URL", () => scanner.check(input(DIRECT_URL))),
   bench("check bare domain", () => scanner.check(input(BARE_DOMAIN))),
+  bench("check allowlist hit", () =>
+    allowlistScanner.check(input(ALLOWLISTED_URL)),
+  ),
+  bench("check allowlist miss", () =>
+    allowlistScanner.check(input(ALLOWLIST_MISS)),
+  ),
   bench("check late-match URL", () => scanner.check(input(LATE_MATCH))),
   bench("censor short clean", () => filter.censor(SHORT_CLEAN)),
   bench("censor long clean", () => filter.censor(LONG_CLEAN)),
   bench("censor direct URL", () => filter.censor(DIRECT_URL)),
   bench("censor bare domain", () => filter.censor(BARE_DOMAIN)),
   bench("censor obfuscated URL", () => filter.censor(OBFUSCATED_URL)),
+  bench("censor allowlist hit", () => allowlistFilter.censor(ALLOWLISTED_URL)),
+  bench("censor allowlist miss", () => allowlistFilter.censor(ALLOWLIST_MISS)),
   bench("censor late-match URL", () => filter.censor(LATE_MATCH)),
 ]);
 

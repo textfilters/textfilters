@@ -134,7 +134,7 @@ Clearly clean input skips URL parser work through a cheap prefilter. See
 
 Build the package, then run URL benchmark coverage for scanner setup,
 `check()`, clean text, direct URLs, bare domains, obfuscated URLs, and
-late-match cases:
+allowlist hits and misses, and late-match cases:
 
 ```sh
 npm run build
