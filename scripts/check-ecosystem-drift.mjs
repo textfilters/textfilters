@@ -30,7 +30,7 @@ const PACKAGES = [
   {
     repo: "url",
     packageName: "@textfilters/url",
-    fallbackRef: "89f70bdac00e79414f76539f36290b806068fa2d",
+    fallbackRef: "d25c1f643efbbeb93c227495a46d97285035bc09",
     dependencyRange: EXPECTED_CORE_RANGE,
     files: ["dist", "docs", "README.md", "LICENSE"],
   },
@@ -44,14 +44,14 @@ const PACKAGES = [
   {
     repo: "phone",
     packageName: "@textfilters/phone",
-    fallbackRef: "c3ae79e434013d8d66637e6c79618735c6dad898",
+    fallbackRef: "e89d6ccd4a167aaeeca6558762e713877eca6ff2",
     dependencyRange: EXPECTED_CORE_RANGE,
     files: ["dist", "docs", "README.md", "LICENSE"],
   },
   {
     repo: "profanity",
     packageName: "@textfilters/profanity",
-    fallbackRef: "442d2b13ee5cc45787cfcffc7213dc8fb9352a70",
+    fallbackRef: "be3202c701887513d351ff0db7b9e917c9e461ab",
     dependencyRange: EXPECTED_CORE_RANGE,
     files: ["dist", "docs", "README.md", "LICENSE"],
   },

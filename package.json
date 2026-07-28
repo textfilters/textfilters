@@ -11,10 +11,10 @@
   },
   "dependencies": {
     "@textfilters/core": "^0.4.0",
-    "@textfilters/url": "^0.2.1",
+    "@textfilters/url": "^0.3.0",
     "@textfilters/email": "^0.3.1",
-    "@textfilters/phone": "^0.2.1",
-    "@textfilters/profanity": "^0.15.2",
+    "@textfilters/phone": "^0.2.2",
+    "@textfilters/profanity": "^0.16.2",
     "@textfilters/spam": "^0.3.2"
   },
   "engines": {
