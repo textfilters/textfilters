@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { filter } from "../src";
+import {
+  createProfanityFilter,
+  createProfanityFilterFromDictionary,
+  filter,
+  russianProfanityDictionary,
+  type ProfanityLanguageDictionary,
+} from "../src";
+import { createRussianProfanityFilter } from "../src/entrypoints/ru";
 
 import { expectUnchanged } from "./russian-audit-helpers";
 
@@ -54,8 +61,6 @@ describe("Russian false-positive audit", () => {
       "удалять",
       "блеяние",
       "хлеб",
-      "всё будет",
-      "все будет",
       "отъезд",
       "съемка",
       "подъезд",
@@ -425,6 +430,145 @@ describe("Russian false-positive audit", () => {
       expectUnchanged(input);
     }
   }, 10_000);
+
+  it("keeps explicitly allowed Russian words and phrases unchanged", () => {
+    const cases = [
+      "жопа",
+      "ЖОПА",
+      "говно",
+      "ГОВНО",
+      "говно.",
+      "«жопа»",
+      "всё будет",
+      "все будет",
+      "себе можно",
+      "себе можно.",
+      "себе можно́",
+      "себе можно́.",
+      "себе можно̧́.",
+      "себе можно‍",
+      "себе можно­.",
+      "себе можно -сделать",
+      "себе можно.-сделать",
+      "себе можно _проект",
+      "Как видите, вполне себе можно сделать целый надёжный, оптимизированный, под разные платформы проект, не написав ни строчки кода",
+    ];
+
+    for (const candidate of [filter, createRussianProfanityFilter()]) {
+      for (const input of cases) {
+        expect(candidate.censor(input), input).toBe(input);
+        expect(candidate.check(input), input).toBe(false);
+        expect(candidate.analyze(input), input).toEqual([]);
+      }
+    }
+  });
+
+  it("keeps homoglyphs and profane phrase tails covered", () => {
+    const cases = [
+      "говнo",
+      "говнｏ",
+      "жопa",
+      "жопａ",
+      "-говно",
+      "говно_",
+      "＿жопа",
+      "жопа－",
+      "говно‍",
+      "жопа­",
+      "говно‎",
+      "жопа‏",
+      "говно⁦",
+      "говно\u{1BCA0}",
+      "\u{1BCA0}жопа",
+      "себе можно-съебать",
+      "себе можно_ебать",
+      "себе можно-хуй",
+      "себе можно_хуй",
+      "себе можно́-съебать",
+      "себе можно́_съебать",
+      "себе можно́-хуй",
+      "себе можно́_хуй",
+      "себе можно̧́-съебать",
+      "себе можно́－хуй",
+      "себе можно́＿хуй",
+      "себе можно​-съебать",
+      "себе можно‌_съебать",
+      "себе можно‍-хуй",
+      "себе можно﻿_хуй",
+      "себе можно⁠-съебать",
+      "себе можно­-хуй",
+      "себе можно -съебать",
+      "себе можно _ебать",
+      "себе можно.-хуй",
+      "себе можно/_съебать",
+      "себе можно 1-съебать",
+      "себе можно.1-хуй",
+      "себе можно _1-хуй",
+      "себе можно 1́-съебать",
+    ];
+
+    for (const candidate of [filter, createRussianProfanityFilter()]) {
+      for (const input of cases) {
+        expect(candidate.check(input), input).toBe(true);
+        expect(candidate.analyze(input).length, input).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it("preserves source exemptions when the Russian dictionary is copied", () => {
+    const jsonCopy = JSON.parse(
+      JSON.stringify(russianProfanityDictionary),
+    ) as ProfanityLanguageDictionary;
+    const copies: readonly ProfanityLanguageDictionary[] = [
+      structuredClone(russianProfanityDictionary),
+      jsonCopy,
+      {
+        ...russianProfanityDictionary,
+        rules: russianProfanityDictionary.rules.map((rule) => ({
+          ...rule,
+          ...(rule.id === "ru.vulgar.govno.family"
+            ? { severity: "high" as const }
+            : {}),
+        })),
+      },
+    ];
+
+    for (const dictionary of copies) {
+      const candidate = createProfanityFilterFromDictionary(dictionary);
+
+      expect(candidate.check("говно")).toBe(false);
+      expect(candidate.check("жопа")).toBe(false);
+      expect(candidate.check("говнo")).toBe(true);
+      expect(candidate.check("жопa")).toBe(true);
+    }
+  });
+
+  it("lets runtime strict literals override maintained source exemptions", () => {
+    for (const candidate of [
+      createProfanityFilter(),
+      createRussianProfanityFilter(),
+    ]) {
+      candidate.addStrict("говно");
+      candidate.addStrict("жопа");
+
+      expect(candidate.check("говно")).toBe(true);
+      expect(candidate.check("жопа")).toBe(true);
+      expect(candidate.censor("говно говнo говно")).toBe("***** ***** *****");
+      expect(candidate.censor("жопа жопa жопа")).toBe("**** **** ****");
+      expect(candidate.analyze("говно")[0]).toMatchObject({ mode: "strict" });
+      expect(candidate.analyze("жопа")[0]).toMatchObject({ mode: "strict" });
+    }
+
+    const categorized = createRussianProfanityFilter();
+    categorized.addStrict({
+      source: "говно",
+      category: "VULGAR",
+      severity: "low",
+    });
+
+    expect(categorized.check("говно", { categories: ["VULGAR"] })).toBe(true);
+    expect(categorized.check("говно", { minSeverity: "high" })).toBe(false);
+  });
 
   it("keeps grouped risky transliteration contexts unchanged", () => {
     const groups: readonly RiskyTransliterationFamilyGroup[] = [

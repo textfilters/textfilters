@@ -147,6 +147,21 @@ describe("strict token index", () => {
     expect(right.check("gamma gamma delta")).toBe(false);
   });
 
+  it("accepts connector padding without accepting embedded word fragments", () => {
+    const filter = createProfanityFilter(["bad"], []);
+
+    expect(filter.censor("-bad __bad__ bad- 1-bad _1-bad 1́-bad bad-1")).toBe(
+      "-*** __***__ ***- 1-*** _1-*** 1́-*** ***-1",
+    );
+    expect(filter.check("good-bad")).toBe(false);
+    expect(filter.check("bad-good")).toBe(false);
+    expect(filter.check("-bad-good")).toBe(false);
+    expect(filter.check("1bad")).toBe(false);
+    expect(filter.check("bad1")).toBe(false);
+    expect(filter.check("-1bad")).toBe(false);
+    expect(filter.check("bad1-")).toBe(false);
+  });
+
   it("keeps public UTF-16 ranges and scanner early-stop behavior compatible", () => {
     const filter = createProfanityFilter(
       [

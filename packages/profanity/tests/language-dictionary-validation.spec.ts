@@ -311,6 +311,58 @@ describe("language dictionary validation", () => {
     );
   });
 
+  it("preserves validated source exemptions in declarative dictionary data", () => {
+    const dictionary = {
+      language: "zz",
+      rules: [
+        {
+          id: "zz.vulgar.qwr",
+          category: "VULGAR",
+          severity: "low",
+          source: "qwr",
+          match: {
+            strict: {},
+          },
+          originalSourceExemptions: ["qwr"],
+        },
+      ],
+    } as unknown as ProfanityLanguageDictionary;
+    const serializedDictionary = JSON.parse(
+      JSON.stringify(dictionary),
+    ) as ProfanityLanguageDictionary;
+    const filter = createProfanityFilterFromDictionary(serializedDictionary);
+
+    expect(validateProfanityLanguageDictionary(serializedDictionary)).toEqual(
+      [],
+    );
+    expect(filter.check("qwr")).toBe(false);
+    expect(filter.check("qwr.")).toBe(false);
+    expect(filter.check("-qwr")).toBe(true);
+
+    const invalidDictionary = {
+      language: "zz",
+      rules: [
+        {
+          id: "zz.vulgar.qwr",
+          category: "VULGAR",
+          severity: "low",
+          source: "qwr",
+          match: {
+            strict: {},
+          },
+          originalSourceExemptions: [],
+        },
+      ],
+    } as unknown as ProfanityLanguageDictionary;
+
+    expect(
+      issueSummary(validateProfanityLanguageDictionary(invalidDictionary)),
+    ).toContainEqual({
+      path: "rules[0].originalSourceExemptions",
+      code: "invalid_source_exemptions",
+    });
+  });
+
   it("treats undefined match modes as absent", () => {
     const dictionary = {
       language: "zz",
