@@ -1,0 +1,64 @@
+{
+  "name": "@textfilters/core",
+  "version": "0.4.0",
+  "type": "module",
+  "description": "Core TypeScript primitives for composable text filtering, censoring, normalization, range masking, and moderation pipelines.",
+  "license": "MIT",
+  "keywords": [
+    "text-filtering",
+    "content-moderation",
+    "moderation",
+    "typescript",
+    "javascript",
+    "censoring",
+    "redaction",
+    "pipeline",
+    "normalization",
+    "text-processing",
+    "range-masking"
+  ],
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "lint": "prettier README.md package.json src tests --check",
+    "format": "prettier README.md package.json src tests --write",
+    "prepack": "npm run build",
+    "pack:dry-run": "npm pack --dry-run",
+    "smoke:dist": "node --input-type=module --eval \"const core = await import('./dist/index.js'); core.createTextPipeline().censor('ok');\"",
+    "check": "npm run lint && npm test && npm run build && npm run smoke:dist && npm run pack:dry-run"
+  },
+  "devDependencies": {
+    "prettier": "^3.8.3",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.7"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "packageManager": "npm@11.16.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/textfilters/core.git"
+  },
+  "bugs": {
+    "url": "https://github.com/textfilters/core/issues"
+  },
+  "homepage": "https://github.com/textfilters/core#readme",
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  }
+}
