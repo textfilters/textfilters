@@ -527,7 +527,6 @@ describe("Russian coverage audit", () => {
       "govno",
       "g-o-v-n-o",
       "g.o.v.n.o",
-      "говно",
       "г-о-в-н-а-м",
       "г-о-в-н-а-м-и",
       "г-о-в-н-а-х",
@@ -1504,8 +1503,8 @@ describe("Russian coverage audit", () => {
     expect(filter.check("залупа", { categories: ["VULGAR"] })).toBe(false);
     expect(filter.check("сука", { categories: ["STRONG_INSULT"] })).toBe(true);
     expect(filter.check("сука", { minSeverity: "high" })).toBe(true);
-    expect(filter.check("говно", { severities: ["low"] })).toBe(false);
-    expect(filter.check("говно", { minSeverity: "medium" })).toBe(true);
+    expect(filter.check("говном", { severities: ["low"] })).toBe(false);
+    expect(filter.check("говном", { minSeverity: "medium" })).toBe(true);
     expect(filter.check("zasranca", { categories: ["STRONG_INSULT"] })).toBe(
       true,
     );

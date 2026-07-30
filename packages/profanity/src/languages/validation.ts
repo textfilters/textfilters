@@ -32,6 +32,7 @@ export type ProfanityLanguageDictionaryValidationIssueCode =
   | "missing_match"
   | "invalid_match"
   | "unsupported_rule_key"
+  | "invalid_source_exemptions"
   | "unsupported_match_key"
   | "missing_match_mode"
   | "invalid_strict_options"
@@ -72,6 +73,7 @@ const ALLOWED_RULE_KEYS = new Set([
   "severity",
   "source",
   "match",
+  "originalSourceExemptions",
 ]);
 const ALLOWED_MATCH_KEYS = new Set(["strict", "loose"]);
 const ALLOWED_LOOSE_MATCH_OPTION_KEYS = new Set([
@@ -209,8 +211,33 @@ const validateRules = (
     validateRuleTaxonomy(rule, path, issues);
     validateRuleIdTaxonomy(rule, path, issues);
     validateRuleSource(rule, path, index, seenRuleSources, issues);
+    validateSourceExemptions(rule, path, issues);
     validateRuleMatch(rule, path, issues);
   });
+};
+
+const validateSourceExemptions = (
+  rule: Record<string, unknown>,
+  path: string,
+  issues: ProfanityLanguageDictionaryValidationIssue[],
+): void => {
+  if (!("originalSourceExemptions" in rule)) {
+    return;
+  }
+
+  if (
+    !Array.isArray(rule.originalSourceExemptions) ||
+    rule.originalSourceExemptions.length === 0 ||
+    !rule.originalSourceExemptions.every(isNonEmptyString)
+  ) {
+    issues.push(
+      issue(
+        `${path}.originalSourceExemptions`,
+        "invalid_source_exemptions",
+        "Original-source exemptions must be a non-empty array of non-empty strings.",
+      ),
+    );
+  }
 };
 
 const validateRuleId = (

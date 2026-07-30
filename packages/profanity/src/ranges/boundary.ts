@@ -1,7 +1,8 @@
 import type { TextRange } from "@textfilters/core";
 import {
   coversToken,
-  SPLIT_TOKEN_CHAR_RE,
+  isLeadingTokenPadding,
+  isTrailingTokenPadding,
   tokenBoundsAt,
   trimMatchToWordChars,
 } from "../token-ranges.js";
@@ -62,29 +63,27 @@ const acceptsSingleTokenMatch = (
   tokenEnd: number,
 ): boolean =>
   coversToken(start, end, tokenStart, tokenEnd) ||
-  isSplitTokenPrefix(normalized, start, end, tokenStart, tokenEnd);
+  hasOnlyTokenPadding(normalized, start, end, tokenStart, tokenEnd);
 
-const isSplitTokenPrefix = (
+const hasOnlyTokenPadding = (
   normalized: string,
   start: number,
   end: number,
   tokenStart: number,
   tokenEnd: number,
 ): boolean => {
-  if (start !== tokenStart) {
+  const leading = normalized.slice(tokenStart, start);
+  const trailing = normalized.slice(end, tokenEnd);
+  if (leading.length === 0 && trailing.length === 0) {
     return false;
   }
 
-  // A split spelling such as `b-a-d` may leave only splitters after the match,
-  // and an unsplit profanity may be followed by only splitters. Prefixes such as
-  // `b-adminton` must stay neutral because the suffix is a real word part.
-  const remainder = normalized.slice(end, tokenEnd);
-  if (remainder.length > 0) {
-    return Array.from(remainder).every((char) =>
-      SPLIT_TOKEN_CHAR_RE.test(char),
-    );
-  }
-
-  const matched = normalized.slice(start, end);
-  return SPLIT_TOKEN_CHAR_RE.test(matched);
+  // Connector padding may surround a complete match at a token boundary.
+  // Numeric and combining-mark content must stay behind a connector at the
+  // matched edge, and real word content still rejects embedded fragments such
+  // as `b-adminton`.
+  return (
+    (leading.length === 0 || isLeadingTokenPadding(leading)) &&
+    (trailing.length === 0 || isTrailingTokenPadding(trailing))
+  );
 };
