@@ -1,6 +1,6 @@
 {
   "name": "@textfilters/spam",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "type": "module",
   "description": "Lightweight TypeScript anti-spam guard for chat moderation: interval, duplicate, burst, and actor-based message checks.",
   "license": "MIT",
@@ -43,7 +43,7 @@
     "check": "npm run lint && npm test && npm run build && npm run smoke:dist && npm run pack:dry-run"
   },
   "dependencies": {
-    "@textfilters/core": "^0.4.0"
+    "@textfilters/core": "^0.4.1"
   },
   "devDependencies": {
     "prettier": "^3.8.3",
