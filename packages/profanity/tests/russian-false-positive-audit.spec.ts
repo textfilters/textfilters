@@ -56,6 +56,8 @@ describe("Russian false-positive audit", () => {
       "хлеб",
       "всё будет",
       "все будет",
+      "себе можно",
+      "Как видите, вполне себе можно сделать целый надёжный, оптимизированный, под разные платформы проект, не написав ни строчки кода",
       "отъезд",
       "съемка",
       "подъезд",
@@ -546,6 +548,47 @@ describe("Russian false-positive audit", () => {
       ["Zalupa — URL", "Zalupa — URL"],
       ["Gandon: estate", "Gandon: estate"],
       ["Gandon, estate", "Gandon, estate"],
+    ];
+
+    for (const [input, expected] of cases) {
+      expect(filter.censor(input), input).toBe(expected);
+    }
+  });
+
+  it("keeps benign connector tails outside the profanity match", () => {
+    const cases = [
+      "себе можно-сделать",
+      "себе можно_сделать",
+      "себе можно-проект",
+      "себе можно_проект",
+    ];
+
+    for (const input of cases) {
+      expect(filter.check(input), input).toBe(false);
+      expect(filter.analyze(input), input).toEqual([]);
+      expect(filter.censor(input), input).toBe(input);
+    }
+  });
+
+  it("does not exempt profanity-bearing connector tails", () => {
+    const cases = [
+      "себе можно-съебать",
+      "себе можно_ебать",
+      "себе можно-хуй",
+      "себе можно_хуй",
+    ];
+
+    for (const input of cases) {
+      expect(filter.check(input), input).toBe(true);
+      expect(filter.analyze(input).length, input).toBeGreaterThan(0);
+      expect(filter.censor(input), input).not.toBe(input);
+    }
+  });
+
+  it("keeps profanity adjacent to the audited neutral phrase covered", () => {
+    const cases: ReadonlyArray<readonly [string, string]> = [
+      ["себе можно съебать", "себе можно *******"],
+      ["себе можно хуй", "себе можно ***"],
     ];
 
     for (const [input, expected] of cases) {
