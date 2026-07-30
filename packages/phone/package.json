@@ -1,0 +1,70 @@
+{
+  "name": "@textfilters/phone",
+  "version": "0.2.2",
+  "type": "module",
+  "description": "TypeScript phone number and phone-like sequence detector for moderation pipelines with false-positive guards.",
+  "license": "MIT",
+  "keywords": [
+    "text-filtering",
+    "content-moderation",
+    "moderation",
+    "typescript",
+    "javascript",
+    "censoring",
+    "redaction",
+    "phone-number-detection",
+    "phone-filter",
+    "pii-redaction",
+    "contact-redaction",
+    "false-positive-guards"
+  ],
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "docs",
+    "README.md",
+    "LICENSE"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "lint": "prettier README.md docs package.json src tests scripts --check",
+    "format": "prettier README.md docs package.json src tests scripts --write",
+    "prepack": "npm run build",
+    "pack:dry-run": "npm pack --dry-run",
+    "smoke:dist": "node --input-type=module --eval \"const phone = await import('./dist/index.js'); phone.createPhoneFilter().censor('+1 555 123 4567');\"",
+    "check": "npm run lint && npm test && npm run build && npm run smoke:dist && npm run pack:dry-run",
+    "benchmark:phone": "npm run build && node scripts/benchmark-phone.mjs"
+  },
+  "dependencies": {
+    "@textfilters/core": "^0.4.0"
+  },
+  "devDependencies": {
+    "prettier": "^3.8.3",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.7"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "packageManager": "npm@11.16.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/textfilters/phone.git"
+  },
+  "bugs": {
+    "url": "https://github.com/textfilters/phone/issues"
+  },
+  "homepage": "https://github.com/textfilters/phone#readme",
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  }
+}
