@@ -1,0 +1,70 @@
+{
+  "name": "@textfilters/email",
+  "version": "0.3.1",
+  "type": "module",
+  "description": "TypeScript email address and obfuscated email detector for content moderation, with exclusions and false-positive guards.",
+  "license": "MIT",
+  "keywords": [
+    "text-filtering",
+    "content-moderation",
+    "moderation",
+    "typescript",
+    "javascript",
+    "censoring",
+    "redaction",
+    "email-detection",
+    "email-filter",
+    "obfuscated-email",
+    "pii-redaction",
+    "contact-redaction"
+  ],
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "docs",
+    "README.md",
+    "LICENSE"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run tests",
+    "lint": "prettier README.md docs package.json src tests scripts --check",
+    "format": "prettier README.md docs package.json src tests scripts --write",
+    "prepack": "npm run build",
+    "pack:dry-run": "npm pack --dry-run",
+    "smoke:dist": "node --input-type=module --eval \"const email = await import('./dist/index.js'); email.createEmailFilter().censor('user@example.com');\"",
+    "check": "npm run lint && npm test && npm run build && npm run smoke:dist && npm run pack:dry-run",
+    "benchmark:email": "npm run build && node scripts/benchmark-email.mjs"
+  },
+  "dependencies": {
+    "@textfilters/core": "^0.4.0"
+  },
+  "devDependencies": {
+    "prettier": "^3.8.3",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.7"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "packageManager": "npm@11.16.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/textfilters/email.git"
+  },
+  "bugs": {
+    "url": "https://github.com/textfilters/email/issues"
+  },
+  "homepage": "https://github.com/textfilters/email#readme",
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  }
+}
