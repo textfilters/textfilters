@@ -8,6 +8,11 @@ export const zhopaExpectedCoveredCases: readonly ReviewedGapAuditCase[] = [
   },
   {
     family: "zhopa",
+    input: "жопа",
+    note: "reviewed vulgar bodily term is covered",
+  },
+  {
+    family: "zhopa",
     input: "жопу",
     note: "reviewed case form is covered",
   },
@@ -52,11 +57,6 @@ export const zhopaIntentionallyUnsupportedCases: readonly ReviewedGapAuditCase[]
   [
     {
       family: "zhopa",
-      input: "жопа",
-      note: "standalone base form is intentionally allowed by moderation policy",
-    },
-    {
-      family: "zhopa",
       input: "zhopa",
       note: "transliteration stays unsupported for the narrow Cyrillic review",
     },
@@ -68,6 +68,14 @@ export const zhopaIntentionallyUnsupportedCases: readonly ReviewedGapAuditCase[]
   ];
 
 export const zhopaCoverageMetadataCases: readonly ReviewedGapMetadataCase[] = [
+  {
+    input: "жопа",
+    expected: {
+      ruleId: "ru.vulgar.zhopa.family",
+      category: "VULGAR",
+      severity: "medium",
+    },
+  },
   {
     input: "жопами",
     expected: {

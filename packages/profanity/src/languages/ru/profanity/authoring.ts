@@ -16,11 +16,6 @@ interface RussianRuleOptions {
   readonly source: ProfanityLanguageRuleSource;
   readonly match?: RussianRuleMatch;
   readonly loose?: ProfanityLanguageLooseMatchOptions;
-  readonly originalSourceExemptions?: readonly string[];
-}
-
-interface RussianRuleDefinition extends ProfanityLanguageRuleDefinition {
-  readonly originalSourceExemptions?: readonly string[];
 }
 
 const DEFAULT_LOOSE_MATCH = {
@@ -93,21 +88,13 @@ export const russianRule = ({
   source,
   match = "strict-loose",
   loose = DEFAULT_LOOSE_MATCH,
-  originalSourceExemptions,
-}: RussianRuleOptions): ProfanityLanguageRuleDefinition => {
-  const rule: RussianRuleDefinition = {
-    id,
-    category,
-    severity,
-    source,
-    match: russianRuleMatch(match, loose),
-    ...(originalSourceExemptions === undefined
-      ? {}
-      : { originalSourceExemptions: [...originalSourceExemptions] }),
-  };
-
-  return rule;
-};
+}: RussianRuleOptions): ProfanityLanguageRuleDefinition => ({
+  id,
+  category,
+  severity,
+  source,
+  match: russianRuleMatch(match, loose),
+});
 
 const russianRuleMatch = (
   match: RussianRuleMatch,

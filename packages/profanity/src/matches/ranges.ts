@@ -15,7 +15,6 @@ export interface CollectedProfanityRange extends TextRange {
   readonly ruleId?: string;
   readonly category?: ProfanityCategory;
   readonly severity?: ProfanitySeverity;
-  readonly originalSourceExemptions?: readonly string[];
 }
 
 export const matchRangeForMode = (

@@ -12,7 +12,6 @@ export interface InternalProfanityRule extends ProfanityTaxonomyMetadata {
   readonly id: string;
   readonly source: string;
   readonly loose?: InternalProfanityRuleLooseOptions;
-  readonly originalSourceExemptions?: readonly string[];
 }
 
 export type InternalProfanityRuleDefinition =
@@ -21,7 +20,6 @@ export type InternalProfanityRuleDefinition =
       readonly id?: string;
       readonly source: string;
       readonly loose?: InternalProfanityRuleLooseOptions;
-      readonly originalSourceExemptions?: readonly string[];
     });
 
 export interface InternalProfanityRuleLooseOptions {
@@ -52,7 +50,6 @@ export const compileStrictInternalRulePatterns = (
     rules.map((rule) => ({
       source: rule.source,
       ruleId: rule.id,
-      originalSourceExemptions: rule.originalSourceExemptions,
       ...ruleIdentityMetadata(rule),
     })),
     true,
@@ -67,7 +64,6 @@ export const compileLooseInternalRulePatterns = (
       trimHyphenTail: rule.loose?.hyphenTail,
       trimHyphenTailMin: rule.loose?.hyphenTailMin,
       ruleId: rule.id,
-      originalSourceExemptions: rule.originalSourceExemptions,
       ...ruleIdentityMetadata(rule),
     })),
     false,
@@ -93,11 +89,6 @@ const builtInRuleDefinitionToRule = (
         ...(definition.id === undefined ? {} : { id: definition.id }),
         ...ruleSourceMetadata(definition),
         ...(definition.loose === undefined ? {} : { loose: definition.loose }),
-        ...(definition.originalSourceExemptions === undefined
-          ? {}
-          : {
-              originalSourceExemptions: definition.originalSourceExemptions,
-            }),
       };
 
 export const loosenInternalRuleSource = (

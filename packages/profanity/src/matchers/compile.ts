@@ -10,7 +10,6 @@ export interface CompiledPattern
   readonly trimHyphenTail?: boolean;
   readonly trimHyphenTailMin?: number;
   readonly ruleId?: string;
-  readonly originalSourceExemptions?: readonly string[];
 }
 
 export interface CompilePatternOptions {
@@ -23,7 +22,6 @@ export interface CompilePatternSource extends ProfanityTaxonomyMetadata {
   readonly ruleId?: string;
   readonly trimHyphenTail?: boolean;
   readonly trimHyphenTailMin?: number;
-  readonly originalSourceExemptions?: readonly string[];
 }
 
 interface CompiledPatternSource extends CompilePatternSource {
@@ -47,7 +45,6 @@ export const compilePatternDefinitions = (
       trimHyphenTail: definition.trimHyphenTail ?? options.trimHyphenTail,
       trimHyphenTailMin:
         definition.trimHyphenTailMin ?? options.trimHyphenTailMin,
-      originalSourceExemptions: definition.originalSourceExemptions,
       ...ruleIdentityMetadata(definition),
     }))
     .map((definition) => compilePattern(definition, wholeToken))
@@ -75,7 +72,6 @@ const compilePattern = (
       ...scanGuardsForSource(definition.scanSource, !wholeToken),
       trimHyphenTail: definition.trimHyphenTail,
       trimHyphenTailMin: definition.trimHyphenTailMin,
-      originalSourceExemptions: definition.originalSourceExemptions,
       ...ruleIdentityMetadata(definition),
     };
   } catch {

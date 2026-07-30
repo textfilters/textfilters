@@ -5,15 +5,9 @@ import type {
 } from "../matchers/build.js";
 import { patternMatches, type CompiledPattern } from "../matchers/compile.js";
 import type { CollectedProfanityRange } from "../matches/ranges.js";
-import {
-  nextCodePointEnd,
-  previousCodePointStart,
-} from "../normalization/text.js";
+import { nextCodePointEnd } from "../normalization/text.js";
 import {
   containsWordChar,
-  isLeadingTokenPadding,
-  isTokenPaddingChar,
-  isTrailingTokenPadding,
   SPLIT_TOKEN_CHAR_RE,
   WHITESPACE_RE,
   WORD_CHAR_RE,
@@ -24,8 +18,6 @@ import { collectedRangeForPattern } from "./collected.js";
 import { iteratePatternMatches, somePatternMatch } from "./patterns.js";
 
 type CollectedRangePredicate = (range: CollectedProfanityRange) => boolean;
-const acceptAnyRange: CollectedRangePredicate = () => true;
-const acceptAnyPattern = (): boolean => true;
 
 export const collectStrictRanges = (
   normalized: string,
@@ -40,11 +32,10 @@ export const collectStrictRanges = (
 export function* iterateStrictRanges(
   normalized: string,
   patterns: StrictPatternSet,
-  acceptsRange: CollectedRangePredicate = acceptAnyRange,
 ): IterableIterator<CollectedProfanityRange> {
   if (!hasStrictPatterns(patterns)) return;
 
-  yield* iterateWordRanges(normalized, patterns, acceptsRange);
+  yield* iterateWordRanges(normalized, patterns);
   yield* iterateSymbolRanges(normalized, patterns);
   yield* iteratePhraseRanges(normalized, patterns);
 }
@@ -53,9 +44,8 @@ export const hasStrictRange = (
   normalized: string,
   patterns: StrictPatternSet,
   predicate: CollectedRangePredicate,
-  acceptsRange: CollectedRangePredicate = acceptAnyRange,
 ): boolean =>
-  hasWordRange(normalized, patterns, predicate, acceptsRange) ||
+  hasWordRange(normalized, patterns, predicate) ||
   hasSymbolRange(normalized, patterns, predicate) ||
   hasPhraseRange(normalized, patterns, predicate);
 
@@ -72,7 +62,6 @@ const collectWordRanges = (
 function* iterateWordRanges(
   normalized: string,
   patterns: StrictPatternSet,
-  acceptsRange: CollectedRangePredicate = acceptAnyRange,
 ): IterableIterator<CollectedProfanityRange> {
   if (patterns.token.length === 0) return;
 
@@ -81,16 +70,20 @@ function* iterateWordRanges(
   // Strict terms must own the whole word token; embedded prefixes are rejected by
   // boundaryCheckedRange before they become mask ranges.
   for (const match of normalized.matchAll(WORD_RE)) {
-    const range = matchedWordRange(
-      normalized,
-      match.index,
-      match[0],
+    const value = match[0];
+    const occurrenceEnd = match.index + value.length;
+    const pattern = findMatchingIndexedTokenPattern(
       patterns,
+      value,
       lookupState,
-      acceptsRange,
     );
+    if (pattern === null) {
+      continue;
+    }
+
+    const range = boundaryCheckedRange(normalized, match.index, occurrenceEnd);
     if (range !== null) {
-      yield range;
+      yield collectedRangeForPattern(range, pattern);
     }
   }
 }
@@ -99,123 +92,30 @@ const hasWordRange = (
   normalized: string,
   patterns: StrictPatternSet,
   predicate: CollectedRangePredicate,
-  acceptsRange: CollectedRangePredicate,
 ): boolean => {
   if (patterns.token.length === 0) return false;
 
   const lookupState = createTokenLookupState();
 
   for (const match of normalized.matchAll(WORD_RE)) {
-    const range = matchedWordRange(
-      normalized,
-      match.index,
-      match[0],
+    const value = match[0];
+    const occurrenceEnd = match.index + value.length;
+    const pattern = findMatchingIndexedTokenPattern(
       patterns,
+      value,
       lookupState,
-      acceptsRange,
     );
-    if (range !== null && predicate(range)) {
+    if (pattern === null) {
+      continue;
+    }
+
+    const range = boundaryCheckedRange(normalized, match.index, occurrenceEnd);
+    if (range !== null && predicate(collectedRangeForPattern(range, pattern))) {
       return true;
     }
   }
 
   return false;
-};
-
-const matchedWordRange = (
-  normalized: string,
-  occurrenceStart: number,
-  value: string,
-  patterns: StrictPatternSet,
-  lookupState: TokenLookupState,
-  acceptsRange: CollectedRangePredicate,
-): CollectedProfanityRange | null => {
-  const fullRange = matchedIndexedTokenRange(
-    normalized,
-    occurrenceStart,
-    value,
-    patterns,
-    lookupState,
-    acceptsRange,
-  );
-  if (fullRange !== null) {
-    return fullRange;
-  }
-
-  const [trimStart, trimEnd] = trimTokenPadding(value);
-  if (trimStart === 0 && trimEnd === value.length) {
-    return null;
-  }
-
-  return matchedIndexedTokenRange(
-    normalized,
-    occurrenceStart + trimStart,
-    value.slice(trimStart, trimEnd),
-    patterns,
-    lookupState,
-    acceptsRange,
-  );
-};
-
-const matchedIndexedTokenRange = (
-  normalized: string,
-  occurrenceStart: number,
-  value: string,
-  patterns: StrictPatternSet,
-  lookupState: TokenLookupState,
-  acceptsRange: CollectedRangePredicate,
-): CollectedProfanityRange | null => {
-  if (value.length === 0) {
-    return null;
-  }
-
-  const pattern = findMatchingIndexedTokenPattern(patterns, value, lookupState);
-  if (pattern === null) {
-    return null;
-  }
-
-  const range = boundaryCheckedRange(
-    normalized,
-    occurrenceStart,
-    occurrenceStart + value.length,
-  );
-  return range === null
-    ? null
-    : acceptedIndexedTokenRange(
-        patterns,
-        value,
-        lookupState,
-        range,
-        pattern,
-        acceptsRange,
-      );
-};
-
-const trimTokenPadding = (value: string): readonly [number, number] => {
-  let leadingEnd = 0;
-  let trailingStart = value.length;
-
-  while (leadingEnd < value.length) {
-    const next = nextCodePointEnd(value, leadingEnd);
-    if (!isTokenPaddingChar(value.slice(leadingEnd, next))) {
-      break;
-    }
-    leadingEnd = next;
-  }
-  while (trailingStart > 0) {
-    const previous = previousCodePointStart(value, trailingStart);
-    if (!isTokenPaddingChar(value.slice(previous, trailingStart))) {
-      break;
-    }
-    trailingStart = previous;
-  }
-
-  return [
-    isLeadingTokenPadding(value.slice(0, leadingEnd)) ? leadingEnd : 0,
-    isTrailingTokenPadding(value.slice(trailingStart))
-      ? trailingStart
-      : value.length,
-  ];
 };
 
 const collectSymbolRanges = (
@@ -414,38 +314,10 @@ const findMatchingIndexedTokenPattern = (
   return pattern;
 };
 
-const acceptedIndexedTokenRange = (
-  patterns: StrictPatternSet,
-  value: string,
-  state: TokenLookupState,
-  range: readonly [number, number],
-  firstPattern: CompiledPattern,
-  acceptsRange: CollectedRangePredicate,
-): CollectedProfanityRange | null => {
-  const firstRange = collectedRangeForPattern(range, firstPattern);
-  if (acceptsRange(firstRange)) {
-    return firstRange;
-  }
-
-  const nextPattern = lookupIndexedTokenPattern(
-    patterns,
-    value,
-    state,
-    patterns.token.indexOf(firstPattern),
-    (pattern) => acceptsRange(collectedRangeForPattern(range, pattern)),
-  );
-
-  return nextPattern === null
-    ? null
-    : collectedRangeForPattern(range, nextPattern);
-};
-
 const lookupIndexedTokenPattern = (
   patterns: StrictPatternSet,
   value: string,
   state: TokenLookupState,
-  afterOrder = -1,
-  acceptsPattern: (pattern: CompiledPattern) => boolean = acceptAnyPattern,
 ): CompiledPattern | null => {
   resetTokenLookupScratch(state);
   addTokenIndexBucket(state, patterns.tokenIndex.fallback);
@@ -487,11 +359,7 @@ const lookupIndexedTokenPattern = (
       }
     }
 
-    if (
-      nextCandidate.order > afterOrder &&
-      patternMatches(nextCandidate.pattern, value) &&
-      acceptsPattern(nextCandidate.pattern)
-    ) {
+    if (patternMatches(nextCandidate.pattern, value)) {
       return nextCandidate.pattern;
     }
   }
