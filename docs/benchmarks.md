@@ -131,7 +131,8 @@ matrix covers:
 - obfuscated profanity candidates
 
 The current workspaces expose the scanner contracts required by every combined
-benchmark path.
+benchmark path. The runner imports those contracts directly, so a missing
+scanner export fails validation instead of silently dropping benchmark rows.
 
 ## Interpreting Results
 
