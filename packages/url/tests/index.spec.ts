@@ -1,0 +1,963 @@
+import { describe, expect, it } from "vitest";
+
+import {
+  checkUrlRanges,
+  createUrlScanner,
+  createUrlFilter,
+  filter,
+  scanUrlRangeMatches,
+  scanUrlRanges,
+  URL_FILTER_NAME,
+  type UrlRangeScanner,
+  type UrlRangeScanResult,
+  type UrlScanHints,
+  urlFilter,
+} from "../src/index.js";
+
+const mask = (s: string, ch = "*") => ch.repeat(Array.from(s).length);
+
+// These tests double as compatibility fixtures for parser boundary decisions:
+// small URL-obfuscation tweaks can otherwise create broad false positives.
+describe("compatibility behavior", () => {
+  it("exposes old-compatible public API", () => {
+    expect(filter.name).toBe(URL_FILTER_NAME);
+    expect(urlFilter()).toEqual(
+      expect.objectContaining({ name: URL_FILTER_NAME }),
+    );
+  });
+
+  it("normalizes empty and non-string public input through core", () => {
+    expect(filter.censor("")).toBe("");
+    expect(filter.censor(null)).toBe("");
+    expect(filter.censor(undefined)).toBe("");
+    expect(filter.censor(12345)).toBe("12345");
+    expect(filter.censor({ toString: () => "https://example.com" })).toBe(
+      mask("https://example.com"),
+    );
+  });
+
+  it("censors explicit scheme URLs and keeps surrounding text", () => {
+    const input = "go https://example.com/path?q=1 now";
+    expect(filter.censor(input)).toBe(
+      `go ${mask("https://example.com/path?q=1")} now`,
+    );
+    expect(filter.censor("go http://secure.com/path now")).toBe(
+      `go ${mask("http://secure.com/path")} now`,
+    );
+    expect(filter.censor("go https://example.com/ now")).toBe(
+      `go ${mask("https://example.com/")} now`,
+    );
+    expect(filter.censor("not http:// next")).toBe("not http:// next");
+    expect(filter.censor("see http:// later")).toBe("see http:// later");
+    expect(filter.censor("go http:// example.com/path now")).toBe(
+      `go ${mask("http:// example.com/path")} now`,
+    );
+  });
+
+  it("keeps trailing punctuation outside masked URL ranges", () => {
+    const input = "go example.com, now";
+    expect(filter.censor(input)).toBe(`go ${mask("example.com")}, now`);
+    expect(filter.censor("go example.com: now")).toBe(
+      `go ${mask("example.com")}: now`,
+    );
+    expect(filter.censor("go example.com? now")).toBe(
+      `go ${mask("example.com")}? now`,
+    );
+    expect(filter.censor("go example.com# now")).toBe(
+      `go ${mask("example.com")}# now`,
+    );
+    expect(filter.censor("go https://example.com: now")).toBe(
+      `go ${mask("https://example.com")}: now`,
+    );
+    expect(filter.censor("go http://example.com:/path now")).toBe(
+      `go ${mask("http://example.com:/path")} now`,
+    );
+    expect(filter.censor("go http://example.com:?x now")).toBe(
+      `go ${mask("http://example.com:?x")} now`,
+    );
+    expect(filter.censor("go http://example.com:#x now")).toBe(
+      `go ${mask("http://example.com:#x")} now`,
+    );
+    expect(filter.censor("go https://example.com. next")).toBe(
+      `go ${mask("https://example.com")}. next`,
+    );
+    expect(filter.censor("go http://localhost:3000. next")).toBe(
+      `go ${mask("http://localhost:3000")}. next`,
+    );
+    expect(filter.censor("go http://localhost. now")).toBe(
+      `go ${mask("http://localhost")}. now`,
+    );
+
+    const withPath = "go https://example.com/path?q=1#frag! now";
+    expect(filter.censor(withPath)).toBe(
+      `go ${mask("https://example.com/path?q=1#frag")}! now`,
+    );
+    expect(filter.censor("go https://example.com/path,then")).toBe(
+      `go ${mask("https://example.com/path")},then`,
+    );
+    expect(filter.censor("go https://example.com/path,\u200bthen")).toBe(
+      `go ${mask("https://example.com/path")},\u200bthen`,
+    );
+    expect(filter.censor("go https://example.com/path,\u200b next")).toBe(
+      `go ${mask("https://example.com/path")},\u200b next`,
+    );
+    expect(filter.censor("go https://example.com/file.html now")).toBe(
+      `go ${mask("https://example.com/file.html")} now`,
+    );
+    expect(filter.censor("go https://example.com/search?q=a,b now")).toBe(
+      `go ${mask("https://example.com/search?q=a,b")} now`,
+    );
+    expect(
+      filter.censor(
+        "go https://en.wikipedia.org/wiki/Function_(mathematics) now",
+      ),
+    ).toBe(
+      `go ${mask("https://en.wikipedia.org/wiki/Function_(mathematics)")} now`,
+    );
+  });
+
+  it("censors hxxp-obfuscated links", () => {
+    const input = "visit hxxp://example.com";
+    expect(filter.censor(input)).toBe(`visit ${mask("hxxp://example.com")}`);
+    expect(filter.censor("visit hxxp[:]//example.com")).toBe(
+      `visit ${mask("hxxp[:]//example.com")}`,
+    );
+    expect(filter.censor("visit http[://]example.com")).toBe(
+      `visit ${mask("http[://]example.com")}`,
+    );
+    expect(filter.censor("visit https[://]example.com")).toBe(
+      `visit ${mask("https[://]example.com")}`,
+    );
+  });
+
+  it("censors domain-only links", () => {
+    expect(filter.censor("example.com")).toBe(mask("example.com"));
+    expect(filter.censor("www.example.com")).toBe(mask("www.example.com"));
+    expect(filter.censor("sub.domain.co.uk/path")).toBe(
+      mask("sub.domain.co.uk/path"),
+    );
+    expect(filter.censor("bit.ly/abc123")).toBe(mask("bit.ly/abc123"));
+    expect(filter.censor("goo.gl/test")).toBe(mask("goo.gl/test"));
+    expect(filter.censor("t.me/example")).toBe(mask("t.me/example"));
+    expect(filter.censor("discord.gg/example")).toBe(
+      mask("discord.gg/example"),
+    );
+    expect(filter.censor("example.com/")).toBe(mask("example.com/"));
+    expect(filter.censor("example.com/path\u200b, next")).toBe(
+      `${mask("example.com/path")}\u200b, next`,
+    );
+    expect(filter.censor("example.com./admin")).toBe(
+      mask("example.com./admin"),
+    );
+    expect(filter.censor("example.com.:443/admin")).toBe(
+      mask("example.com.:443/admin"),
+    );
+    expect(filter.censor("example.com:443.next")).toBe(
+      `${mask("example.com:443")}.next`,
+    );
+    expect(filter.censor("example.com:443?next")).toBe(
+      mask("example.com:443?next"),
+    );
+    expect(filter.censor("example.com:80, next")).toBe(
+      `${mask("example.com:80")}, next`,
+    );
+    expect(filter.censor("example.com:80\u200b, next")).toBe(
+      `${mask("example.com:80")}\u200b, next`,
+    );
+    expect(filter.censor("example.com:80) next")).toBe(
+      `${mask("example.com:80")}) next`,
+    );
+    expect(filter.censor("example.com. next")).toBe(
+      `${mask("example.com")}. next`,
+    );
+    expect(filter.censor("example.com. store")).toBe(
+      `${mask("example.com")}. store`,
+    );
+    expect(filter.censor("example.com a")).toBe(`${mask("example.com")} a`);
+    expect(filter.censor("foo.com x")).toBe(`${mask("foo.com")} x`);
+    expect(filter.censor("example.com\u200b. next")).toBe(
+      `${mask("example.com")}\u200b. next`,
+    );
+    expect(filter.censor("example.com\u200b. store")).toBe(
+      `${mask("example.com")}\u200b. store`,
+    );
+    expect(filter.censor("example.com\u200b,next")).toBe(
+      `${mask("example.com")}\u200b,next`,
+    );
+    expect(filter.censor("example.com\u200b!next")).toBe(
+      `${mask("example.com")}\u200b!next`,
+    );
+    expect(filter.censor("example.com\u200bnext")).toBe(
+      `${mask("example.com")}\u200bnext`,
+    );
+    expect(filter.censor("example.com/path,\u200bthen")).toBe(
+      `${mask("example.com/path")},\u200bthen`,
+    );
+    expect(filter.censor("example.com:support")).toBe(
+      `${mask("example.com")}:support`,
+    );
+    expect(filter.censor("example.com:123support")).toBe(
+      `${mask("example.com")}:123support`,
+    );
+    expect(filter.censor("example.com:123support?x")).toBe(
+      `${mask("example.com")}:123support?x`,
+    );
+    expect(filter.censor("example.com:123-support")).toBe(
+      `${mask("example.com")}:123-support`,
+    );
+    expect(filter.censor("example.com:123_support")).toBe(
+      `${mask("example.com")}:123_support`,
+    );
+    expect(filter.censor("example.com:8\u200b0support")).toBe(
+      `${mask("example.com")}:8\u200b0support`,
+    );
+    expect(filter.censor("example.com's")).toBe(`${mask("example.com")}'s`);
+    expect(filter.censor("example.com’s")).toBe(`${mask("example.com")}’s`);
+    expect(filter.censor("example.com-like")).toBe(
+      `${mask("example.com")}-like`,
+    );
+    expect(filter.censor("example.com--test")).toBe(
+      `${mask("example.com")}--test`,
+    );
+  });
+
+  it("censors defanged dots", () => {
+    expect(filter.censor("example[.]com")).toBe(mask("example[.]com"));
+    expect(filter.censor("example dot com")).toBe(mask("example dot com"));
+    expect(filter.censor("go to dot com now")).toBe(
+      `go ${mask("to dot com")} now`,
+    );
+    expect(filter.censor("example d0t com")).toBe(mask("example d0t com"));
+    expect(filter.censor("example точка com")).toBe(mask("example точка com"));
+    expect(filter.censor("the dotcom bubble")).toBe("the dotcom bubble");
+    expect(filter.censor("not dotorg")).toBe("not dotorg");
+    expect(filter.censor("hello dotnet now")).toBe("hello dotnet now");
+  });
+
+  it("censors links split by separators and spaces", () => {
+    const input = "h t t p : / / e x a m p l e . c o m";
+    expect(filter.censor(input)).toBe(mask(input));
+    expect(filter.censor("go exa mple.com now")).toBe(
+      `go ${mask("exa mple.com")} now`,
+    );
+    expect(filter.censor("go ex ample dot com now")).toBe(
+      `go ${mask("ex ample dot com")} now`,
+    );
+    expect(filter.censor("please example.com")).toBe(
+      `please ${mask("example.com")}`,
+    );
+    expect(filter.censor("and example.com")).toBe(`and ${mask("example.com")}`);
+    expect(filter.censor("please e\u200bxample.com")).toBe(
+      `please ${mask("e\u200bxample.com")}`,
+    );
+  });
+
+  it("keeps current split-path behavior after a spaced host", () => {
+    const input = "go h t t p : / / e x a m p l e . c o m / p a t h now";
+    expect(filter.censor(input)).toBe(
+      `go ${mask("h t t p : / / e x a m p l e . c o m")} / p a t h now`,
+    );
+  });
+
+  it("handles mixed latin/cyrillic lookalikes in host", () => {
+    const input = "hxxp://еxample.cоm";
+    expect(filter.censor(input)).toBe(mask(input));
+  });
+
+  it("keeps zero-width marks inside host labels", () => {
+    expect(filter.censor("go exa\u200bmple.com now")).toBe(
+      `go ${mask("exa\u200bmple.com")} now`,
+    );
+    expect(filter.censor("go https://exa\u200bmple.com/path now")).toBe(
+      `go ${mask("https://exa\u200bmple.com/path")} now`,
+    );
+  });
+
+  it("locks current uppercase TLD behavior", () => {
+    expect(filter.censor("go EXAMPLE.COM now")).toBe(
+      `go ${mask("EXAMPLE.COM")} now`,
+    );
+  });
+
+  it("does not censor neutral non-url text", () => {
+    const input = "welcome to sample text and enjoy the canvas";
+    expect(filter.censor(input)).toBe(input);
+  });
+
+  it("preserves input length and is idempotent", () => {
+    const input =
+      "check https://example.com and h t t p : / / e x a m p l e . c o m";
+    const once = filter.censor(input);
+    const twice = filter.censor(once);
+    expect(once.length).toBe(input.length);
+    expect(twice).toBe(once);
+  });
+
+  it("preserves UTF-16 length for astral code points inside URLs", () => {
+    const input = "go http://😀.com/ now";
+    const output = filter.censor(input);
+    expect(output).toBe(`go ${"*".repeat("http://😀.com/".length)} now`);
+    expect(output.length).toBe(input.length);
+
+    const customBmp = createUrlFilter({ maskChar: "#" }).censor(input);
+    expect(customBmp).toBe(`go ${"#".repeat("http://😀.com/".length)} now`);
+    expect(customBmp.length).toBe(input.length);
+
+    const custom = createUrlFilter({ maskChar: "😀" }).censor(
+      "go example.com now",
+    );
+    expect(custom).toBe(`go ${mask("example.com")} now`);
+    expect(custom.length).toBe("go example.com now".length);
+  });
+
+  it("handles long non-url input without excessive scanning", () => {
+    const punctuation = ".".repeat(10_000);
+    const letters = "a".repeat(10_000);
+    const dotted = "a.".repeat(5_000);
+    expect(filter.censor(punctuation)).toBe(punctuation);
+    expect(filter.censor(letters)).toBe(letters);
+    expect(filter.censor(dotted)).toBe(dotted);
+  });
+
+  it("supports custom tld list and custom mask char", () => {
+    const f = createUrlFilter({ tlds: ["internal"], maskChar: "#" });
+    expect(f.censor("svc.internal")).toBe(mask("svc.internal", "#"));
+    expect(f.censor("example.com")).toBe("example.com");
+  });
+
+  it("normalizes custom uppercase TLDs and preserves path punctuation behavior", () => {
+    const f = createUrlFilter({ tlds: ["INTERNAL"] });
+    expect(f.censor("go EXAMPLE.INTERNAL now")).toBe(
+      `go ${mask("EXAMPLE.INTERNAL")} now`,
+    );
+    expect(f.censor("go example.internal/path?x=1#y.")).toBe(
+      `go ${mask("example.internal/path?x=1#y")}.`,
+    );
+  });
+
+  it("allows exact configured domains across URL forms", () => {
+    const f = createUrlFilter({ allowedDomains: [" TRUSTED.COM. "] });
+
+    expect(f.censor("visit trusted.com/path now")).toBe(
+      "visit trusted.com/path now",
+    );
+    expect(f.censor("visit https://trusted.com:443/path?q=1 now")).toBe(
+      "visit https://trusted.com:443/path?q=1 now",
+    );
+    expect(f.censor("visit https://user:pass@trusted.com/path now")).toBe(
+      "visit https://user:pass@trusted.com/path now",
+    );
+    expect(f.censor("visit hxxp[:]//trusted[.]com/path now")).toBe(
+      "visit hxxp[:]//trusted[.]com/path now",
+    );
+    expect(f.censor("visit https://trusted [.] com/path now")).toBe(
+      "visit https://trusted [.] com/path now",
+    );
+    expect(f.censor("visit https://trusted . com/path now")).toBe(
+      "visit https://trusted . com/path now",
+    );
+    expect(f.censor("visit trusted dot com now")).toBe(
+      "visit trusted dot com now",
+    );
+    expect(f.censor("visit trusted d o t com now")).toBe(
+      "visit trusted d o t com now",
+    );
+    expect(
+      f.censor("visit trusted \u0442\u043e\u0447\u043a\u0430 com now"),
+    ).toBe("visit trusted \u0442\u043e\u0447\u043a\u0430 com now");
+    expect(f.censor("visit trusted\u3002com now")).toBe(
+      "visit trusted\u3002com now",
+    );
+    expect(f.censor("visit https://tru\u200bsted.com/path now")).toBe(
+      "visit https://tru\u200bsted.com/path now",
+    );
+    expect(f.censor("visit https://tru\ufb06ed.com/path now")).toBe(
+      "visit https://tru\ufb06ed.com/path now",
+    );
+    expect(f.censor("visit trusted.com./admin now")).toBe(
+      "visit trusted.com./admin now",
+    );
+
+    const split = createUrlFilter({
+      allowedDomains: ["example.com", "example.ai"],
+    });
+    expect(split.censor("visit exa mple.com now")).toBe(
+      "visit exa mple.com now",
+    );
+    expect(split.censor("visit ex ample dot com now")).toBe(
+      "visit ex ample dot com now",
+    );
+    expect(split.censor("visit https://exa mple.ai/path now")).toBe(
+      "visit https://exa mple.ai/path now",
+    );
+  });
+
+  it("keeps domain allowlists exact and hostname-based", () => {
+    const f = createUrlFilter({ allowedDomains: ["trusted.com"] });
+    const homograph = "https://tru\u0455ted.com/path";
+
+    expect(f.censor("www.trusted.com")).toBe(mask("www.trusted.com"));
+    expect(f.censor("nottrusted.com")).toBe(mask("nottrusted.com"));
+    expect(f.censor("trusted.com.evil.com")).toBe(mask("trusted.com.evil.com"));
+    expect(f.censor("https://trusted.com@evil.com/path")).toBe(
+      mask("https://trusted.com@evil.com/path"),
+    );
+    expect(f.censor("https://evil.com@trusted.com/path")).toBe(
+      "https://evil.com@trusted.com/path",
+    );
+    expect(f.censor(homograph)).toBe(mask(homograph));
+  });
+
+  it("normalizes Unicode allowed domains without broadening scripts", () => {
+    const f = createUrlFilter({
+      allowedDomains: [
+        " \u041f\u0420\u0418\u041c\u0415\u0420\u3002\u0420\u0424. ",
+      ],
+    });
+
+    expect(
+      f.censor(
+        "visit \u043f\u0440\u0438\u043c\u0435\u0440.\u0440\u0444/path now",
+      ),
+    ).toBe("visit \u043f\u0440\u0438\u043c\u0435\u0440.\u0440\u0444/path now");
+    expect(f.censor("visit primer.\u0440\u0444/path now")).toBe(
+      `visit ${mask("primer.\u0440\u0444/path")} now`,
+    );
+    expect(f.censor("visit xn--e1afmkfd.xn--p1ai now")).toBe(
+      `visit ${mask("xn--e1afmkfd.xn--p1ai")} now`,
+    );
+  });
+
+  it("ignores invalid allowed-domain entries and masks mixed blocked URLs", () => {
+    const invalid = createUrlFilter({
+      allowedDomains: [
+        "",
+        "*.trusted.com",
+        "https://trusted.com",
+        "trusted-.com",
+        "127.0.0.1",
+        "localhost",
+      ],
+    });
+    expect(invalid.censor("trusted.com")).toBe(mask("trusted.com"));
+    expect(invalid.censor("https://trusted-.com/path")).toBe(
+      mask("https://trusted-.com/path"),
+    );
+    expect(invalid.censor("https://127.0.0.1/path")).toBe(
+      mask("https://127.0.0.1/path"),
+    );
+    expect(invalid.censor("http://localhost:3000/path")).toBe(
+      mask("http://localhost:3000/path"),
+    );
+
+    const f = createUrlFilter({ allowedDomains: ["trusted.com"] });
+    expect(f.censor("trusted.com and example.org")).toBe(
+      `trusted.com and ${mask("example.org")}`,
+    );
+    expect(f.censor("https://trusted.com:80example.org")).toBe(
+      `https://trusted.com:80${mask("example.org")}`,
+    );
+  });
+});
+
+describe("URL scanner", () => {
+  it("keeps scanner contracts compatible with shared range shapes", () => {
+    const scanner: UrlRangeScanner = createUrlScanner();
+    const hints: UrlScanHints = {
+      hasNonAscii: false,
+      hasDot: true,
+      hasSlash: false,
+      hasColon: false,
+    };
+    const text = "visit example.com now";
+    const result: UrlRangeScanResult = scanner.scan({
+      text,
+      codePoints: Array.from(text),
+      hints,
+    });
+
+    expect(result).toEqual({ ranges: [[6, 17]] });
+  });
+
+  it("exposes scanner ranges compatible with code point masking", () => {
+    const scanner = createUrlScanner();
+    expect(
+      scanner.scan({
+        text: "visit https://example.com now",
+        codePoints: Array.from("visit https://example.com now"),
+      }),
+    ).toEqual({
+      ranges: [[6, 25]],
+    });
+  });
+
+  it("keeps the public censor wrapper aligned with scanner ranges", () => {
+    const text = "go https://example.com/path now";
+    const scanner = createUrlScanner();
+    const ranges = scanner.scan({
+      text,
+      codePoints: Array.from(text),
+    }).ranges;
+
+    expect(ranges).toEqual([[3, 27]]);
+    expect(createUrlFilter({ maskChar: "#" }).censor(text)).toBe(
+      `go ${mask("https://example.com/path", "#")} now`,
+    );
+  });
+
+  it("checks URL candidates without collecting every range", () => {
+    const scanner = createUrlScanner();
+    const text = "visit https://example.com and https://second.example now";
+    const input = { text, codePoints: Array.from(text) };
+
+    expect(scanner.check(input)).toBe(true);
+    expect(scanner.check({ text: "plain words only", codePoints: [] })).toBe(
+      false,
+    );
+    expect(checkUrlRanges(input)).toBe(true);
+  });
+
+  it("streams scanner ranges into a sink and supports early stop", () => {
+    const scanner = createUrlScanner();
+    const text = "visit example.com and example.org now";
+    const seen: Array<readonly [number, number]> = [];
+
+    const completed = scanner.scan(
+      { text, codePoints: Array.from(text) },
+      (match) => {
+        seen.push(match.range);
+        return false;
+      },
+    );
+
+    expect(completed).toBe(false);
+    expect(seen).toEqual([[6, 17]]);
+  });
+
+  it("uses shared-style hints to skip clearly clean text", () => {
+    expect(
+      checkUrlRanges({
+        text: "plain words only",
+        codePoints: Array.from("plain words only"),
+        hints: {
+          hasNonAscii: false,
+          hasDot: false,
+          hasSlash: false,
+          hasColon: false,
+        },
+      }),
+    ).toBe(false);
+  });
+
+  it("does not let false shared hints hide split-dot URLs", () => {
+    const scanner = createUrlScanner();
+    const text = "visit example d o t com";
+    const input = {
+      text,
+      codePoints: Array.from(text),
+      hints: {
+        hasNonAscii: false,
+        hasDot: false,
+        hasSlash: false,
+        hasColon: false,
+      },
+    };
+    const seen: Array<readonly [number, number]> = [];
+
+    expect(scanner.check(input)).toBe(true);
+    expect(
+      scanner.scan(input, (match) => {
+        seen.push(match.range);
+        return false;
+      }),
+    ).toBe(false);
+    expect(seen).toEqual([[6, 23]]);
+  });
+
+  it("streams prefixed, bare-domain, and punctuation-trimmed ranges", () => {
+    const text = "go https://example.com/path, then example.org.";
+    const seen: Array<readonly [number, number]> = [];
+
+    expect(
+      scanUrlRangeMatches({ text, codePoints: Array.from(text) }, (match) => {
+        seen.push(match.range);
+      }),
+    ).toBe(true);
+    expect(seen).toEqual([
+      [3, 27],
+      [34, 45],
+    ]);
+  });
+
+  it("supports custom TLD configuration", () => {
+    expect(scanUrlRanges("go svc.internal", new Set(["internal"]))).toEqual([
+      [3, 15],
+    ]);
+    expect(scanUrlRanges("go svc.internal")).toEqual([]);
+    expect(scanUrlRanges("go example.com", new Set(["internal"]))).toEqual([]);
+  });
+
+  it("keeps allowlist behavior aligned across scanner APIs", () => {
+    const scanner = createUrlScanner({ allowedDomains: ["trusted.com"] });
+    const allowedText = "visit trusted.com/path now";
+    const mixedText = "visit trusted.com/path and https://blocked.org/path now";
+    const blocked = "https://blocked.org/path";
+    const blockedStart = Array.from(
+      mixedText.slice(0, mixedText.indexOf(blocked)),
+    ).length;
+    const blockedEnd = blockedStart + Array.from(blocked).length;
+    const mixedInput = { text: mixedText, codePoints: Array.from(mixedText) };
+    const seen: Array<readonly [number, number]> = [];
+
+    expect(
+      scanner.scan({ text: allowedText, codePoints: Array.from(allowedText) }),
+    ).toEqual({ ranges: [] });
+    expect(
+      scanner.check({
+        text: allowedText,
+        codePoints: Array.from(allowedText),
+      }),
+    ).toBe(false);
+    expect(scanner.scan(mixedInput)).toEqual({
+      ranges: [[blockedStart, blockedEnd]],
+    });
+    expect(scanner.check(mixedInput)).toBe(true);
+    expect(
+      scanner.scan(mixedInput, (match) => {
+        seen.push(match.range);
+      }),
+    ).toBe(true);
+    expect(seen).toEqual([[blockedStart, blockedEnd]]);
+  });
+
+  it("returns no ranges for clearly clean text", () => {
+    const scanner = createUrlScanner();
+    expect(
+      scanner.scan({
+        text: "plain words only",
+        codePoints: Array.from("plain words only"),
+      }),
+    ).toEqual({ ranges: [] });
+  });
+
+  it("keeps obfuscated URL coverage through the scanner path", () => {
+    const astralLetter = "\u{10437}";
+    const cyrillicO = "\u043e";
+    const rawDotWord = ["\u0442", "\u043e", "\u0447", "\u043a", "\u0430"].join(
+      " ",
+    );
+
+    expect(scanUrlRanges(`${astralLetter}.com`)).toEqual([[0, 5]]);
+    expect(scanUrlRanges("visit hxxp[:]//example[.]com")).toEqual([[6, 28]]);
+    expect(scanUrlRanges("visit example dot com")).toEqual([[6, 21]]);
+    expect(scanUrlRanges("visit example d o t com")).toEqual([[6, 23]]);
+    expect(scanUrlRanges("visit example d-o-t com")).toEqual([[6, 23]]);
+    expect(scanUrlRanges(`visit example d${cyrillicO}t com`)).toEqual([
+      [6, 21],
+    ]);
+    expect(scanUrlRanges("visit example ( . ) com")).toEqual([[6, 23]]);
+    expect(scanUrlRanges("visit example { . } com")).toEqual([[6, 23]]);
+    expect(scanUrlRanges(`visit example ${rawDotWord} com`)).toEqual([[6, 27]]);
+    expect(scanUrlRanges("example(.)com")).toEqual([[0, 13]]);
+    expect(scanUrlRanges("example{.}com")).toEqual([[0, 13]]);
+    expect(scanUrlRanges("example。com")).toEqual([[0, 11]]);
+  });
+});
+
+describe("explicit URL improvements", () => {
+  it("censors explicit-scheme URLs with unknown TLDs while preserving bare-domain TLD rules", () => {
+    expect(filter.censor("go https://example.unknown/path now")).toBe(
+      `go ${mask("https://example.unknown/path")} now`,
+    );
+    expect(filter.censor("go example.unknown/path now")).toBe(
+      "go example.unknown/path now",
+    );
+  });
+
+  it("censors explicit authority forms", () => {
+    expect(filter.censor("go https://[2001:db8::1]/path now")).toBe(
+      `go ${mask("https://[2001:db8::1]/path")} now`,
+    );
+    expect(filter.censor("go http://localhost:3000/admin now")).toBe(
+      `go ${mask("http://localhost:3000/admin")} now`,
+    );
+    expect(filter.censor("go https://user:pass@example.com/admin now")).toBe(
+      `go ${mask("https://user:pass@example.com/admin")} now`,
+    );
+    expect(filter.censor("go https://user:1.next@example.com/admin now")).toBe(
+      `go ${mask("https://user:1.next@example.com/admin")} now`,
+    );
+    expect(filter.censor("go https://foo_bar.com/path now")).toBe(
+      `go ${mask("https://foo_bar.com/path")} now`,
+    );
+    expect(filter.censor("go https://foo_\u200bbar.com/path now")).toBe(
+      `go ${mask("https://foo_\u200bbar.com/path")} now`,
+    );
+    expect(filter.censor("go https://example.com_foo/path now")).toBe(
+      `go ${mask("https://example.com_foo/path")} now`,
+    );
+    expect(filter.censor("go https://example.com😀/path now")).toBe(
+      `go ${"*".repeat("https://example.com😀/path".length)} now`,
+    );
+    expect(filter.censor("go http://svc_api:8080/ now")).toBe(
+      `go ${mask("http://svc_api:8080/")} now`,
+    );
+  });
+
+  it("censors explicit IDN, emoji, and punycode hosts", () => {
+    expect(filter.censor("go http://☃.net/ now")).toBe(
+      `go ${mask("http://☃.net/")} now`,
+    );
+    expect(filter.censor("go http://😀.com/ now")).toBe(
+      `go ${"*".repeat("http://😀.com/".length)} now`,
+    );
+    expect(filter.censor("go xn--e1afmkfd.xn--p1ai now")).toBe(
+      `go ${mask("xn--e1afmkfd.xn--p1ai")} now`,
+    );
+  });
+
+  it("trims glued prose around explicit authority URLs", () => {
+    expect(filter.censor("go http://localhost:3000,then")).toBe(
+      `go ${mask("http://localhost:3000")},then`,
+    );
+    expect(filter.censor("go http://localhost:3000.next")).toBe(
+      `go ${mask("http://localhost:3000")}.next`,
+    );
+    expect(filter.censor("go http://localhost:details")).toBe(
+      `go ${mask("http://localhost")}:details`,
+    );
+    expect(filter.censor("go https://[2001:db8::1]:next")).toBe(
+      `go ${mask("https://[2001:db8::1]")}:next`,
+    );
+    expect(filter.censor("go https://[2001:db8::1], now")).toBe(
+      `go ${mask("https://[2001:db8::1]")}, now`,
+    );
+    expect(filter.censor("go http://localhost\u200b, next")).toBe(
+      `go ${mask("http://localhost")}\u200b, next`,
+    );
+    expect(filter.censor("go https://[2001:db8::1]\u200b, next")).toBe(
+      `go ${mask("https://[2001:db8::1]")}\u200b, next`,
+    );
+    expect(filter.censor("go https://[2001:db8::1],next")).toBe(
+      `go ${mask("https://[2001:db8::1]")},next`,
+    );
+    expect(filter.censor("go https://[2001:db8::1].next")).toBe(
+      `go ${mask("https://[2001:db8::1]")}.next`,
+    );
+    expect(filter.censor("go http://localhost\u200bnext now")).toBe(
+      `go ${mask("http://localhost")}\u200bnext now`,
+    );
+    expect(filter.censor("go http://localhost”next now")).toBe(
+      `go ${mask("http://localhost")}”next now`,
+    );
+    expect(filter.censor("go http://localhost»next now")).toBe(
+      `go ${mask("http://localhost")}»next now`,
+    );
+    expect(filter.censor("go http://localhost“next now")).toBe(
+      `go ${mask("http://localhost")}“next now`,
+    );
+    expect(filter.censor("go http://localhost‘next now")).toBe(
+      `go ${mask("http://localhost")}‘next now`,
+    );
+    expect(filter.censor("go http://localhost«next now")).toBe(
+      `go ${mask("http://localhost")}«next now`,
+    );
+    expect(filter.censor("go http://localhost(next now")).toBe(
+      `go ${mask("http://localhost")}(next now`,
+    );
+    expect(filter.censor("go http://localhost[next now")).toBe(
+      `go ${mask("http://localhost")}[next now`,
+    );
+    expect(filter.censor("go https://[2001:db8::1](next now")).toBe(
+      `go ${mask("https://[2001:db8::1]")}(next now`,
+    );
+    expect(filter.censor("go https://[2001:db8::1][next now")).toBe(
+      `go ${mask("https://[2001:db8::1]")}[next now`,
+    );
+    expect(filter.censor("go https://user:pass@example.com, now")).toBe(
+      `go ${mask("https://user:pass@example.com")}, now`,
+    );
+  });
+
+  it("keeps surrounding brackets outside explicit authority ranges", () => {
+    expect(filter.censor("(https://[2001:db8::1])")).toBe(
+      `(${mask("https://[2001:db8::1]")})`,
+    );
+    expect(filter.censor('"http://localhost:3000"')).toBe(
+      `"${mask("http://localhost:3000")}"`,
+    );
+    expect(filter.censor("“https://[2001:db8::1]”")).toBe(
+      `“${mask("https://[2001:db8::1]")}”`,
+    );
+    expect(filter.censor("<http://localhost:3000>")).toBe(
+      `<${mask("http://localhost:3000")}>`,
+    );
+    expect(filter.censor("[https://[2001:db8::1]]")).toBe(
+      `[${mask("https://[2001:db8::1]")}]`,
+    );
+    expect(filter.censor("(http://localhost:3000)")).toBe(
+      `(${mask("http://localhost:3000")})`,
+    );
+  });
+
+  it("censors explicit dot-before-path and spaced-host continuations", () => {
+    expect(filter.censor("go https://example.com.:443/admin now")).toBe(
+      `go ${mask("https://example.com.:443/admin")} now`,
+    );
+    expect(filter.censor("go https://example.com./admin now")).toBe(
+      `go ${mask("https://example.com./admin")} now`,
+    );
+    expect(filter.censor("go https://exa mple.ai/path now")).toBe(
+      `go ${mask("https://exa mple.ai/path")} now`,
+    );
+    expect(filter.censor("go https://exam pl\u200be.ai/path now")).toBe(
+      `go ${mask("https://exam pl\u200be.ai/path")} now`,
+    );
+    expect(filter.censor("go https://example .ai/path now")).toBe(
+      `go ${mask("https://example .ai/path")} now`,
+    );
+    expect(filter.censor("go https://example [.] com/path now")).toBe(
+      `go ${mask("https://example [.] com/path")} now`,
+    );
+    expect(filter.censor("go https://example . com/path now")).toBe(
+      `go ${mask("https://example . com/path")} now`,
+    );
+    expect(filter.censor("go http://example. com/path now")).toBe(
+      `go ${mask("http://example. com/path")} now`,
+    );
+    expect(filter.censor("go https://example. online/path now")).toBe(
+      `go ${mask("https://example. online/path")} now`,
+    );
+    expect(filter.censor("go https://example. online\u200b/path now")).toBe(
+      `go ${mask("https://example. online\u200b/path")} now`,
+    );
+    expect(filter.censor("go https://example. on\u200bline/path now")).toBe(
+      `go ${mask("https://example. on\u200bline/path")} now`,
+    );
+    expect(
+      createUrlFilter({ tlds: ["internal"] }).censor(
+        "go https://svc. internal/path now",
+      ),
+    ).toBe(`go ${mask("https://svc. internal/path")} now`);
+    expect(filter.censor("go https://example dot com/path now")).toBe(
+      `go ${mask("https://example dot com/path")} now`,
+    );
+    expect(filter.censor("go https://example dot com n\u200bext now")).toBe(
+      `go ${mask("https://example dot com")} n\u200bext now`,
+    );
+    expect(filter.censor("go https://example dot com\u200b, next")).toBe(
+      `go ${mask("https://example dot com")}\u200b, next`,
+    );
+    expect(filter.censor("go https://example dot com/path\u200b, next")).toBe(
+      `go ${mask("https://example dot com/path")}\u200b, next`,
+    );
+    expect(filter.censor("go https://example dot com,then")).toBe(
+      `go ${mask("https://example dot com")},then`,
+    );
+    expect(filter.censor("go https://example dot com,example.org now")).toBe(
+      `go ${mask("https://example dot com")},${mask("example.org")} now`,
+    );
+    expect(filter.censor("go https://example dot com:123support now")).toBe(
+      `go ${mask("https://example dot com:123")}support now`,
+    );
+    expect(filter.censor("go https://example dot com:123-support now")).toBe(
+      `go ${mask("https://example dot com:123")}-support now`,
+    );
+    expect(filter.censor("go https://example dot com:80.support now")).toBe(
+      `go ${mask("https://example dot com:80")}.support now`,
+    );
+    expect(filter.censor("go https://example dot unknown/path now")).toBe(
+      `go ${mask("https://example dot unknown/path")} now`,
+    );
+    expect(filter.censor("go https://example . com now")).toBe(
+      `go ${mask("https://example . com")} now`,
+    );
+    expect(filter.censor("go https://exa mple.ai/path,then")).toBe(
+      `go ${mask("https://exa mple.ai/path")},then`,
+    );
+    expect(
+      filter.censor("go https://exa mple.ai/wiki/Function_(math) now"),
+    ).toBe(`go ${mask("https://exa mple.ai/wiki/Function_(math)")} now`);
+    expect(filter.censor("go https://exam ple.unknown/path now")).toBe(
+      `go ${mask("https://exam ple.unknown/path")} now`,
+    );
+  });
+
+  it("trims prose and zero-width separators around explicit authority tails", () => {
+    expect(filter.censor("go http://localhost next.step")).toBe(
+      `go ${mask("http://localhost")} next.step`,
+    );
+    expect(filter.censor("go http://localhost\u200b/admin now")).toBe(
+      `go ${mask("http://localhost\u200b/admin")} now`,
+    );
+    expect(filter.censor("go https://[2001:db8::1]\u200b/path now")).toBe(
+      `go ${mask("https://[2001:db8::1]\u200b/path")} now`,
+    );
+    expect(filter.censor("go http://localhost:80abc now")).toBe(
+      `go ${mask("http://localhost:80")}abc now`,
+    );
+    expect(filter.censor("go http://localhost:80-admin now")).toBe(
+      `go ${mask("http://localhost:80")}-admin now`,
+    );
+    expect(filter.censor("go https://[2001:db8::1]:443_admin now")).toBe(
+      `go ${mask("https://[2001:db8::1]:443")}_admin now`,
+    );
+    expect(filter.censor("go http://localhost:_admin now")).toBe(
+      `go ${mask("http://localhost")}:_admin now`,
+    );
+    expect(filter.censor("go https://[2001:db8::1]:-note now")).toBe(
+      `go ${mask("https://[2001:db8::1]")}:-note now`,
+    );
+    expect(filter.censor("go http://localhost:8\u200b0/admin now")).toBe(
+      `go ${mask("http://localhost:8\u200b0/admin")} now`,
+    );
+    expect(filter.censor("go http://localhost:8\u200b0example.com now")).toBe(
+      `go ${mask("http://localhost:8\u200b0")}${mask("example.com")} now`,
+    );
+    expect(filter.censor("go https://[2001:db8::1]\u200b:443/path now")).toBe(
+      `go ${mask("https://[2001:db8::1]\u200b:443/path")} now`,
+    );
+    expect(filter.censor("go https://[2001:db8::1]:443next now")).toBe(
+      `go ${mask("https://[2001:db8::1]:443")}next now`,
+    );
+    expect(filter.censor("go https://[2001:db8::1]next now")).toBe(
+      `go ${mask("https://[2001:db8::1]")}next now`,
+    );
+    expect(filter.censor("go https://[2001:db8::1]\u200bnext now")).toBe(
+      `go ${mask("https://[2001:db8::1]")}\u200bnext now`,
+    );
+    expect(filter.censor("go http://localhost,\u200bnext now")).toBe(
+      `go ${mask("http://localhost")},\u200bnext now`,
+    );
+    expect(filter.censor("go http://localhost]next now")).toBe(
+      `go ${mask("http://localhost")}]next now`,
+    );
+    expect(filter.censor("go https://[2001:db8::1]]next now")).toBe(
+      `go ${mask("https://[2001:db8::1]")}]next now`,
+    );
+    expect(filter.censor("go http://[note:todo]/ now")).toBe(
+      "go http://[note:todo]/ now",
+    );
+    expect(filter.censor("go https://example.com,example.org now")).toBe(
+      `go ${mask("https://example.com")},${mask("example.org")} now`,
+    );
+    expect(filter.censor("go example.com.\u200b/admin now")).toBe(
+      `go ${mask("example.com.\u200b/admin")} now`,
+    );
+    expect(filter.censor("go https://example.com.\u200b/admin now")).toBe(
+      `go ${mask("https://example.com.\u200b/admin")} now`,
+    );
+    expect(filter.censor("go https://example.\u200bcom/path now")).toBe(
+      `go ${mask("https://example.\u200bcom/path")} now`,
+    );
+    expect(filter.censor("go https://example.com\u200bnext now")).toBe(
+      `go ${mask("https://example.com")}\u200bnext now`,
+    );
+    expect(filter.censor("go http://localhost:80example.com now")).toBe(
+      `go ${mask("http://localhost:80")}${mask("example.com")} now`,
+    );
+    expect(filter.censor("go http://localhost:80\u200b.next now")).toBe(
+      `go ${mask("http://localhost:80")}\u200b.next now`,
+    );
+  });
+});
