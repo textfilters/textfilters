@@ -59,8 +59,12 @@ graph TD
   ranges --> scheme["scheme.ts"]
   ranges --> domain["domain.ts"]
   ranges --> explicit["explicit-authority.ts"]
-  explicit --> domain
+  explicit --> host["explicit-host.ts"]
+  explicit --> tail["authority-tail.ts"]
   explicit --> path["path.ts"]
+  host --> domain
+  host --> dots["dots.ts"]
+  tail --> dots
   domain --> dots["dots.ts"]
   domain --> path
   scheme --> chars["chars.ts"]
@@ -71,21 +75,23 @@ graph TD
 
 ## File Responsibilities
 
-| File                        | Responsibility                                                                                                     | Out of scope                               |
-| --------------------------- | ------------------------------------------------------------------------------------------------------------------ | ------------------------------------------ |
-| `src/index.ts`              | Public entrypoint, public exports, and censor wrapper orchestration.                                               | Parser details or matching policy.         |
-| `src/contracts.ts`          | Public types and constants.                                                                                        | Internal parser types.                     |
-| `src/scanner.ts`            | URL scanner factory, range scanner output, boolean checks, sink streaming, and cheap clean-text prefilter.         | Low-level parser rules.                    |
-| `src/tlds.ts`               | Default TLDs and TLD normalization.                                                                                | Host parsing or URL range collection.      |
-| `src/allowed-domains.ts`    | Exact allowed-domain normalization and parsed-host comparison.                                                     | Network loading, caching, or suffix trust. |
-| `src/chars.ts`              | Shared character sets, punctuation policy, lookalike map, and static parser character arrays.                      | Parser control flow.                       |
-| `src/meta.ts`               | Source metadata, raw and skeleton views, and low-level consume helpers.                                            | URL-specific matching policy.              |
-| `src/scheme.ts`             | Real, split, hxxp, and defanged scheme parsing.                                                                    | Host or path parsing.                      |
-| `src/dots.ts`               | Real, Unicode, bracketed, word, and Russian defanged dot parsing.                                                  | TLD validation.                            |
-| `src/domain.ts`             | Bare domain labels, separators, TLD validation, and domain path tails.                                             | Explicit authority-only host rules.        |
-| `src/explicit-authority.ts` | Explicit-scheme authority parsing for localhost, ports, IPv6, userinfo, underscores, IDN, emoji, and unknown TLDs. | Bare-domain allowlist policy.              |
-| `src/path.ts`               | Path, query, fragment continuation and trailing prose trimming.                                                    | Scheme or TLD parsing.                     |
-| `src/ranges.ts`             | Internal range collection facade and range merging.                                                                | Public API exports.                        |
+| File                        | Responsibility                                                                                             | Out of scope                               |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------- | ------------------------------------------ |
+| `src/index.ts`              | Public entrypoint, public exports, and censor wrapper orchestration.                                       | Parser details or matching policy.         |
+| `src/contracts.ts`          | Public types and constants.                                                                                | Internal parser types.                     |
+| `src/scanner.ts`            | URL scanner factory, range scanner output, boolean checks, sink streaming, and cheap clean-text prefilter. | Low-level parser rules.                    |
+| `src/tlds.ts`               | Default TLDs and TLD normalization.                                                                        | Host parsing or URL range collection.      |
+| `src/allowed-domains.ts`    | Exact allowed-domain normalization and parsed-host comparison.                                             | Network loading, caching, or suffix trust. |
+| `src/chars.ts`              | Shared character sets, punctuation policy, lookalike map, and static parser character arrays.              | Parser control flow.                       |
+| `src/meta.ts`               | Source metadata, raw and skeleton views, and low-level consume helpers.                                    | URL-specific matching policy.              |
+| `src/scheme.ts`             | Real, split, hxxp, and defanged scheme parsing.                                                            | Host or path parsing.                      |
+| `src/dots.ts`               | Real, Unicode, bracketed, word, and Russian defanged dot parsing.                                          | TLD validation.                            |
+| `src/domain.ts`             | Bare domain labels, separators, TLD validation, and domain path tails.                                     | Explicit authority-only host rules.        |
+| `src/explicit-authority.ts` | Explicit-scheme authority orchestration and final range construction.                                      | Low-level host or tail parsing.            |
+| `src/explicit-host.ts`      | Localhost, port, IPv6, userinfo, underscore, IDN, emoji, and unknown-TLD host parsing.                     | Trailing prose and path-tail recovery.     |
+| `src/authority-tail.ts`     | Authority boundary trimming, glued prose detection, and spaced/defanged continuation checks.               | Host validity or bare-domain TLD policy.   |
+| `src/path.ts`               | Path, query, fragment continuation and trailing prose trimming.                                            | Scheme or TLD parsing.                     |
+| `src/ranges.ts`             | Internal range collection facade and range merging.                                                        | Public API exports.                        |
 
 ## Matching Strategy
 
@@ -142,16 +148,17 @@ Masking is idempotent because ranges are collected from the original text before
 
 ## Change Guide
 
-| Change                                    | Primary files                                      |
-| ----------------------------------------- | -------------------------------------------------- |
-| Add a new TLD behavior                    | `src/tlds.ts` + public API tests                   |
-| Change defanged dot behavior              | `src/dots.ts` + public API tests                   |
-| Change hxxp/scheme parsing                | `src/scheme.ts` + public API tests                 |
-| Change explicit host handling             | `src/explicit-authority.ts` + public API tests     |
-| Change trailing punctuation/path behavior | `src/path.ts` + public API tests                   |
-| Change source normalization/lookalikes    | `src/meta.ts` or `src/chars.ts` + public API tests |
-| Change scanner wrapping or prefiltering   | `src/scanner.ts` + scanner tests                   |
-| Change allowed-domain behavior            | `src/allowed-domains.ts` + public API tests        |
+| Change                                  | Primary files                                      |
+| --------------------------------------- | -------------------------------------------------- |
+| Add a new TLD behavior                  | `src/tlds.ts` + public API tests                   |
+| Change defanged dot behavior            | `src/dots.ts` + public API tests                   |
+| Change hxxp/scheme parsing              | `src/scheme.ts` + public API tests                 |
+| Change explicit host handling           | `src/explicit-host.ts` + public API tests          |
+| Change authority/prose boundaries       | `src/authority-tail.ts` + public API tests         |
+| Change path/query/fragment tails        | `src/path.ts` + public API tests                   |
+| Change source normalization/lookalikes  | `src/meta.ts` or `src/chars.ts` + public API tests |
+| Change scanner wrapping or prefiltering | `src/scanner.ts` + scanner tests                   |
+| Change allowed-domain behavior          | `src/allowed-domains.ts` + public API tests        |
 
 ## Safety Rules
 
