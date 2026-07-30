@@ -6,7 +6,7 @@
   "include-v-in-tag": true,
   "skip-changelog": true,
   "separate-pull-requests": false,
-  "group-pull-request-title-pattern": "chore: release packages",
+  "group-pull-request-title-pattern": "chore: release ${branch}",
   "always-link-local": true,
   "plugins": [
     "node-workspace"
