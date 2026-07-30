@@ -33,14 +33,11 @@ import {
   matchRangeForMode,
   PROFANITY_MATCH_MODE,
   textRangesForMode,
-  type CollectedProfanityRange,
 } from "./matches/ranges.js";
 import { normalizeTextInput } from "@textfilters/core";
 import {
   normalizeForMatchSameLen,
   normalizeForMatchSameLenWithoutHomoglyphs,
-  nextCodePointEnd,
-  previousCodePointStart,
   prepareForMatchSameLen,
   prepareForMatchSameLenWithoutHomoglyphs,
   type MatchInputPreparer,
@@ -50,7 +47,7 @@ import {
   iterateLooseCandidateRanges,
 } from "./ranges/loose.js";
 import { hasStrictRange, iterateStrictRanges } from "./ranges/strict.js";
-import { isWordCharAt, maskProfanityRanges } from "./token-ranges.js";
+import { maskProfanityRanges } from "./token-ranges.js";
 import { LOOSE_BASE } from "./terms/loose-base.js";
 import { STRICT_BASE } from "./terms/strict-base.js";
 import {
@@ -679,20 +676,9 @@ const hasProfanity = (
     state.normalization,
     state.normalizeForMatch,
   );
-  const acceptsOriginalSource = collectedRangeMatchesOriginalSource(
-    input.text,
-    normalized,
-  );
   const matchesTaxonomy = collectedRangeMatchesTaxonomy(options);
 
-  if (
-    hasStrictRange(
-      normalized,
-      state.strictPatterns,
-      matchesTaxonomy,
-      acceptsOriginalSource,
-    )
-  ) {
+  if (hasStrictRange(normalized, state.strictPatterns, matchesTaxonomy)) {
     return true;
   }
 
@@ -710,7 +696,7 @@ const hasProfanity = (
     input.text,
     looseCandidates,
     state.strictPatterns,
-    collectedRangeMatchesInput(input.text, normalized, options),
+    matchesTaxonomy,
     state.loosePatterns,
   );
 };
@@ -815,15 +801,7 @@ function* iterateProfanityMatches(
   const { normalized, facts } = prepareInput(state, input);
   const matchesTaxonomy = collectedRangeMatchesTaxonomy(options);
 
-  const acceptsOriginalSource = collectedRangeMatchesOriginalSource(
-    input.text,
-    normalized,
-  );
-  for (const range of iterateStrictRanges(
-    normalized,
-    state.strictPatterns,
-    acceptsOriginalSource,
-  )) {
+  for (const range of iterateStrictRanges(normalized, state.strictPatterns)) {
     const match = matchRangeForMode(range, PROFANITY_MATCH_MODE.STRICT);
     if (matchesTaxonomy(match)) {
       yield match;
@@ -845,61 +823,12 @@ function* iterateProfanityMatches(
     state.strictPatterns,
     state.loosePatterns,
   )) {
-    if (isOriginalSourceExempted(range, input.text, normalized)) {
-      continue;
-    }
     const match = matchRangeForMode(range, PROFANITY_MATCH_MODE.LOOSE);
     if (matchesTaxonomy(match)) {
       yield match;
     }
   }
 }
-
-const isOriginalSourceExempted = (
-  range: CollectedProfanityRange,
-  source: string,
-  normalized: string,
-): boolean => {
-  if (range.originalSourceExemptions === undefined) {
-    return false;
-  }
-
-  if (hasSourceExemptionContinuation(range, source, normalized)) {
-    return false;
-  }
-
-  const matchedSource = source
-    .slice(range[0], range[1])
-    .toLocaleLowerCase("ru");
-  return range.originalSourceExemptions.includes(matchedSource);
-};
-
-const SOURCE_EXEMPTION_INVISIBLE_RE = /\p{Default_Ignorable_Code_Point}/u;
-
-const hasSourceExemptionContinuation = (
-  range: CollectedProfanityRange,
-  source: string,
-  normalized: string,
-): boolean => {
-  const sourceLeadingStart =
-    range[0] > 0 ? previousCodePointStart(source, range[0]) : range[0];
-  const sourceTrailingEnd =
-    range[1] < source.length ? nextCodePointEnd(source, range[1]) : range[1];
-  const hasLeadingContinuation =
-    range[0] > 0 &&
-    (isWordCharAt(normalized, previousCodePointStart(normalized, range[0])) ||
-      SOURCE_EXEMPTION_INVISIBLE_RE.test(
-        source.slice(sourceLeadingStart, range[0]),
-      ));
-  const hasTrailingContinuation =
-    range[1] < normalized.length &&
-    (isWordCharAt(normalized, range[1]) ||
-      SOURCE_EXEMPTION_INVISIBLE_RE.test(
-        source.slice(range[1], sourceTrailingEnd),
-      ));
-
-  return hasLeadingContinuation || hasTrailingContinuation;
-};
 
 const prepareInput = (
   state: FilterStateSnapshot,
@@ -965,31 +894,6 @@ const hasTaxonomyFilters = (options: ProfanityMatchOptions): boolean =>
   options.categories !== undefined ||
   options.severities !== undefined ||
   options.minSeverity !== undefined;
-
-const collectedRangeMatchesOriginalSource =
-  (source: string, normalized: string) =>
-  (range: CollectedProfanityRange): boolean =>
-    !isOriginalSourceExempted(range, source, normalized);
-
-const collectedRangeMatchesInput = (
-  source: string,
-  normalized: string,
-  options: ProfanityMatchOptions | undefined,
-): ((range: CollectedProfanityRange) => boolean) => {
-  if (options === undefined || !hasTaxonomyFilters(options)) {
-    return (range) => !isOriginalSourceExempted(range, source, normalized);
-  }
-
-  const categories =
-    options.categories === undefined ? undefined : new Set(options.categories);
-  const severities =
-    options.severities === undefined ? undefined : new Set(options.severities);
-  const minSeverity = options.minSeverity;
-
-  return (range) =>
-    !isOriginalSourceExempted(range, source, normalized) &&
-    rangeMatchesTaxonomy(range, categories, severities, minSeverity);
-};
 
 const collectedRangeMatchesTaxonomy = (
   options: ProfanityMatchOptions | undefined,

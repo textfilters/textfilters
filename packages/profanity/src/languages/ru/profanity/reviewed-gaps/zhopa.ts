@@ -25,6 +25,5 @@ export default russianFamilyDictionary([
     severity: "medium",
     source: token(regexGroup(ZHOPA_FORMS)),
     match: "strict",
-    originalSourceExemptions: ["жопа"],
   }),
 ]);

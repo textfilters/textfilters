@@ -23,10 +23,6 @@ export interface ProfanityLanguageRuleDefinition {
   readonly match: ProfanityLanguageRuleMatch;
 }
 
-interface SourceExemptedProfanityLanguageRuleDefinition extends ProfanityLanguageRuleDefinition {
-  readonly originalSourceExemptions?: readonly string[];
-}
-
 export type ProfanityLanguageRuleSource = string | readonly string[];
 
 export type ProfanityLanguageRuleMatch =
@@ -67,17 +63,11 @@ export const dictionaryRulesForMode = (
       return [];
     }
 
-    const originalSourceExemptions = (
-      rule as SourceExemptedProfanityLanguageRuleDefinition
-    ).originalSourceExemptions;
     const definition: InternalProfanityRuleDefinition = {
       id: rule.id,
       source: languageRuleSourcePattern(rule.source),
       category: rule.category,
       severity: rule.severity,
-      ...(originalSourceExemptions === undefined
-        ? {}
-        : { originalSourceExemptions }),
       ...(mode === "loose"
         ? looseOptions(match as ProfanityLanguageLooseMatchOptions)
         : {}),

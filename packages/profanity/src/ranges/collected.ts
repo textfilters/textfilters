@@ -10,9 +10,6 @@ export const collectedRangeForPattern = (
     ...(pattern.ruleId === undefined ? {} : { ruleId: pattern.ruleId }),
     ...(pattern.category === undefined ? {} : { category: pattern.category }),
     ...(pattern.severity === undefined ? {} : { severity: pattern.severity }),
-    ...(pattern.originalSourceExemptions === undefined
-      ? {}
-      : { originalSourceExemptions: pattern.originalSourceExemptions }),
   };
 
   return Object.keys(metadata).length === 0

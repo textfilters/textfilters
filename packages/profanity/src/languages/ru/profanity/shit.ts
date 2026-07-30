@@ -908,7 +908,6 @@ export default russianFamilyDictionary([
     category: "VULGAR",
     severity: "medium",
     source: String.raw`(?:говн${regexGroup(GOVNO_FAMILY_TAILS)}|говен)`,
-    originalSourceExemptions: ["говно"],
   }),
   russianRule({
     id: "ru.vulgar.govno.adjective",

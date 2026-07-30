@@ -11,35 +11,6 @@ export const WORD_RE = /[\p{L}\p{N}_-][\p{L}\p{N}\p{M}_-]*/gu;
 export const WORD_CHAR_RE = /[\p{L}\p{N}\p{M}_-]/u;
 export const WHITESPACE_RE = /\s/u;
 export const SPLIT_TOKEN_CHAR_RE = /[_-]/u;
-const TOKEN_PADDING_CHAR_RE = /^[\p{N}\p{M}_-]$/u;
-const TOKEN_PADDING_MARK_RE = /^\p{M}$/u;
-
-export const isTokenPaddingChar = (value: string): boolean =>
-  TOKEN_PADDING_CHAR_RE.test(value);
-
-export const isLeadingTokenPadding = (value: string): boolean => {
-  const chars = Array.from(value);
-  return (
-    chars.length > 0 &&
-    chars.every(isTokenPaddingChar) &&
-    SPLIT_TOKEN_CHAR_RE.test(lastNonMark(chars))
-  );
-};
-
-export const isTrailingTokenPadding = (value: string): boolean => {
-  const chars = Array.from(value);
-  return (
-    chars.length > 0 &&
-    chars.every(isTokenPaddingChar) &&
-    SPLIT_TOKEN_CHAR_RE.test(firstNonMark(chars))
-  );
-};
-
-const firstNonMark = (chars: readonly string[]): string =>
-  chars.find((char) => !TOKEN_PADDING_MARK_RE.test(char)) ?? "";
-
-const lastNonMark = (chars: readonly string[]): string =>
-  chars.findLast((char) => !TOKEN_PADDING_MARK_RE.test(char)) ?? "";
 
 export const isWordCharAt = (s: string, i: number): boolean =>
   i >= 0 &&
