@@ -37,7 +37,7 @@ object-backed but its current rules do not attach taxonomy metadata yet.
 Severity values are present in four places:
 
 - `src/types.ts` defines the public `ProfanitySeverity` union.
-- `src/filter.ts` applies exact-match filtering for `options.severities`.
+- `src/match-options.ts` applies exact and minimum-severity filtering.
 - `README.md`, [Match Metadata Design](match-metadata-design.md), and
   [Profanity Taxonomy Metadata Plan](profanity-taxonomy-plan.md) describe
   severity as rule metadata, not as final moderation policy.

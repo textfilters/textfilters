@@ -9,8 +9,10 @@ The taxonomy metadata rollout plan is tracked separately in
 
 ## Current State
 
-`src/filter.ts` exposes `analyze(text): ProfanityMatchRange[]` and collects
-internal range metadata from two matcher paths:
+`src/filter.ts` exposes `analyze(text): ProfanityMatchRange[]` and orchestrates
+match collection. `src/match-options.ts` applies taxonomy predicates to the
+collected match metadata. The collector preserves internal range metadata from
+two matcher paths:
 
 - `strict`: ranges found by the strict token-oriented matcher.
 - `loose`: ranges found by the loose matcher that tolerates separators and other
