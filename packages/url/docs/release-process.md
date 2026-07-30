@@ -9,4 +9,7 @@ aggregated release pull request, Release Please creates a `url-vX.Y.Z` tag and
 GitHub Release, then the publish job validates the released path and publishes
 this workspace in dependency order.
 
+The first monorepo release excludes imported history and starts after the
+migration boundary recorded in the root release configuration.
+
 See the [monorepo release process](../../../docs/release-process.md).
