@@ -1,0 +1,427 @@
+{
+  "language": "ru",
+  "rules": [
+    {
+      "id": "ru.obscene.huy.base",
+      "category": "OBSCENE_MAT",
+      "severity": "high",
+      "source": "(?:хуй|хуя|хуи|хуё|хуе|хую)",
+      "match": {
+        "strict": {},
+        "loose": {
+          "stretch": true
+        }
+      }
+    },
+    {
+      "id": "ru.obscene.huy.digit.split.loose",
+      "category": "OBSCENE_MAT",
+      "severity": "high",
+      "source": "(?<!\\p{L})х(?=1у)1у(?=1[йяиёею])1[йяиёею](?!\\p{L})",
+      "match": {
+        "loose": {}
+      }
+    },
+    {
+      "id": "ru.obscene.huy.huiev.family",
+      "category": "OBSCENE_MAT",
+      "severity": "high",
+      "source": "хуев(?:[а-яё]+)?",
+      "match": {
+        "strict": {},
+        "loose": {
+          "stretch": true
+        }
+      }
+    },
+    {
+      "id": "ru.obscene.huy.huet.family",
+      "category": "OBSCENE_MAT",
+      "severity": "high",
+      "source": "хует(?:[а-яё]+)?",
+      "match": {
+        "strict": {},
+        "loose": {
+          "stretch": true
+        }
+      }
+    },
+    {
+      "id": "ru.vulgar.prihue.family",
+      "category": "VULGAR",
+      "severity": "medium",
+      "source": "прихуе(?:[а-яё]+)?",
+      "match": {
+        "strict": {},
+        "loose": {
+          "stretch": true
+        }
+      }
+    },
+    {
+      "id": "ru.vulgar.prihuel.split.loose",
+      "category": "VULGAR",
+      "severity": "medium",
+      "source": "(?<!\\p{L})п[^\\p{L}\\p{N}]*р[^\\p{L}\\p{N}]*и[^\\p{L}\\p{N}]*х[^\\p{L}\\p{N}]*у[^\\p{L}\\p{N}]*е[^\\p{L}\\p{N}]+л(?!\\p{L})",
+      "match": {
+        "loose": {}
+      }
+    },
+    {
+      "id": "ru.vulgar.prihuel.split.inflected.loose",
+      "category": "VULGAR",
+      "severity": "medium",
+      "source": [
+        "(?<!\\p{L})п[^\\p{L}\\p{N}]*р[^\\p{L}\\p{N}]*и[^\\p{L}\\p{N}]*х[^\\p{L}\\p{N}]*у[^\\p{L}\\p{N}]*",
+        "е[^\\p{L}\\p{N}]+л[^\\p{L}\\s]*(?:[аи]|\\s+[аи](?!\\s*\\p{L}))(?!\\p{L})"
+      ],
+      "match": {
+        "loose": {}
+      }
+    },
+    {
+      "id": "ru.vulgar.huyak.repeated",
+      "category": "VULGAR",
+      "severity": "medium",
+      "source": "хуяк-хуяк",
+      "match": {
+        "strict": {},
+        "loose": {}
+      }
+    },
+    {
+      "id": "ru.vulgar.huyak.family",
+      "category": "VULGAR",
+      "severity": "medium",
+      "source": "хуяк(?:[а-яё]+)?",
+      "match": {
+        "strict": {},
+        "loose": {
+          "stretch": true
+        }
+      }
+    },
+    {
+      "id": "ru.vulgar.huyach.family",
+      "category": "VULGAR",
+      "severity": "medium",
+      "source": "(?:о|за|пере|от|об)?хуя[ч4](?:[а-яё]+)?",
+      "match": {
+        "strict": {}
+      }
+    },
+    {
+      "id": "ru.vulgar.huyn.family",
+      "category": "VULGAR",
+      "severity": "medium",
+      "source": "хуйн(?:[а-яё]+)?",
+      "match": {
+        "strict": {},
+        "loose": {
+          "stretch": true,
+          "hyphenTail": true,
+          "hyphenTailMin": 5
+        }
+      }
+    },
+    {
+      "id": "ru.insult.huyesos.family",
+      "category": "STRONG_INSULT",
+      "severity": "high",
+      "source": "хуесос(?:[а-яё]+)?",
+      "match": {
+        "strict": {},
+        "loose": {
+          "stretch": true
+        }
+      }
+    },
+    {
+      "id": "ru.obscene.huy.translit",
+      "category": "OBSCENE_MAT",
+      "severity": "high",
+      "source": "(?<!\\p{L})(?![hн]ui(?!\\p{L}))(?![hн]u(?:[yу][aа]?|i)\\s+(?:in[cс]|s[tт][oо][cс][kк]|f[oо]ng|ngu[yу][eе]n|[tт]r[aа]n))(?![kк][^\\p{L}\\p{N}]+[hн]ui(?!\\p{L}))(?![kк][^\\p{L}\\p{N}]+[hн]u[yу][aа]?\\s+(?:in[cс]|s[tт][oо][cс][kк]|f[oо]ng|ngu[yу][eе]n|[tт]r[aа]n))(?![hн]u[yу]['’`´]s\\s+s[aа]u[cс][eе])(?:[kк][hн]|[hн]|[xх])u(?:[yу]|i|j|[yу][aа]|i[aа]|[yу][eе]|[yу][oо]|[yу]u)(?!\\p{L})",
+      "match": {
+        "loose": {
+          "stretch": true
+        }
+      }
+    },
+    {
+      "id": "ru.vulgar.huy.translit",
+      "category": "VULGAR",
+      "severity": "medium",
+      "source": [
+        "(?<!\\p{L})",
+        "(?:",
+        "(?:n[aа]|ni|[pр][oо])(?:[kк][hн]|[hн]|[xх])u(?:",
+        "[yу]|i|j|[yу][aа]|i[aа]|[eе]|[yу][eе]|[yу][oо]|[yу]u",
+        ")|",
+        "(?:[oо]|[aа])(?:[kк][hн]|[hн]|[xх])u[eе](?:[tт]|l)(?:[a-zа-яё]+)?|",
+        "[pр]ri(?:[kк][hн]|[hн]|[xх])u[eе]l?(?:[a-zа-яё]+)?|",
+        "(?:[kк][hн]|[hн]|[xх])u[eе][tт][aа](?:[a-zа-яё]+)?|",
+        "(?:[kк][hн]|[hн]|[xх])u(?:[yу]|i|j)(?:",
+        "[eе]v|[oо]v|n[yу][aа]|[aа][kк]|[aа][cс][hн]|[eе][tт][aа]",
+        ")(?:[a-zа-яё]+)?",
+        ")",
+        "(?!\\p{L})"
+      ],
+      "match": {
+        "strict": {},
+        "loose": {
+          "stretch": true
+        }
+      }
+    },
+    {
+      "id": "ru.insult.huyesos.translit",
+      "category": "STRONG_INSULT",
+      "severity": "high",
+      "source": "(?<!\\p{L})(?:[kк][hн]|[hн]|[xх])u(?:[yу]|i|j)[eе]?s[oо]s(?:[a-zа-яё]+)?(?!\\p{L})",
+      "match": {
+        "strict": {},
+        "loose": {
+          "stretch": true
+        }
+      }
+    },
+    {
+      "id": "ru.vulgar.ohue.family",
+      "category": "VULGAR",
+      "severity": "medium",
+      "source": "охуе(?:[а-яё]+)?",
+      "match": {
+        "strict": {},
+        "loose": {
+          "stretch": true
+        }
+      }
+    },
+    {
+      "id": "ru.vulgar.ahue.family",
+      "category": "VULGAR",
+      "severity": "medium",
+      "source": "ахуев(?:[а-яё]+)?",
+      "match": {
+        "strict": {},
+        "loose": {
+          "stretch": true
+        }
+      }
+    },
+    {
+      "id": "ru.vulgar.ohui.family",
+      "category": "VULGAR",
+      "severity": "medium",
+      "source": "охуи(?:[а-яё]+)?",
+      "match": {
+        "strict": {}
+      }
+    },
+    {
+      "id": "ru.vulgar.ohui.in.token.loose",
+      "category": "VULGAR",
+      "severity": "medium",
+      "source": "о[^\\p{L}\\p{N}\\s]*х[^\\p{L}\\p{N}\\s]*у[^\\p{L}\\p{N}\\s]*и[^\\p{L}\\p{N}\\s]*(?:[а-яё][^\\p{L}\\p{N}\\s]*)*",
+      "match": {
+        "loose": {
+          "stretch": true
+        }
+      }
+    },
+    {
+      "id": "ru.vulgar.ohuet.family",
+      "category": "VULGAR",
+      "severity": "medium",
+      "source": "оху[ея]т",
+      "match": {
+        "strict": {},
+        "loose": {
+          "stretch": true
+        }
+      }
+    },
+    {
+      "id": "ru.vulgar.huli",
+      "category": "VULGAR",
+      "severity": "low",
+      "source": "хули(?!ган|[оo](?!\\p{L})|т)",
+      "match": {
+        "strict": {}
+      }
+    },
+    {
+      "id": "ru.vulgar.poh",
+      "category": "VULGAR",
+      "severity": "low",
+      "source": "(?<!\\p{L})пох(?!\\p{L})",
+      "match": {
+        "strict": {},
+        "loose": {}
+      }
+    },
+    {
+      "id": "ru.vulgar.nihuy.family",
+      "category": "VULGAR",
+      "severity": "medium",
+      "source": "(?<!\\p{L})н[иu]ху[йяиёею](?:[а-яё]+)?(?!\\p{L})",
+      "match": {
+        "strict": {}
+      }
+    },
+    {
+      "id": "ru.vulgar.nehuy.family",
+      "category": "VULGAR",
+      "severity": "medium",
+      "source": "(?<!\\p{L})неху[йяиёею](?:[а-яё]+)?(?!\\p{L})",
+      "match": {
+        "strict": {}
+      }
+    },
+    {
+      "id": "ru.vulgar.nahuy.family",
+      "category": "VULGAR",
+      "severity": "medium",
+      "source": "(?<!\\p{L})(?:[нз]а|по)ху[йяиёею](?:[\\p{L}-]+)?(?!\\p{L})",
+      "match": {
+        "strict": {}
+      }
+    },
+    {
+      "id": "ru.vulgar.nahuy.translit.nahoy",
+      "category": "VULGAR",
+      "severity": "medium",
+      "source": "n[aа][hн][oо][yу]",
+      "match": {
+        "loose": {}
+      }
+    },
+    {
+      "id": "ru.vulgar.nahuy.in.token.loose",
+      "category": "VULGAR",
+      "severity": "medium",
+      "source": "(?<!\\p{L})(?:[нз]а|по)[^\\p{L}\\p{N}\\s]*х[^\\p{L}\\p{N}\\s]*у[^\\p{L}\\p{N}\\s]*[йяиёею](?:[\\p{L}-]+)?(?!\\p{L})",
+      "match": {
+        "loose": {
+          "stretch": true
+        }
+      }
+    },
+    {
+      "id": "ru.vulgar.nahuy.split.loose",
+      "category": "VULGAR",
+      "severity": "medium",
+      "source": [
+        "(?<!\\p{L})(?:[нз][^\\p{L}\\p{N}]+а|п[^\\p{L}\\p{N}]+о)[^\\p{L}\\p{N}]+х[^\\p{L}\\p{N}]+у(?:[^\\p{L}",
+        "\\p{N}]+у)*[^\\p{L}\\p{N}]+[йяиёею](?!\\p{L})"
+      ],
+      "match": {
+        "loose": {}
+      }
+    },
+    {
+      "id": "ru.vulgar.nahuy.partial.split.loose",
+      "category": "VULGAR",
+      "severity": "medium",
+      "source": "(?<!\\p{L})(?:[нз]а|по)х[^\\p{L}\\p{N}]+у(?:[^\\p{L}\\p{N}]+у)*[^\\p{L}\\p{N}]*й(?!\\p{L})",
+      "match": {
+        "loose": {}
+      }
+    },
+    {
+      "id": "ru.obscene.huey.loose",
+      "category": "OBSCENE_MAT",
+      "severity": "high",
+      "source": "ху[её]й",
+      "match": {
+        "loose": {
+          "stretch": true
+        }
+      }
+    },
+    {
+      "id": "ru.vulgar.huyach.loose",
+      "category": "VULGAR",
+      "severity": "medium",
+      "source": "х[^\\p{L}\\p{N}\\s]*у[^\\p{L}\\p{N}\\s]*я[^\\p{L}\\p{N}\\s]*[ч4](?:[а-яё]+)?",
+      "match": {
+        "loose": {}
+      }
+    },
+    {
+      "id": "ru.vulgar.huyach.cyrillic.stretched.loose",
+      "category": "VULGAR",
+      "severity": "medium",
+      "source": "хуяч(?:[а-яё]+)?",
+      "match": {
+        "loose": {
+          "stretch": true
+        }
+      }
+    },
+    {
+      "id": "ru.vulgar.huyach.prefixed.loose",
+      "category": "VULGAR",
+      "severity": "medium",
+      "source": "(?:о|за|пере|от|об)ху+я[ч4](?:[а-яё]+)?",
+      "match": {
+        "loose": {
+          "stretch": true
+        }
+      }
+    },
+    {
+      "id": "ru.vulgar.huynya.loose",
+      "category": "VULGAR",
+      "severity": "low",
+      "source": "хуйня",
+      "match": {
+        "loose": {
+          "stretch": true
+        }
+      }
+    },
+    {
+      "id": "ru.vulgar.ahuet.loose",
+      "category": "VULGAR",
+      "severity": "medium",
+      "source": "(?<!\\p{L})ахуеть(?!\\p{L})",
+      "match": {
+        "loose": {
+          "stretch": true
+        }
+      }
+    },
+    {
+      "id": "ru.vulgar.ohuet.loose",
+      "category": "VULGAR",
+      "severity": "medium",
+      "source": "охуеть",
+      "match": {
+        "loose": {
+          "stretch": true
+        }
+      }
+    },
+    {
+      "id": "ru.vulgar.huli.loose",
+      "category": "VULGAR",
+      "severity": "low",
+      "source": "хули(?![^\\p{L}\\p{N}]*г[^\\p{L}\\p{N}]*а[^\\p{L}\\p{N}]*н|[^\\p{L}\\p{N}]*[оo](?!\\p{L})|[^\\p{L}\\p{N}]*т)",
+      "match": {
+        "loose": {
+          "stretch": true
+        }
+      }
+    },
+    {
+      "id": "ru.vulgar.ni.huya.spaced.loose",
+      "category": "VULGAR",
+      "severity": "medium",
+      "source": "(?<!\\p{L})н[^\\p{L}\\p{N}]+[иu][^\\p{L}\\p{N}]+х[^\\p{L}\\p{N}]+у[^\\p{L}\\p{N}]+я(?!\\p{L})",
+      "match": {
+        "loose": {}
+      }
+    }
+  ]
+}

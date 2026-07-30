@@ -1,0 +1,123 @@
+{
+  "language": "ru",
+  "rules": [
+    {
+      "id": "ru.obscene.blya",
+      "category": "OBSCENE_MAT",
+      "severity": "medium",
+      "source": "[б6]ля",
+      "match": {
+        "strict": {},
+        "loose": {
+          "stretch": true
+        }
+      }
+    },
+    {
+      "id": "ru.obscene.blyad.family",
+      "category": "OBSCENE_MAT",
+      "severity": "high",
+      "source": "[б6]л[я9@][дт](?:[а-яё]+)?",
+      "match": {
+        "strict": {}
+      }
+    },
+    {
+      "id": "ru.obscene.blyad.digit.split.loose",
+      "category": "OBSCENE_MAT",
+      "severity": "high",
+      "source": "(?<!\\p{L})[б6]1?л1?[я9@]1?[дт]1?ь(?!\\p{L})",
+      "match": {
+        "loose": {}
+      }
+    },
+    {
+      "id": "ru.obscene.blea",
+      "category": "OBSCENE_MAT",
+      "severity": "medium",
+      "source": "[б6]л[еэ]а+(?:[а-яё]+)?",
+      "match": {
+        "strict": {},
+        "loose": {}
+      }
+    },
+    {
+      "id": "ru.obscene.bleat.family",
+      "category": "OBSCENE_MAT",
+      "severity": "medium",
+      "source": "[б6]л[еэ]а+[тд]ь(?:[а-яё]+)?",
+      "match": {
+        "strict": {},
+        "loose": {}
+      }
+    },
+    {
+      "id": "ru.obscene.blya.translit",
+      "category": "OBSCENE_MAT",
+      "severity": "medium",
+      "source": "(?<!\\p{L})[bьв]l(?:[yу][aа]|i[aа]|j[aа])(?!\\p{L})",
+      "match": {
+        "strict": {},
+        "loose": {
+          "stretch": true
+        }
+      }
+    },
+    {
+      "id": "ru.obscene.blyad.translit",
+      "category": "OBSCENE_MAT",
+      "severity": "high",
+      "source": "(?<!\\p{L})[bьв]l(?:[yу][aа]|i[aа]|j[aа])(?:d|[tт])(?:[a-zа-яё]+)?(?!\\p{L})",
+      "match": {
+        "strict": {},
+        "loose": {
+          "stretch": true
+        }
+      }
+    },
+    {
+      "id": "ru.obscene.bleat.translit",
+      "category": "OBSCENE_MAT",
+      "severity": "medium",
+      "source": "(?<!\\p{L})[bьв]l[eе][aа]d(?:[a-zа-яё]+)?(?!\\p{L})",
+      "match": {
+        "strict": {},
+        "loose": {}
+      }
+    },
+    {
+      "id": "ru.obscene.lyat",
+      "category": "OBSCENE_MAT",
+      "severity": "medium",
+      "source": "(?<!\\p{L})ля[тд]ь(?:[а-яё]+)?(?!\\p{L})",
+      "match": {
+        "strict": {},
+        "loose": {
+          "stretch": true
+        }
+      }
+    },
+    {
+      "id": "ru.obscene.blyad.loose",
+      "category": "OBSCENE_MAT",
+      "severity": "high",
+      "source": "[б6]л[я9@][дт]ь",
+      "match": {
+        "loose": {
+          "stretch": true
+        }
+      }
+    },
+    {
+      "id": "ru.obscene.blyad.short.loose",
+      "category": "OBSCENE_MAT",
+      "severity": "medium",
+      "source": "(?<!\\p{L})[б6]л[я9@][дт](?!\\p{L})",
+      "match": {
+        "loose": {
+          "stretch": true
+        }
+      }
+    }
+  ]
+}

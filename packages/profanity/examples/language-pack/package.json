@@ -1,0 +1,30 @@
+{
+  "name": "@textfilters/profanity-zz",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Template metadata for a future external profanity language pack.",
+  "license": "UNLICENSED",
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./dictionary": {
+      "types": "./dist/dictionary.d.ts",
+      "import": "./dist/dictionary.js"
+    },
+    "./filter": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  }
+}

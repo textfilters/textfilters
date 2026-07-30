@@ -1,0 +1,85 @@
+{
+  "name": "@textfilters/profanity",
+  "version": "0.16.2",
+  "type": "module",
+  "description": "TypeScript profanity filter with Russian and opt-in English dictionaries, obfuscation handling, taxonomy metadata, and language-pack validation.",
+  "license": "MIT",
+  "keywords": [
+    "text-filtering",
+    "content-moderation",
+    "moderation",
+    "typescript",
+    "javascript",
+    "censoring",
+    "redaction",
+    "profanity-filter",
+    "russian-profanity",
+    "english-profanity",
+    "language-dictionaries",
+    "obfuscation",
+    "taxonomy",
+    "content-safety"
+  ],
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "docs",
+    "README.md",
+    "LICENSE"
+  ],
+  "bin": {
+    "profanity-validate-language-dictionary": "./dist/cli/validate-language-dictionary.js"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./ru": {
+      "types": "./dist/entrypoints/ru.d.ts",
+      "import": "./dist/entrypoints/ru.js"
+    },
+    "./en": {
+      "types": "./dist/entrypoints/en.d.ts",
+      "import": "./dist/entrypoints/en.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run --maxWorkers 4 --testTimeout 15000",
+    "lint": "prettier README.md docs examples package.json src tests scripts --check",
+    "format": "prettier README.md docs examples package.json src tests scripts --write",
+    "prepack": "npm run build",
+    "smoke:dist": "npm run build && tsc --ignoreConfig --noEmit --target ES2024 --module NodeNext --moduleResolution NodeNext --strict --skipLibCheck tests/dist-public-api-smoke.ts && node tests/dist-public-api-smoke.mjs",
+    "pack:dry-run": "npm pack --dry-run",
+    "check": "npm run lint && npm test && npm run smoke:dist && npm run pack:dry-run",
+    "benchmark:profanity": "npm run build && node scripts/benchmark-profanity.mjs",
+    "benchmark:strict-lookup": "npm run build && node scripts/benchmark-strict-lookup.mjs"
+  },
+  "dependencies": {
+    "@textfilters/core": "^0.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.9.3",
+    "prettier": "^3.8.3",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.7"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "packageManager": "npm@11.16.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/textfilters/profanity.git"
+  },
+  "bugs": {
+    "url": "https://github.com/textfilters/profanity/issues"
+  },
+  "homepage": "https://github.com/textfilters/profanity#readme",
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  }
+}

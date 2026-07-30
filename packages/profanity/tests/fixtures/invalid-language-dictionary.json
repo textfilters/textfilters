@@ -1,0 +1,30 @@
+{
+  "language": "",
+  "rules": [
+    {
+      "source": "",
+      "match": {}
+    },
+    {
+      "id": "zz.vulgar.duplicate",
+      "category": "VULGAR",
+      "severity": "low",
+      "source": "qwr",
+      "match": {
+        "strict": {}
+      }
+    },
+    {
+      "id": "zz.vulgar.duplicate",
+      "category": "UNKNOWN",
+      "severity": "highest",
+      "source": "qwr",
+      "match": {
+        "loose": {
+          "stretch": false,
+          "distance": 1
+        }
+      }
+    }
+  ]
+}
