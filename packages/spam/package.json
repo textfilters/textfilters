@@ -1,0 +1,68 @@
+{
+  "name": "@textfilters/spam",
+  "version": "0.3.2",
+  "type": "module",
+  "description": "Lightweight TypeScript anti-spam guard for chat moderation: interval, duplicate, burst, and actor-based message checks.",
+  "license": "MIT",
+  "keywords": [
+    "text-filtering",
+    "content-moderation",
+    "moderation",
+    "typescript",
+    "javascript",
+    "spam-filter",
+    "anti-spam",
+    "chat-moderation",
+    "rate-limiting",
+    "duplicate-detection",
+    "burst-detection"
+  ],
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "docs",
+    "README.md",
+    "LICENSE"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "lint": "prettier README.md docs package.json src tests --check",
+    "format": "prettier README.md docs package.json src tests --write",
+    "prepack": "npm run build",
+    "pack:dry-run": "npm pack --dry-run",
+    "smoke:dist": "node --input-type=module --eval \"const spam = await import('./dist/index.js'); spam.createSpamFilter().check({ text: 'ok' });\"",
+    "check": "npm run lint && npm test && npm run build && npm run smoke:dist && npm run pack:dry-run"
+  },
+  "dependencies": {
+    "@textfilters/core": "^0.4.0"
+  },
+  "devDependencies": {
+    "prettier": "^3.8.3",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.7"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "packageManager": "npm@11.16.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/textfilters/spam.git"
+  },
+  "bugs": {
+    "url": "https://github.com/textfilters/spam/issues"
+  },
+  "homepage": "https://github.com/textfilters/spam#readme",
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  }
+}
