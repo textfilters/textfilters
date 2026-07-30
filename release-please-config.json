@@ -1,0 +1,40 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "bootstrap-sha": "90437b1eb7ccfe7c4b00e10a596e9c9f9693848f",
+  "release-type": "node",
+  "include-component-in-tag": true,
+  "include-v-in-tag": true,
+  "skip-changelog": true,
+  "separate-pull-requests": false,
+  "group-pull-request-title-pattern": "chore: release packages",
+  "always-link-local": true,
+  "plugins": [
+    "node-workspace"
+  ],
+  "packages": {
+    "packages/core": {
+      "component": "core",
+      "package-name": "@textfilters/core"
+    },
+    "packages/url": {
+      "component": "url",
+      "package-name": "@textfilters/url"
+    },
+    "packages/email": {
+      "component": "email",
+      "package-name": "@textfilters/email"
+    },
+    "packages/phone": {
+      "component": "phone",
+      "package-name": "@textfilters/phone"
+    },
+    "packages/profanity": {
+      "component": "profanity",
+      "package-name": "@textfilters/profanity"
+    },
+    "packages/spam": {
+      "component": "spam",
+      "package-name": "@textfilters/spam"
+    }
+  }
+}

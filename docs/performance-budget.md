@@ -3,9 +3,9 @@
 ## Purpose
 
 The benchmark suite is a comparison tool for the same machine, Node.js version,
-package set, and command shape. Absolute numbers are not portable. Use this
-budget to decide whether a performance change needs investigation before a PR is
-merged in a package repository.
+workspace state, and command shape. Absolute numbers are not portable. Use this
+budget to decide whether a performance change needs investigation before a pull
+request is merged.
 
 ## Command
 
@@ -26,7 +26,7 @@ Record these fields in PRs that change performance-sensitive code:
 
 | Field | Required value |
 | --- | --- |
-| Package refs | Published versions or local checkout branches used for the run |
+| Package refs | Baseline and branch commits used for the run |
 | Runtime | Node.js major version and npm package manager version |
 | Command | Exact benchmark command |
 | Scope | Suites and scenarios compared |
@@ -63,15 +63,11 @@ exposes the required public APIs:
 | `combined scanner ranges` | Existing range scanner pipeline using scan/censor flows |
 | `combined shared hints` | Shared-hints scanner set using `check()`, `scan()`, and `censor()` flows |
 
-Rows are skipped when the installed published packages do not expose the
-required scanner APIs yet. That skip is expected while shared scanner work is in
-flight. For unpublished package work, link or install local package builds and
-record the package refs in the PR body.
+The six current workspaces expose the required scanner APIs. A skipped combined
+row is therefore a validation failure unless the pull request intentionally
+changes that public contract.
 
 ## Current Baseline
 
-The current package set exposes the legacy wrapper path, range scanner path, and
-shared-hints scanner path. Scanner rows should run in the combined benchmark
-when the dependency ranges in this repository are installed. See
-[final benchmark comparison](final-benchmark-comparison.md) for the first
-post-alignment combined run and row-by-row tradeoffs.
+The current workspace set exposes the legacy wrapper path, range scanner path,
+and shared-hints scanner path. Scanner rows must run after `npm run build`.

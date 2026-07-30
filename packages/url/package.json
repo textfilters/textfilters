@@ -58,12 +58,13 @@
   "packageManager": "npm@11.16.0",
   "repository": {
     "type": "git",
-    "url": "https://github.com/textfilters/url.git"
+    "url": "https://github.com/textfilters/textfilters.git",
+    "directory": "packages/url"
   },
   "bugs": {
-    "url": "https://github.com/textfilters/url/issues"
+    "url": "https://github.com/textfilters/textfilters/issues"
   },
-  "homepage": "https://github.com/textfilters/url#readme",
+  "homepage": "https://github.com/textfilters/textfilters/tree/main/packages/url#readme",
   "publishConfig": {
     "registry": "https://npm.pkg.github.com"
   }

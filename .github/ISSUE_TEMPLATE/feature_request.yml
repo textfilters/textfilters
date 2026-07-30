@@ -1,0 +1,46 @@
+name: Feature request
+description: Propose a package or repository improvement.
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Repository artifacts must be written in English. Keep proposals within the owning package boundary.
+  - type: dropdown
+    id: package
+    attributes:
+      label: Package
+      options:
+        - core
+        - url
+        - email
+        - phone
+        - profanity
+        - spam
+        - repository tooling or documentation
+    validations:
+      required: true
+  - type: textarea
+    id: use-case
+    attributes:
+      label: Use case
+    validations:
+      required: true
+  - type: textarea
+    id: proposed-api
+    attributes:
+      label: Proposed API or behavior
+      description: Describe the public API, documentation, workflow, or behavior change being requested.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+  - type: textarea
+    id: compatibility
+    attributes:
+      label: Compatibility notes
+      description: Note expected impact on public API, package boundaries, ecosystem compatibility, performance, and releases.

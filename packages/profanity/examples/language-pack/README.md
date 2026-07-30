@@ -21,9 +21,9 @@ examples/language-pack/
   profile from it, and exports all three values from the hypothetical package
   entrypoint.
 
-## Starting a Real Package
+## Starting a Real Workspace
 
-Copy these files into the future package repository:
+Copy these files into a new workspace under `packages/`:
 
 ```text
 package.json

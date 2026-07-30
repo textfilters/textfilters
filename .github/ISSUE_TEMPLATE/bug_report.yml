@@ -1,0 +1,68 @@
+name: Bug report
+description: Report a package or repository documentation bug.
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Repository artifacts must be written in English. Include enough detail for maintainers to reproduce the issue without private application context.
+  - type: dropdown
+    id: package
+    attributes:
+      label: Package
+      options:
+        - core
+        - url
+        - email
+        - phone
+        - profanity
+        - spam
+        - repository tooling or documentation
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      placeholder: "0.x.y"
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Include Node.js, npm, operating system, and package manager details.
+    validations:
+      required: true
+  - type: textarea
+    id: current-behavior
+    attributes:
+      label: Current behavior
+      description: Describe what happens now, including exact output or errors when useful.
+    validations:
+      required: true
+  - type: textarea
+    id: expected-behavior
+    attributes:
+      label: Expected behavior
+      description: Describe the behavior you expected and why it matches the package contract.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: Provide the smallest reproducible example you can, including install commands and input text when relevant.
+    validations:
+      required: true
+  - type: textarea
+    id: regression
+    attributes:
+      label: Regression notes
+      description: Include the last known working package version or commit if this is a regression.
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional context

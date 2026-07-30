@@ -3,35 +3,25 @@
 ## Overview
 
 The benchmark suite measures the runtime cost of the current `@textfilters/*`
-package set on representative inputs. Use it for **before/after comparisons on
+workspaces on representative inputs. Use it for **before/after comparisons on
 the same machine**. Absolute numbers depend on hardware, OS scheduling, Node.js
 version, and local load. See [ecosystem policy](ecosystem-policy.md) for the
 performance comparison expectations that PRs should follow, and see
 [performance budget](performance-budget.md) for regression thresholds and PR
-reporting expectations. See the
-[final benchmark comparison](final-benchmark-comparison.md) for the first
-combined legacy sequential, range scanner, and shared-hints scanner comparison
-after the package scanner alignment work.
+reporting expectations.
 
 ## Setup
 
-Packages are published on GitHub Packages, so npm must use the GitHub Packages
-registry for the `@textfilters` scope and must be authenticated before install.
-This repository commits the scope registry in `.npmrc`, matching the package
-repositories. Keep authentication outside the project file so user-level npm
-config and CI-generated auth are not overridden.
+Install and build the monorepo from the repository root:
 
 ```sh
-export NODE_AUTH_TOKEN=<github-token-with-read-packages>
-npm config set //npm.pkg.github.com/:_authToken "$NODE_AUTH_TOKEN" --location=user
-npm install
+npm ci
+npm run build
 npm run benchmark
 ```
 
-No build step is required for published packages. The runner uses Node.js
-built-in modules and public package exports only. The combined scanner rows are
-printed when the installed or locally linked package set exposes the public
-range scanner exports.
+The runner uses Node.js built-in modules and the built public exports of the six
+local workspaces. It does not import package internals.
 
 ## Running a Subset
 
@@ -140,10 +130,8 @@ matrix covers:
 - Cyrillic clean text
 - obfuscated profanity candidates
 
-If the installed package set does not expose scanner exports yet, the benchmark
-prints a skip message for scanner rows and still runs the legacy sequential
-rows. Link or install local package builds to compare unpublished scanner work
-before release.
+The current workspaces expose the scanner contracts required by every combined
+benchmark path.
 
 ## Interpreting Results
 
