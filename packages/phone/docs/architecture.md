@@ -49,31 +49,40 @@ flowchart TD
 
 ```mermaid
 graph TD
-  index["index.ts"] --> parser["parser.ts"]
-  parser --> meta["meta.ts"]
-  parser --> ranges["ranges.ts"]
+  index["index.ts"] --> contracts["contracts.ts"]
+  index --> filter["filter.ts"]
+  index --> publicScanner["public-scanner.ts"]
+  filter --> publicScanner
+  publicScanner --> meta["meta.ts"]
+  publicScanner --> ranges["ranges.ts"]
   meta --> digits["digits.ts"]
   ranges --> scanner["scanner.ts"]
   scanner --> boundaries["boundaries.ts"]
   scanner --> groups["phone-groups.ts"]
   scanner --> fp["false-positives.ts"]
+  fp --> dateTime["date-time.ts"]
+  fp --> json["json-metadata.ts"]
   fp --> boundaries
   fp --> groups
 ```
 
 ## File Responsibilities
 
-| File                     | Responsibility                                                          | Out of scope                                            |
-| ------------------------ | ----------------------------------------------------------------------- | ------------------------------------------------------- |
-| `src/index.ts`           | Public entrypoint, scanner facade, prefilter, and filter orchestration. | Parser internals or package-private matching details.   |
-| `src/parser.ts`          | Thin internal facade for the entrypoint.                                | Candidate scanning, validation, or false-positive code. |
-| `src/digits.ts`          | Unicode decimal digit folding and raw character mapping.                | Text metadata arrays or candidate scanning.             |
-| `src/meta.ts`            | Code point metadata and character classification.                       | Phone-specific validation rules.                        |
-| `src/boundaries.ts`      | Boundary checks, cursors, and extension edge parsing.                   | Date, coordinate, IP, or amount rules.                  |
-| `src/phone-groups.ts`    | Group count, digit count, plus, and parentheses rules.                  | Text scanning or false-positive classification.         |
-| `src/false-positives.ts` | Guards for numeric shapes that are probably not phones.                 | Public API exports or final range merging.              |
-| `src/scanner.ts`         | Candidate reads, rejected-run tracking, and range emits.                | Final range merging or mask application.                |
-| `src/ranges.ts`          | Candidate collection and final range merge facade.                      | Low-level parsing rules.                                |
+| File                     | Responsibility                                                       | Out of scope                                    |
+| ------------------------ | -------------------------------------------------------------------- | ----------------------------------------------- |
+| `src/index.ts`           | Public re-exports only.                                              | Runtime orchestration or package-private rules. |
+| `src/contracts.ts`       | Public filter, scanner, hint, result, and sink contracts.            | Scanner implementation.                         |
+| `src/filter.ts`          | Filter factory, shared instance, input normalization, and masking.   | Candidate parsing.                              |
+| `src/public-scanner.ts`  | Public scanner facade, prefilter, range merging, and sink streaming. | Candidate validation rules.                     |
+| `src/digits.ts`          | Unicode decimal digit folding and raw character mapping.             | Text metadata arrays or candidate scanning.     |
+| `src/meta.ts`            | Code point metadata and character classification.                    | Phone-specific validation rules.                |
+| `src/boundaries.ts`      | Boundary checks, cursors, and extension edge parsing.                | Date, coordinate, IP, or amount rules.          |
+| `src/phone-groups.ts`    | Group count, digit count, plus, and parentheses rules.               | Text scanning or false-positive classification. |
+| `src/false-positives.ts` | Structured-number guards, suffix recovery, and guard coordination.   | JSON syntax indexing or public API exports.     |
+| `src/date-time.ts`       | Date, time, coordinate, and timezone recognition helpers.            | Phone group validation or JSON metadata rules.  |
+| `src/json-metadata.ts`   | JSON member recognition, structural indexing, and object caching.    | Phone grouping and masking rules.               |
+| `src/scanner.ts`         | Candidate reads, rejected-run tracking, and range emits.             | Final range merging or mask application.        |
+| `src/ranges.ts`          | Candidate collection and final range merge facade.                   | Low-level parsing rules.                        |
 
 ## Matching Strategy
 
@@ -102,7 +111,8 @@ or rejected non-phone numeric runs.
 
 ## False Positive Strategy
 
-`false-positives.ts` identifies numeric structures that should not be censored:
+The false-positive modules identify numeric structures that should not be
+censored:
 
 - coordinates with latitude and longitude limits;
 - dates and datetime prefixes;
@@ -124,7 +134,10 @@ or rejected non-phone numeric runs.
   validation results are indexed once on the scan metadata identity. A single
   syntax pass selects non-overlapping complete object roots for authoritative
   parsing. Valid inner objects remain eligible inside malformed surrounding
-  regions, while incomplete or invalid members are negatively indexed.
+  regions, while incomplete or invalid members are negatively indexed. These
+  JSON-specific concerns live in `json-metadata.ts`; `false-positives.ts` only
+  decides how a protected metadata prefix interacts with a recoverable phone
+  suffix.
 
 Some prefixes are rejected only until the end of the structured part. This lets a
 valid phone after a neutral numeric prefix still be rescanned and censored.
@@ -143,11 +156,14 @@ for already masked output.
 
 | Change                                      | Where to change                |
 | ------------------------------------------- | ------------------------------ |
+| Change a public scanner or filter contract  | `contracts.ts` + public tests  |
+| Change public scanner orchestration         | `public-scanner.ts` + tests    |
 | Add support for another Unicode digit block | `digits.ts` + public API tests |
 | Change metadata classification              | `meta.ts` + tests              |
 | Change word boundary behavior               | `boundaries.ts` + tests        |
 | Change valid phone grouping                 | `phone-groups.ts` + tests      |
-| Change date/coordinate/time rejection       | `false-positives.ts` + tests   |
+| Change date/coordinate/time rejection       | `date-time.ts` + tests         |
+| Change JSON metadata recognition            | `json-metadata.ts` + tests     |
 | Change candidate scanning                   | `scanner.ts` + tests           |
 | Change final range merging                  | `ranges.ts` + tests            |
 
