@@ -199,7 +199,10 @@ The implementation is split by reading level:
 
 ```mermaid
 flowchart TD
-  Factory["factory.ts: legacy and custom mutable factories"] --> API["filter.ts: matcher lifecycle and mutable state"]
+  Factory["factory.ts: legacy and custom mutable factories"] --> API["filter.ts: public lifecycle and match orchestration"]
+  API --> State["filter-state.ts: compiled and mutable matcher state"]
+  API --> Prepared["prepared-input.ts: invocation-local normalized views"]
+  API --> Options["match-options.ts: taxonomy predicates"]
   Composer["composition.ts: read-only profile composition"] --> Profiles["languages/profile.ts: profile contract"]
   Composer --> API
   Profiles --> Languages
@@ -217,12 +220,17 @@ flowchart TD
   LooseRanges --> Boundary
 ```
 
-The top-level filter has lifecycle code only; matcher modules compile rules;
-range modules decide what parts of text can be masked.
+The top-level filter coordinates the public lifecycle and matching paths.
+State construction, prepared-input caching, and taxonomy predicates stay in
+focused modules; matcher modules compile rules, while range modules decide what
+parts of text can be masked.
 
 | File                                      | Responsibility                                                        |
 | ----------------------------------------- | --------------------------------------------------------------------- |
 | `src/filter.ts`                           | Public API lifecycle and orchestration.                               |
+| `src/filter-state.ts`                     | Compiled dictionaries, mutable matcher state, and runtime mutations.  |
+| `src/prepared-input.ts`                   | Invocation-local normalized views and corroborated scanner hints.     |
+| `src/match-options.ts`                    | Taxonomy category and severity predicates.                            |
 | `src/factory.ts`                          | Backward-compatible and object-based mutable filter factories.        |
 | `src/composition.ts`                      | Read-only profile composition, provenance, policy, and streaming.     |
 | `src/languages/profile.ts`                | Public declarative language profile and selection contracts.          |
@@ -260,6 +268,9 @@ after text normalization.
 | Change                                     | Start Here                                                       |
 | ------------------------------------------ | ---------------------------------------------------------------- |
 | Add a runtime dictionary behavior          | `src/matchers/literals.ts` and tests.                            |
+| Change filter state or runtime mutation    | `src/filter-state.ts` and tests.                                 |
+| Change prepared-input reuse or hints       | `src/prepared-input.ts` and scanner tests.                       |
+| Change taxonomy option filtering           | `src/match-options.ts` and API tests.                            |
 | Add a built-in Russian corpus rule         | `src/languages/ru/profanity/` and corpus tests.                  |
 | Change separator handling for built-ins    | `src/matchers/internal-rules.ts`.                                |
 | Change token acceptance or false positives | `src/ranges/boundary.ts`.                                        |

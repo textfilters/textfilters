@@ -1,26 +1,10 @@
 import {
-  buildTokenPatternIndex,
-  buildLoosePatterns,
-  buildStrictPatterns,
-  type MatcherTerms,
-  type StrictPatternSet,
-} from "./matchers/build.js";
-import type { CompiledPattern } from "./matchers/compile.js";
-import {
-  buildLooseCandidateIndex,
   collectInputScanFacts,
   createInputScanFactCollector,
   loosePatternCandidates,
   type InputScanFacts,
-  type LooseCandidateIndex,
 } from "./matchers/loose-candidates.js";
 import {
-  createBuiltInProfanityRules,
-  type InternalProfanityRuleDefinition,
-} from "./matchers/internal-rules.js";
-import { normalizeTermList } from "./matchers/terms.js";
-import {
-  dictionaryRulesForMode,
   type ProfanityDictionaryCompileOptions,
   type ProfanityLanguageDictionary,
   type ProfanityNormalizationStrategy,
@@ -36,13 +20,6 @@ import {
 } from "./matches/ranges.js";
 import { normalizeTextInput } from "@textfilters/core";
 import {
-  normalizeForMatchSameLen,
-  normalizeForMatchSameLenWithoutHomoglyphs,
-  prepareForMatchSameLen,
-  prepareForMatchSameLenWithoutHomoglyphs,
-  type MatchInputPreparer,
-} from "./normalization/text.js";
-import {
   hasLooseCandidateRange,
   iterateLooseCandidateRanges,
 } from "./ranges/loose.js";
@@ -55,77 +32,42 @@ import {
   type ProfanityFilter,
   type ProfanityMatchOptions,
   type ProfanityMatchRange,
-  type ProfanityScanHints,
-  type ProfanitySeverity,
   type ProfanityTermList,
   type ReadonlyProfanityFilter,
 } from "./types.js";
 import {
-  compileLooseLiteralPatterns,
-  compileStrictLiteralPatterns,
-  compileStrictPhraseLiteralPatterns,
-  compileStrictSymbolLiteralPatterns,
-  normalizeLiteralTerm,
-  type LiteralTermDefinition,
-  type LiteralNormalizer,
-  strictSymbolLiteralLengths,
-} from "./matchers/literals.js";
+  appendRuntimeLiteralTerm,
+  compileDictionaryState,
+  createState,
+  createStateFromCompiledDictionary,
+  DEFAULT_NORMALIZATION_STRATEGY,
+  rebuildLoose,
+  rebuildStrict,
+  runtimeLiteralTerms,
+  snapshotFilterState,
+  type CompiledDictionaryState,
+  type FilterState,
+  type FilterStateSnapshot,
+} from "./filter-state.js";
+import {
+  createPreparedProfanityInput,
+  normalizedTextForPreparedProfanityInput,
+  type PreparedNormalizationView,
+  type PreparedProfanityInput,
+} from "./prepared-input.js";
+import { collectedRangeMatchesTaxonomy } from "./match-options.js";
 
-interface FilterState {
-  // Built-in rules and runtime literals are stored separately so appending a
-  // tenant literal never changes how the bundled regex-like corpus is compiled.
-  strictTerms: MatcherTerms;
-  looseTerms: MatcherTerms;
-  strictPatterns: StrictPatternSet;
-  loosePatterns: CompiledPattern[];
-  looseCandidateIndex: LooseCandidateIndex;
-  strictBasePatterns?: StrictPatternSet;
-  looseBasePatterns?: readonly CompiledPattern[];
-  normalization: ProfanityNormalizationStrategy;
-  normalizeForMatch: LiteralNormalizer;
-  prepareForMatch: MatchInputPreparer;
-}
-
-type FilterStateSnapshot = Pick<
-  FilterState,
-  | "strictPatterns"
-  | "loosePatterns"
-  | "looseCandidateIndex"
-  | "normalization"
-  | "normalizeForMatch"
-  | "prepareForMatch"
->;
+export {
+  createPreparedProfanityInput,
+  normalizedTextForPreparedProfanityInput,
+};
+export type { PreparedProfanityInput } from "./prepared-input.js";
 
 export interface CompiledProfanityDictionary {
   readonly language: string;
   readonly normalization: ProfanityNormalizationStrategy;
   readonly strictRuleCount: number;
   readonly looseRuleCount: number;
-}
-
-interface CompiledDictionaryState {
-  readonly strictTerms: MatcherTerms;
-  readonly looseTerms: MatcherTerms;
-  readonly strictPatterns: StrictPatternSet;
-  readonly loosePatterns: readonly CompiledPattern[];
-  readonly normalization: ProfanityNormalizationStrategy;
-  readonly normalizeForMatch: LiteralNormalizer;
-  readonly prepareForMatch: MatchInputPreparer;
-}
-
-interface PreparedNormalizationView {
-  readonly normalized: string;
-  readonly scanFacts: WeakMap<LooseCandidateIndex, InputScanFacts>;
-}
-
-export interface PreparedProfanityInput {
-  readonly text: string;
-  readonly codePoints?: readonly string[];
-  readonly hints?: ProfanityScanHints;
-  readonly normalizedViews: Map<
-    ProfanityNormalizationStrategy,
-    PreparedNormalizationView
-  >;
 }
 
 const compiledDictionaryStates = new WeakMap<
@@ -160,44 +102,6 @@ type CompiledProfanityDictionaryWithState = CompiledProfanityDictionary & {
 export const canStreamProfanityMatches = (
   filter: ReadonlyProfanityFilter,
 ): boolean => filterStates.has(filter) || profanityMatchStreamers.has(filter);
-
-export const createPreparedProfanityInput = (
-  text: string,
-  scanInput?: {
-    readonly codePoints?: readonly string[];
-    readonly hints?: ProfanityScanHints;
-  },
-): PreparedProfanityInput => {
-  const codePoints = scanInput?.codePoints;
-  // Preserve generic hints as optional evidence, but derive length facts from
-  // the actual invocation input before package-owned code can use them.
-  const hints =
-    scanInput?.hints === undefined
-      ? undefined
-      : {
-          ...scanInput.hints,
-          textLength: text.length,
-          ...(codePoints === undefined
-            ? {}
-            : { codePointLength: codePoints.length }),
-          isEmpty: text.length === 0,
-        };
-
-  return {
-    text,
-    ...(codePoints === undefined ? {} : { codePoints }),
-    ...(hints === undefined ? {} : { hints }),
-    normalizedViews: new Map(),
-  };
-};
-
-export const normalizedTextForPreparedProfanityInput = (
-  input: PreparedProfanityInput,
-  normalization: ProfanityNormalizationStrategy,
-  normalizeForMatch: LiteralNormalizer,
-): string =>
-  normalizedViewForPreparedInput(input, normalization, normalizeForMatch)
-    .normalized;
 
 export const registerProfanityMatchStreamer = (
   filter: ReadonlyProfanityFilter,
@@ -375,294 +279,6 @@ function rejectReadOnlyFilterMutation(): never {
   );
 }
 
-function createState(
-  strictTerms: ProfanityTermList,
-  looseTerms: ProfanityTermList,
-): FilterState {
-  const state: FilterState = {
-    strictTerms:
-      strictTerms === STRICT_BASE
-        ? builtInRuleTerms(strictTerms, "strict")
-        : runtimeLiteralTerms(strictTerms, normalizeForMatchSameLen),
-    looseTerms:
-      looseTerms === LOOSE_BASE
-        ? builtInRuleTerms(looseTerms, "loose")
-        : runtimeLiteralTerms(looseTerms, normalizeForMatchSameLen),
-    strictPatterns: {
-      token: [],
-      tokenIndex: buildTokenPatternIndex([]),
-      symbolToken: [],
-      symbolLengths: [],
-      phrase: [],
-    },
-    loosePatterns: [],
-    looseCandidateIndex: buildLooseCandidateIndex([]),
-    normalization: DEFAULT_NORMALIZATION_STRATEGY,
-    normalizeForMatch: normalizeForMatchSameLen,
-    prepareForMatch: prepareForMatchSameLen,
-  };
-
-  rebuildStrict(state);
-  rebuildLoose(state);
-
-  return state;
-}
-
-function compileDictionaryState(
-  dictionary: ProfanityLanguageDictionary,
-  normalization: ProfanityNormalizationStrategy,
-): CompiledDictionaryState {
-  const strictTerms = builtInRuleTerms(
-    dictionaryRulesForMode(dictionary, "strict"),
-    "strict",
-  );
-  const looseTerms = builtInRuleTerms(
-    dictionaryRulesForMode(dictionary, "loose"),
-    "loose",
-  );
-  const { normalizeForMatch, prepareForMatch } =
-    normalizersForStrategy(normalization);
-
-  return {
-    strictTerms,
-    looseTerms,
-    strictPatterns: buildStrictPatterns(strictTerms, normalizeForMatch),
-    loosePatterns: buildLoosePatterns(looseTerms, normalizeForMatch),
-    normalization,
-    normalizeForMatch,
-    prepareForMatch,
-  };
-}
-
-const DEFAULT_NORMALIZATION_STRATEGY: ProfanityNormalizationStrategy =
-  "cyrillic-homoglyphs";
-
-const normalizersForStrategy = (
-  strategy: ProfanityNormalizationStrategy,
-): {
-  readonly normalizeForMatch: LiteralNormalizer;
-  readonly prepareForMatch: MatchInputPreparer;
-} => {
-  switch (strategy) {
-    case "cyrillic-homoglyphs":
-      return {
-        normalizeForMatch: normalizeForMatchSameLen,
-        prepareForMatch: prepareForMatchSameLen,
-      };
-    case "latin-preserving":
-      return {
-        normalizeForMatch: normalizeForMatchSameLenWithoutHomoglyphs,
-        prepareForMatch: prepareForMatchSameLenWithoutHomoglyphs,
-      };
-    default:
-      throw new TypeError(`Unsupported profanity normalization: ${strategy}`);
-  }
-};
-
-function createStateFromCompiledDictionary(
-  state: CompiledDictionaryState,
-): FilterState {
-  return {
-    strictTerms: cloneMatcherTerms(state.strictTerms),
-    looseTerms: cloneMatcherTerms(state.looseTerms),
-    strictPatterns: cloneStrictPatternSet(state.strictPatterns),
-    loosePatterns: [...state.loosePatterns],
-    looseCandidateIndex: buildLooseCandidateIndex(state.loosePatterns),
-    strictBasePatterns: cloneStrictPatternSet(state.strictPatterns),
-    looseBasePatterns: [...state.loosePatterns],
-    normalization: state.normalization,
-    normalizeForMatch: state.normalizeForMatch,
-    prepareForMatch: state.prepareForMatch,
-  };
-}
-
-function cloneMatcherTerms(terms: MatcherTerms): MatcherTerms {
-  return {
-    internal: [...terms.internal],
-    literals: [...terms.literals],
-  };
-}
-
-function cloneStrictPatternSet(patterns: StrictPatternSet): StrictPatternSet {
-  const token = [...patterns.token];
-  return {
-    token,
-    tokenIndex: buildTokenPatternIndex(token),
-    symbolToken: [...patterns.symbolToken],
-    symbolLengths: [...patterns.symbolLengths],
-    phrase: [...patterns.phrase],
-  };
-}
-
-function rebuildStrict(state: FilterState): void {
-  state.strictPatterns =
-    state.strictBasePatterns === undefined ||
-    state.strictTerms.internal.length === 0
-      ? buildStrictPatterns(state.strictTerms, state.normalizeForMatch)
-      : appendStrictLiteralPatterns(
-          state.strictBasePatterns,
-          state.strictTerms.literals,
-          state.normalizeForMatch,
-        );
-}
-
-function rebuildLoose(state: FilterState): void {
-  state.loosePatterns =
-    state.looseBasePatterns === undefined ||
-    state.looseTerms.internal.length === 0
-      ? buildLoosePatterns(state.looseTerms, state.normalizeForMatch)
-      : [
-          ...state.looseBasePatterns,
-          ...compileLooseLiteralPatterns(
-            state.looseTerms.literals,
-            state.normalizeForMatch,
-          ),
-        ];
-  state.looseCandidateIndex = buildLooseCandidateIndex(state.loosePatterns);
-}
-
-function appendStrictLiteralPatterns(
-  basePatterns: StrictPatternSet,
-  literals: readonly LiteralTermDefinition[],
-  normalize: LiteralNormalizer,
-): StrictPatternSet {
-  const token = [
-    ...basePatterns.token,
-    ...compileStrictLiteralPatterns(literals, true, normalize),
-  ];
-
-  return {
-    token,
-    tokenIndex: buildTokenPatternIndex(token),
-    symbolToken: [
-      ...basePatterns.symbolToken,
-      ...compileStrictSymbolLiteralPatterns(literals, normalize),
-    ],
-    symbolLengths: [
-      ...basePatterns.symbolLengths,
-      ...strictSymbolLiteralLengths(literals, normalize),
-    ],
-    phrase: [
-      ...basePatterns.phrase,
-      ...compileStrictPhraseLiteralPatterns(literals, normalize),
-    ],
-  };
-}
-
-const builtInRuleTerms = (
-  terms: ProfanityTermList,
-  corpus: "strict" | "loose",
-): MatcherTerms => ({
-  internal: createBuiltInProfanityRules(builtInRuleDefinitions(terms), corpus),
-  literals: [],
-});
-
-const builtInRuleDefinitions = (
-  terms: ProfanityTermList,
-): InternalProfanityRuleDefinition[] =>
-  Array.isArray(terms)
-    ? terms.flatMap((term): InternalProfanityRuleDefinition[] =>
-        isRuleDefinition(term)
-          ? [normalizedRuleDefinition(term)]
-          : normalizeTermList([term]),
-      )
-    : [];
-
-const normalizedRuleDefinition = (
-  definition: Extract<InternalProfanityRuleDefinition, { source: string }>,
-): Extract<InternalProfanityRuleDefinition, { source: string }> => ({
-  ...definition,
-  source: definition.source.trim(),
-});
-
-const isRuleDefinition = (
-  term: unknown,
-): term is Extract<InternalProfanityRuleDefinition, { source: string }> =>
-  typeof term === "object" &&
-  term !== null &&
-  "source" in term &&
-  typeof term.source === "string" &&
-  term.source.trim().length > 0;
-
-const runtimeLiteralTerms = (
-  terms: ProfanityTermList,
-  normalize: LiteralNormalizer,
-): MatcherTerms => ({
-  internal: [],
-  literals: literalDefinitions(terms, normalize),
-});
-
-const appendRuntimeLiteralTerm = (
-  terms: MatcherTerms,
-  term: unknown,
-  normalize: LiteralNormalizer,
-): MatcherTerms => ({
-  // Keep the existing internal rules intact and append only to the literal side.
-  internal: terms.internal,
-  literals: appendLiteralTerm(terms.literals, term, normalize),
-});
-
-const literalDefinitions = (
-  terms: ProfanityTermList,
-  normalize: LiteralNormalizer,
-): LiteralTermDefinition[] => {
-  if (!Array.isArray(terms)) {
-    return [];
-  }
-
-  const seen = new Set<string>();
-  const definitions: LiteralTermDefinition[] = [];
-
-  for (const term of terms) {
-    const definition = literalDefinition(term);
-    if (definition === null) {
-      continue;
-    }
-
-    const key = normalizeLiteralTerm(definition.source, normalize);
-    if (seen.has(key)) {
-      continue;
-    }
-
-    seen.add(key);
-    definitions.push(definition);
-  }
-
-  return definitions;
-};
-
-const appendLiteralTerm = (
-  terms: readonly LiteralTermDefinition[],
-  term: unknown,
-  normalize: LiteralNormalizer,
-): LiteralTermDefinition[] => {
-  const definition = literalDefinition(term);
-  if (definition === null) {
-    return [...terms];
-  }
-
-  const key = normalizeLiteralTerm(definition.source, normalize);
-
-  return terms.some(
-    (term) => normalizeLiteralTerm(term.source, normalize) === key,
-  )
-    ? [...terms]
-    : [...terms, definition];
-};
-
-const literalDefinition = (term: unknown): LiteralTermDefinition | null => {
-  if (isRuleDefinition(term)) {
-    return {
-      source: term.source.trim(),
-      ...(term.category === undefined ? {} : { category: term.category }),
-      ...(term.severity === undefined ? {} : { severity: term.severity }),
-    };
-  }
-
-  const [source] = normalizeTermList([term]);
-  return source === undefined ? null : { source };
-};
-
 const hasProfanity = (
   state: FilterStateSnapshot,
   input: PreparedProfanityInput,
@@ -784,15 +400,6 @@ export const checkPreparedProfanity = (
   return found;
 };
 
-const snapshotFilterState = (state: FilterState): FilterStateSnapshot => ({
-  strictPatterns: state.strictPatterns,
-  loosePatterns: state.loosePatterns,
-  looseCandidateIndex: state.looseCandidateIndex,
-  normalization: state.normalization,
-  normalizeForMatch: state.normalizeForMatch,
-  prepareForMatch: state.prepareForMatch,
-});
-
 function* iterateProfanityMatches(
   state: FilterStateSnapshot,
   input: PreparedProfanityInput,
@@ -856,22 +463,6 @@ const prepareInput = (
   return { normalized, facts };
 };
 
-const normalizedViewForPreparedInput = (
-  input: PreparedProfanityInput,
-  normalization: ProfanityNormalizationStrategy,
-  normalizeForMatch: LiteralNormalizer,
-): PreparedNormalizationView => {
-  const existing = input.normalizedViews.get(normalization);
-  if (existing !== undefined) return existing;
-
-  const created: PreparedNormalizationView = {
-    normalized: normalizeForMatch(input.text),
-    scanFacts: new WeakMap(),
-  };
-  input.normalizedViews.set(normalization, created);
-  return created;
-};
-
 const scanFactsForPreparedInput = (
   state: FilterStateSnapshot,
   input: PreparedProfanityInput,
@@ -889,59 +480,6 @@ const scanFactsForPreparedInput = (
   view.scanFacts.set(state.looseCandidateIndex, created);
   return created;
 };
-
-const hasTaxonomyFilters = (options: ProfanityMatchOptions): boolean =>
-  options.categories !== undefined ||
-  options.severities !== undefined ||
-  options.minSeverity !== undefined;
-
-const collectedRangeMatchesTaxonomy = (
-  options: ProfanityMatchOptions | undefined,
-): ((range: Pick<ProfanityMatchRange, "category" | "severity">) => boolean) => {
-  if (options === undefined || !hasTaxonomyFilters(options)) {
-    return () => true;
-  }
-
-  const categories =
-    options.categories === undefined ? undefined : new Set(options.categories);
-  const severities =
-    options.severities === undefined ? undefined : new Set(options.severities);
-  const minSeverity = options.minSeverity;
-
-  return (range) =>
-    rangeMatchesTaxonomy(range, categories, severities, minSeverity);
-};
-
-const rangeMatchesTaxonomy = (
-  match: Pick<ProfanityMatchRange, "category" | "severity">,
-  categories:
-    | ReadonlySet<NonNullable<ProfanityMatchRange["category"]>>
-    | undefined,
-  severities:
-    | ReadonlySet<NonNullable<ProfanityMatchRange["severity"]>>
-    | undefined,
-  minSeverity: ProfanitySeverity | undefined,
-): boolean =>
-  (categories === undefined ||
-    (match.category !== undefined && categories.has(match.category))) &&
-  (severities === undefined ||
-    (match.severity !== undefined && severities.has(match.severity))) &&
-  (minSeverity === undefined ||
-    (match.severity !== undefined &&
-      isAtLeastSeverity(match.severity, minSeverity)));
-
-const PROFANITY_SEVERITY_RANK: Record<ProfanitySeverity, number> = {
-  soft: 0,
-  low: 1,
-  medium: 2,
-  high: 3,
-};
-
-const isAtLeastSeverity = (
-  severity: ProfanitySeverity,
-  minSeverity: ProfanitySeverity,
-): boolean =>
-  PROFANITY_SEVERITY_RANK[severity] >= PROFANITY_SEVERITY_RANK[minSeverity];
 
 export const profanityFilter = createProfanityFilter;
 export const filter: ReadonlyProfanityFilter = createReadOnlyFilter(
