@@ -76,12 +76,7 @@ function publish(workspaces) {
     console.log(`Publishing ${workspace.name} from ${workspace.path}.`);
     const result = spawnSync(
       "npm",
-      [
-        "publish",
-        "--workspace",
-        workspace.name,
-        `--registry=${REGISTRY}`,
-      ],
+      ["publish", "--workspace", workspace.name, `--registry=${REGISTRY}`],
       { stdio: "inherit" },
     );
 
@@ -94,14 +89,10 @@ function publish(workspaces) {
   }
 }
 
-const args = new Set(process.argv.slice(2));
-
-if (args.has("--self-test")) {
+if (process.argv.includes("--self-test")) {
   runSelfTest();
 } else {
-  const selected = selectReleasedWorkspaces(
-    process.env.RELEASED_PATHS ?? "[]",
-  );
+  const selected = selectReleasedWorkspaces(process.env.RELEASED_PATHS ?? "[]");
 
   if (selected.length === 0) {
     throw new Error("No released package paths were provided.");
@@ -112,8 +103,5 @@ if (args.has("--self-test")) {
       .map((workspace) => workspace.path)
       .join(", ")}`,
   );
-
-  if (!args.has("--validate-only")) {
-    publish(selected);
-  }
+  publish(selected);
 }

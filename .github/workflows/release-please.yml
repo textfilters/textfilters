@@ -51,11 +51,6 @@ jobs:
       - name: Check all workspaces
         run: npm run check
 
-      - name: Validate released package paths
-        env:
-          RELEASED_PATHS: ${{ needs.release-please.outputs.paths_released }}
-        run: node scripts/publish-released-workspaces.mjs --validate-only
-
       - name: Publish released packages
         env:
           NODE_AUTH_TOKEN: ${{ github.token }}
