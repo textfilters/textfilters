@@ -1,30 +1,10 @@
 {
+  "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "target": "ES2024",
-    "lib": [
-      "ES2024"
-    ],
-    "module": "ESNext",
-    "moduleResolution": "Bundler",
-    "strict": true,
-    "declaration": true,
-    "declarationMap": true,
-    "sourceMap": true,
     "resolveJsonModule": true,
-    "types": [
-      "node"
-    ],
+    "types": ["node"],
     "rootDir": "./src",
-    "outDir": "./dist",
-    "skipLibCheck": true
+    "outDir": "./dist"
   },
-  "include": [
-    "src/**/*.ts",
-    "src/**/*.json"
-  ],
-  "exclude": [
-    "src/**/*.spec.ts",
-    "dist",
-    "node_modules"
-  ]
+  "include": ["src/**/*.ts", "src/**/*.json"]
 }

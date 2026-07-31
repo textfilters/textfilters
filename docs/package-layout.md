@@ -90,6 +90,17 @@ Every publishable workspace keeps:
 
 The root `package.json` is private and is never published.
 
+## Workspace Tooling
+
+The root owns shared development dependencies and TypeScript defaults.
+Workspace manifests contain only runtime dependencies and package-specific
+scripts, while each workspace `tsconfig.json` extends `tsconfig.base.json`.
+
+Root package commands run workspaces sequentially in the declared order through
+`scripts/run-workspace-script.mjs`. Keeping `core` first ensures dependent
+workspace tests resolve a freshly built local package without repeating the
+workspace list in every script.
+
 ## Alignment Rules
 
 - Prefer additive public exports.

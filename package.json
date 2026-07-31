@@ -15,18 +15,21 @@
   ],
   "scripts": {
     "benchmark": "node scripts/benchmark.mjs",
-    "build": "npm run build --workspace @textfilters/core && npm run build --workspace @textfilters/url && npm run build --workspace @textfilters/email && npm run build --workspace @textfilters/phone && npm run build --workspace @textfilters/profanity && npm run build --workspace @textfilters/spam",
+    "build": "node scripts/run-workspace-script.mjs build",
     "check": "npm run check:metadata && npm run check:release-paths && npm run check:workspaces",
     "check:metadata": "node scripts/check-monorepo-metadata.mjs",
     "check:release-paths": "node scripts/publish-released-workspaces.mjs --self-test",
-    "check:workspaces": "npm run check --workspace @textfilters/core && npm run check --workspace @textfilters/url && npm run check --workspace @textfilters/email && npm run check --workspace @textfilters/phone && npm run check --workspace @textfilters/profanity && npm run check --workspace @textfilters/spam",
-    "lint": "npm run lint --workspace @textfilters/core && npm run lint --workspace @textfilters/url && npm run lint --workspace @textfilters/email && npm run lint --workspace @textfilters/phone && npm run lint --workspace @textfilters/profanity && npm run lint --workspace @textfilters/spam",
-    "pack:dry-run": "npm run pack:dry-run --workspace @textfilters/core && npm run pack:dry-run --workspace @textfilters/url && npm run pack:dry-run --workspace @textfilters/email && npm run pack:dry-run --workspace @textfilters/phone && npm run pack:dry-run --workspace @textfilters/profanity && npm run pack:dry-run --workspace @textfilters/spam",
-    "smoke:dist": "npm run smoke:dist --workspace @textfilters/core && npm run smoke:dist --workspace @textfilters/url && npm run smoke:dist --workspace @textfilters/email && npm run smoke:dist --workspace @textfilters/phone && npm run smoke:dist --workspace @textfilters/profanity && npm run smoke:dist --workspace @textfilters/spam",
-    "test": "npm run test --workspace @textfilters/core && npm run test --workspace @textfilters/url && npm run test --workspace @textfilters/email && npm run test --workspace @textfilters/phone && npm run test --workspace @textfilters/profanity && npm run test --workspace @textfilters/spam"
+    "check:workspaces": "node scripts/run-workspace-script.mjs check",
+    "lint": "node scripts/run-workspace-script.mjs lint",
+    "pack:dry-run": "node scripts/run-workspace-script.mjs pack:dry-run",
+    "smoke:dist": "node scripts/run-workspace-script.mjs smoke:dist",
+    "test": "node scripts/run-workspace-script.mjs test"
   },
-  "overrides": {
-    "prettier": "3.8.3"
+  "devDependencies": {
+    "@types/node": "25.9.5",
+    "prettier": "3.8.3",
+    "typescript": "6.0.3",
+    "vitest": "4.1.10"
   },
   "engines": {
     "node": ">=24"
