@@ -32,7 +32,7 @@ import {
   separatorHas,
 } from "./false-positives.js";
 import { COMBINING_MARK_RE, type TextMeta, WHITESPACE_RE } from "./meta.js";
-import { isValidPhoneGroups } from "./phone-groups.js";
+import { isValidPhoneGroups, MAX_PHONE_DIGITS } from "./phone-groups.js";
 import { type CodePointRange } from "./ranges.js";
 
 interface PhoneCandidate {
@@ -43,6 +43,9 @@ interface PhoneCandidate {
 interface RejectedPhoneRun {
   readonly rejectedUntil: number;
 }
+
+const hasNonZeroDigit = (groups: readonly string[]): boolean =>
+  groups.some((group) => /[1-9]/u.test(group));
 
 const parsePhoneCandidate = (
   meta: TextMeta,
@@ -187,9 +190,15 @@ const parsePhoneCandidate = (
   if (lastDigitPos < 0) return null;
 
   const end = lastDigitPos + 1;
+  const hasOpeningParenthesis = parenthesisPositions.some(
+    (parenPos) => meta.raw[parenPos] === "(",
+  );
   let candidateEnd = end;
   while (candidateEnd < pos) {
-    if (meta.zeroWidth[candidateEnd] || meta.raw[candidateEnd] === ")") {
+    if (
+      meta.zeroWidth[candidateEnd] ||
+      (hasOpeningParenthesis && meta.raw[candidateEnd] === ")")
+    ) {
       candidateEnd++;
       continue;
     }
@@ -201,7 +210,7 @@ const parsePhoneCandidate = (
       ) {
         next++;
       }
-      if (next < pos && meta.raw[next] === ")") {
+      if (hasOpeningParenthesis && next < pos && meta.raw[next] === ")") {
         candidateEnd++;
         continue;
       }
@@ -363,7 +372,143 @@ const parsePhoneCandidate = (
     }
     return { rejectedUntil: candidateEnd };
   }
+
+  const hasStructuredPrefixBeforeZeroRun = (
+    zeroStart: number,
+    zeroEnd: number,
+  ): boolean => {
+    if (zeroStart === 0) return true;
+
+    const zeroStartPos = groupStarts[zeroStart];
+    if (zeroStartPos === undefined) return false;
+    const prefixGroups = groups.slice(0, zeroStart);
+    const prefixSeparators = groupSeparators.slice(
+      0,
+      Math.max(zeroStart - 1, 0),
+    );
+    if (
+      getStructuredFalsePositive(prefixGroups, prefixSeparators, { hasPlus }) ||
+      getStructuredPrefixEnd(
+        prefixGroups,
+        prefixSeparators,
+        groupEnds.slice(0, zeroStart),
+      ) !== null
+    ) {
+      return true;
+    }
+
+    const groupsThroughZeroRun = groups.slice(0, zeroEnd);
+    const separatorsThroughZeroRun = groupSeparators.slice(
+      0,
+      Math.max(zeroEnd - 1, 0),
+    );
+    const startsThroughZeroRun = groupStarts.slice(0, zeroEnd);
+    return [
+      getLeadingDecimalPhoneSuffixStart(
+        groupsThroughZeroRun,
+        separatorsThroughZeroRun,
+        startsThroughZeroRun,
+      ),
+      getLeadingFormattedAmountPhoneSuffixStart(
+        groupsThroughZeroRun,
+        separatorsThroughZeroRun,
+        startsThroughZeroRun,
+      ),
+      getLeadingVersionPhoneSuffixStart(
+        groupsThroughZeroRun,
+        separatorsThroughZeroRun,
+        startsThroughZeroRun,
+      ),
+    ].some((structuredSuffixStart) => structuredSuffixStart === zeroStartPos);
+  };
+
+  const getZeroCandidateStart = (zeroStart: number): number => {
+    if (zeroStart === 0) return candidateStart;
+    const groupStart = groupStarts[zeroStart];
+    if (groupStart === undefined) return candidateStart;
+
+    const minimumStart = groupEnds[zeroStart - 1] ?? groupStart;
+    let zeroCandidateStart = groupStart;
+    let cursor = groupStart - 1;
+    while (cursor >= minimumStart) {
+      while (
+        cursor >= minimumStart &&
+        (meta.zeroWidth[cursor] || WHITESPACE_RE.test(meta.raw[cursor]))
+      ) {
+        cursor--;
+      }
+      if (cursor < minimumStart || meta.raw[cursor] !== "(") break;
+      zeroCandidateStart = cursor;
+      cursor--;
+    }
+    return zeroCandidateStart;
+  };
+
+  const getZeroCandidateEnd = (zeroEnd: number): number | null => {
+    const groupEnd = groupEnds[zeroEnd - 1];
+    if (groupEnd === undefined) return null;
+
+    const maximumEnd = groupStarts[zeroEnd] ?? candidateEnd;
+    let zeroCandidateEnd = groupEnd;
+    let cursor = groupEnd;
+    while (cursor < maximumEnd) {
+      while (
+        cursor < maximumEnd &&
+        (meta.zeroWidth[cursor] || WHITESPACE_RE.test(meta.raw[cursor]))
+      ) {
+        cursor++;
+      }
+      if (cursor >= maximumEnd || meta.raw[cursor] !== ")") break;
+      zeroCandidateEnd = cursor + 1;
+      cursor++;
+    }
+    return zeroCandidateEnd;
+  };
+
+  // Structured-prefix recovery is intentionally bounded to the same six-group
+  // window used above; this keeps adversarial grouped zero runs linear.
+  for (let zeroStart = 0; zeroStart < Math.min(groups.length, 7); zeroStart++) {
+    if (hasNonZeroDigit(groups.slice(zeroStart, zeroStart + 1))) continue;
+
+    let zeroDigitCount = 0;
+    for (let zeroEnd = zeroStart + 1; zeroEnd <= groups.length; zeroEnd++) {
+      zeroDigitCount += groups[zeroEnd - 1]?.length ?? 0;
+      if (zeroDigitCount > MAX_PHONE_DIGITS) break;
+      const zeroGroups = groups.slice(zeroStart, zeroEnd);
+      if (hasNonZeroDigit(zeroGroups)) break;
+      if (!hasStructuredPrefixBeforeZeroRun(zeroStart, zeroEnd)) continue;
+
+      const zeroCandidateStart = getZeroCandidateStart(zeroStart);
+      const zeroCandidateEnd = getZeroCandidateEnd(zeroEnd);
+      if (zeroCandidateEnd === null) continue;
+      const zeroHasParentheses =
+        meta.raw[zeroCandidateStart] === "(" &&
+        parenthesisPositions.some(
+          (parenPos) =>
+            parenPos > zeroCandidateStart &&
+            parenPos < zeroCandidateEnd &&
+            meta.raw[parenPos] === ")",
+        );
+      const hasZeroBoundary =
+        hasLeftBoundary(meta, zeroCandidateStart) &&
+        (hasRightBoundary(meta, zeroCandidateEnd) ||
+          hasInlineExtensionMarker(meta, zeroCandidateEnd));
+      if (
+        hasZeroBoundary &&
+        isValidPhoneGroups(zeroGroups, {
+          hasPlus: zeroStart === 0 && hasPlus,
+          hasParentheses: zeroHasParentheses,
+        })
+      ) {
+        // Skip only the independent zero placeholder. The normal scanner pass
+        // owns wrappers, extensions, later phones, and trailing numeric data.
+        return { rejectedUntil: zeroCandidateEnd };
+      }
+    }
+  }
+
   if (
+    hasNonZeroDigit(groups) &&
     isValidPhoneGroups(groups, {
       hasPlus,
       hasParentheses,
@@ -379,7 +524,11 @@ const parsePhoneCandidate = (
     return { start: candidateStart, end: candidateEnd };
   }
 
+  let prefixHasNonZero = false;
   for (let prefixLength = 1; prefixLength < groups.length; prefixLength++) {
+    prefixHasNonZero ||= hasNonZeroDigit([groups[prefixLength - 1] ?? ""]);
+    if (!prefixHasNonZero) continue;
+
     const prefixGroups = groups.slice(0, prefixLength);
     const prefixEnd = groupEnds[prefixLength - 1];
     const prefixHasParentheses = hasPhoneParenthesesBefore(prefixEnd);

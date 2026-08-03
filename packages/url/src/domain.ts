@@ -28,7 +28,13 @@ const measureAlphaNumRun = (meta: TextMeta, start: number): number => {
   return runLen;
 };
 
-export const parseLabel = (meta: TextMeta, start: number): Label | null => {
+export const parseLabel = (
+  meta: TextMeta,
+  start: number,
+  {
+    joinSingleCharacterWhitespaceRuns = true,
+  }: { readonly joinSingleCharacterWhitespaceRuns?: boolean } = {},
+): Label | null => {
   let pos = start;
   while (pos < meta.codePoints.length && meta.labelJoinSeparator[pos]) pos++;
   let first = -1;
@@ -58,16 +64,21 @@ export const parseLabel = (meta: TextMeta, start: number): Label | null => {
       let gapHasWhitespace = false;
       let gapHasZeroWidth = false;
       let gapHasNonZeroWidthSymbol = false;
+      let visibleGapRaw = "";
       while (pos < meta.codePoints.length && meta.labelJoinSeparator[pos]) {
         gapHasWhitespace ||= meta.whitespace[pos];
         gapHasZeroWidth ||= meta.zeroWidth[pos];
         gapHasNonZeroWidthSymbol ||=
           !meta.zeroWidth[pos] && !meta.whitespace[pos];
+        if (!meta.zeroWidth[pos] && !meta.whitespace[pos]) {
+          visibleGapRaw += meta.raw[pos];
+        }
         pos++;
       }
       const gapRaw = meta.raw.slice(gapStart, pos).join("");
-      if (!gapHasWhitespace && /^-+$/u.test(gapRaw)) {
-        appendLabelText({ raw: gapRaw, skeleton: gapRaw });
+      const hasOnlyHostnameJoinSymbols = /^[-_]+$/u.test(visibleGapRaw);
+      if (!gapHasWhitespace && /^-+$/u.test(visibleGapRaw)) {
+        appendLabelText({ raw: visibleGapRaw, skeleton: visibleGapRaw });
         if (raw.length > 63) return null;
       }
       // Join only very short whitespace-split pieces. Longer visible runs are
@@ -78,7 +89,7 @@ export const parseLabel = (meta: TextMeta, start: number): Label | null => {
         meta.alphaNum[pos]
       ) {
         const runLen = measureAlphaNumRun(meta, pos);
-        if (runLen > 1) {
+        if (!joinSingleCharacterWhitespaceRuns || runLen > 1) {
           pos = gapStart;
           break;
         }
@@ -95,6 +106,7 @@ export const parseLabel = (meta: TextMeta, start: number): Label | null => {
       if (
         gapHasZeroWidth &&
         gapHasNonZeroWidthSymbol &&
+        !hasOnlyHostnameJoinSymbols &&
         pos < meta.codePoints.length &&
         meta.alphaNum[pos]
       ) {
@@ -180,20 +192,68 @@ const trimTldTrailingProse = (
   return null;
 };
 
+const hasWhitespaceInLabelSeparatorRun = (
+  meta: TextMeta,
+  start: number,
+): boolean => {
+  let cursor = start;
+  while (cursor < meta.codePoints.length && meta.labelJoinSeparator[cursor]) {
+    if (meta.whitespace[cursor]) return true;
+    cursor++;
+  }
+  return false;
+};
+
 export const parseDomain = (
   meta: TextMeta,
   start: number,
   tldSet: ReadonlySet<string>,
   tldSkeletonSet: ReadonlySet<string>,
-  { allowUnknownTld = false }: { readonly allowUnknownTld?: boolean } = {},
+  {
+    allowUnknownTld = false,
+    joinSingleCharacterWhitespaceRuns = true,
+    splitAdjacentDomains = true,
+  }: {
+    readonly allowUnknownTld?: boolean;
+    readonly joinSingleCharacterWhitespaceRuns?: boolean;
+    readonly splitAdjacentDomains?: boolean;
+  } = {},
 ): DomainMatch | null => {
-  const first = parseLabel(meta, start);
+  const first = parseLabel(meta, start, {
+    joinSingleCharacterWhitespaceRuns,
+  });
   if (!first) return null;
 
   const labels: Label[] = [first];
   let pos = first.pos;
 
   while (true) {
+    const currentLabel = labels[labels.length - 1];
+    if (splitAdjacentDomains && labels.length >= 2 && currentLabel) {
+      const trimmedTld = trimTldTrailingProse(
+        meta,
+        currentLabel,
+        tldSet,
+        tldSkeletonSet,
+      );
+      if (
+        trimmedTld &&
+        hasWhitespaceInLabelSeparatorRun(meta, trimmedTld.pos) &&
+        parseDomain(meta, trimmedTld.pos, tldSet, tldSkeletonSet, {
+          joinSingleCharacterWhitespaceRuns: false,
+          splitAdjacentDomains: false,
+        })
+      ) {
+        // A one-character first label can otherwise be joined through
+        // whitespace to the previous TLD (`one.com x.org`). Split only across
+        // a real whitespace boundary when the remainder is independently
+        // recognizable as a complete domain.
+        labels[labels.length - 1] = trimmedTld;
+        pos = trimmedTld.pos;
+        break;
+      }
+    }
+
     const dot = parseDot(meta, pos);
     if (!dot) break;
     const currentTld = labels[labels.length - 1];
@@ -214,7 +274,9 @@ export const parseDomain = (
       // third label that should make the whole candidate fail.
       break;
     }
-    const next = parseLabel(meta, dot.pos);
+    const next = parseLabel(meta, dot.pos, {
+      joinSingleCharacterWhitespaceRuns,
+    });
     if (!next) break;
     labels.push(next);
     const domainTextLength =

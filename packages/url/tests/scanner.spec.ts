@@ -141,6 +141,354 @@ describe("URL scanner", () => {
     ]);
   });
 
+  it("keeps sentence prose outside independent domain ranges", () => {
+    const text = "природе. shutterstock.com ru.freepik.com symbl.cc";
+    const domains = ["shutterstock.com", "ru.freepik.com", "symbl.cc"];
+    const expected = domains.map((domain) => {
+      const start = Array.from(text.slice(0, text.indexOf(domain))).length;
+      return [start, start + Array.from(domain).length] as const;
+    });
+    const seen: Array<readonly [number, number]> = [];
+    const censored = createUrlFilter().censor(text);
+
+    expect(scanUrlRanges(text)).toEqual(expected);
+    expect(
+      scanUrlRangeMatches({ text, codePoints: Array.from(text) }, (match) => {
+        seen.push(match.range);
+      }),
+    ).toBe(true);
+    expect(seen).toEqual(expected);
+    expect(censored).toBe(
+      `природе. ${domains.map((domain) => mask(domain)).join(" ")}`,
+    );
+    expect(censored.length).toBe(text.length);
+  });
+
+  it("prefers the last sentence boundary before a bare domain", () => {
+    const text = "Hello. There. example.com";
+    const domain = "example.com";
+    const start = Array.from(text.slice(0, text.indexOf(domain))).length;
+
+    expect(scanUrlRanges(text)).toEqual([
+      [start, start + Array.from(domain).length],
+    ]);
+    expect(createUrlFilter().censor(text)).toBe(
+      `Hello. There. ${mask(domain)}`,
+    );
+  });
+
+  it("checks allowlists against the selected sentence suffix", () => {
+    const text = "foo.bar. evil.com";
+    const suffix = "evil.com";
+    const suffixStart = Array.from(text.slice(0, text.indexOf(suffix))).length;
+    const input = { text, codePoints: Array.from(text) };
+    const cases = [
+      {
+        allowedDomains: [] as string[],
+        ranges: [[suffixStart, Array.from(text).length]],
+        censored: `foo.bar. ${mask(suffix)}`,
+      },
+      {
+        allowedDomains: ["foo.bar.evil.com"],
+        ranges: [[suffixStart, Array.from(text).length]],
+        censored: `foo.bar. ${mask(suffix)}`,
+      },
+      {
+        allowedDomains: [suffix],
+        ranges: [[0, Array.from(text).length]],
+        censored: mask(text),
+      },
+      {
+        allowedDomains: ["foo.bar.evil.com", suffix],
+        ranges: [] as Array<readonly [number, number]>,
+        censored: text,
+      },
+    ] as const;
+
+    for (const { allowedDomains, ranges, censored } of cases) {
+      const scanner = createUrlScanner({ allowedDomains });
+      const seen: Array<readonly [number, number]> = [];
+
+      expect(scanner.scan(input)).toEqual({ ranges });
+      expect(scanner.check(input)).toBe(ranges.length > 0);
+      expect(
+        scanner.scan(input, (match) => {
+          seen.push(match.range);
+          return false;
+        }),
+      ).toBe(ranges.length === 0);
+      expect(seen).toEqual(ranges.slice(0, 1));
+      expect(createUrlFilter({ allowedDomains }).censor(text)).toBe(censored);
+    }
+
+    for (const sentenceText of ["foo.bar﹒ evil.com", "foo.bar.” evil.com"]) {
+      const sentenceSuffixStart = Array.from(
+        sentenceText.slice(0, sentenceText.indexOf(suffix)),
+      ).length;
+      const scanner = createUrlScanner({
+        allowedDomains: ["foo.bar.evil.com"],
+      });
+
+      expect(
+        scanner.scan({
+          text: sentenceText,
+          codePoints: Array.from(sentenceText),
+        }),
+      ).toEqual({
+        ranges: [[sentenceSuffixStart, Array.from(sentenceText).length]],
+      });
+      expect(
+        createUrlFilter({ allowedDomains: ["foo.bar.evil.com"] }).censor(
+          sentenceText,
+        ),
+      ).toBe(
+        sentenceText.slice(0, sentenceText.indexOf(suffix)) + mask(suffix),
+      );
+    }
+
+    const spacedSubdomain = "foo. bar.evil.com";
+    expect(
+      createUrlScanner({ allowedDomains: ["foo.bar.evil.com"] }).scan({
+        text: spacedSubdomain,
+        codePoints: Array.from(spacedSubdomain),
+      }),
+    ).toEqual({ ranges: [] });
+    expect(
+      createUrlFilter({ allowedDomains: ["foo.bar.evil.com"] }).censor(
+        spacedSubdomain,
+      ),
+    ).toBe(spacedSubdomain);
+    expect(
+      createUrlFilter({ allowedDomains: ["bar.evil.com"] }).censor(
+        spacedSubdomain,
+      ),
+    ).toBe(mask(spacedSubdomain));
+  });
+
+  it("recognizes normalized full stops as sentence boundaries", () => {
+    for (const fullStop of [
+      ".",
+      "。",
+      "｡",
+      "．",
+      "﹒",
+      "․",
+      "‥",
+      "…",
+      "︙",
+      "︰",
+    ]) {
+      const domain = "example.com";
+      const text = `Hello${fullStop} ${domain}`;
+      const start = Array.from(text.slice(0, text.indexOf(domain))).length;
+
+      expect(scanUrlRanges(text)).toEqual([
+        [start, start + Array.from(domain).length],
+      ]);
+      expect(createUrlFilter().censor(text)).toBe(
+        `Hello${fullStop} ${mask(domain)}`,
+      );
+    }
+  });
+
+  it("keeps sentence closers outside following bare domains", () => {
+    for (const closer of ['"', "'", "”", "’", "»", ")", "]", "}", "」", "』"]) {
+      const domain = "example.com";
+      const prefix = `Hello.${closer} `;
+      const text = prefix + domain;
+
+      expect(scanUrlRanges(text)).toEqual([
+        [Array.from(prefix).length, Array.from(text).length],
+      ]);
+      expect(createUrlFilter().censor(text)).toBe(prefix + mask(domain));
+    }
+  });
+
+  it("keeps obfuscated non-sentence dots inside domain ranges", () => {
+    for (const dot of ["·", "•", "⋅", "・"]) {
+      const text = `evil${dot} sub.example.com`;
+
+      expect(scanUrlRanges(text)).toEqual([[0, Array.from(text).length]]);
+      expect(createUrlFilter().censor(text)).toBe(mask(text));
+    }
+  });
+
+  it("keeps adjacent URL ranges and allowlists independent", () => {
+    const bare = "one.com two.com";
+    const explicit = "https://one.com two.com";
+    const shortBare = "one.com x.org";
+    const shortExplicit = "https://one.com a.net";
+
+    expect(scanUrlRanges(bare)).toEqual([
+      [0, 7],
+      [8, 15],
+    ]);
+    expect(scanUrlRanges(explicit)).toEqual([
+      [0, 15],
+      [16, 23],
+    ]);
+    expect(scanUrlRanges(shortBare)).toEqual([
+      [0, 7],
+      [8, 13],
+    ]);
+    expect(scanUrlRanges(shortExplicit)).toEqual([
+      [0, 15],
+      [16, 21],
+    ]);
+    expect(createUrlFilter({ allowedDomains: ["one.com"] }).censor(bare)).toBe(
+      `one.com ${mask("two.com")}`,
+    );
+    expect(createUrlFilter({ allowedDomains: ["two.com"] }).censor(bare)).toBe(
+      `${mask("one.com")} two.com`,
+    );
+    expect(
+      createUrlFilter({ allowedDomains: ["one.com"] }).censor(explicit),
+    ).toBe(`https://one.com ${mask("two.com")}`);
+    expect(
+      createUrlFilter({ allowedDomains: ["two.com"] }).censor(explicit),
+    ).toBe(`${mask("https://one.com")} two.com`);
+    expect(
+      createUrlFilter({ allowedDomains: ["one.com"] }).censor(shortBare),
+    ).toBe(`one.com ${mask("x.org")}`);
+    expect(
+      createUrlFilter({ allowedDomains: ["x.org"] }).censor(shortBare),
+    ).toBe(`${mask("one.com")} x.org`);
+    expect(
+      createUrlFilter({ allowedDomains: ["one.com"] }).censor(shortExplicit),
+    ).toBe(`https://one.com ${mask("a.net")}`);
+    expect(
+      createUrlFilter({ allowedDomains: ["a.net"] }).censor(shortExplicit),
+    ).toBe(`${mask("https://one.com")} a.net`);
+
+    const splitLabel = "one.com exa mple.com";
+    expect(scanUrlRanges(splitLabel)).toEqual([
+      [0, 7],
+      [8, 20],
+    ]);
+    expect(
+      createUrlFilter({ allowedDomains: ["example.com"] }).censor(splitLabel),
+    ).toBe(`${mask("one.com")} exa mple.com`);
+    expect(scanUrlRanges("go example.co m now")).toEqual([[3, 15]]);
+  });
+
+  it("does not split adjacent domains across non-whitespace separators", () => {
+    const filter = createUrlFilter({
+      allowedDomains: ["evil.com", "x.org", "s.org"],
+    });
+    for (const text of [
+      "evil.com-x.org",
+      "evil.com-x.org/path",
+      "evil.com\u200bx.org",
+      "evil.com\u200b-x.org",
+      "evil.com-\u200bx.org",
+      "evil.com\u200b_x.org",
+      "evil.com's.org",
+    ]) {
+      const input = { text, codePoints: Array.from(text) };
+
+      expect(scanUrlRanges(text)).toEqual([[0, Array.from(text).length]]);
+      expect(createUrlScanner().check(input)).toBe(true);
+      expect(filter.censor(text)).toBe(mask(text));
+    }
+
+    for (const text of [
+      "evil.com-x.org",
+      "evil.com-x.org/path",
+      "evil.com\u200bx.org",
+      "evil.com\u200b-x.org",
+      "evil.com-\u200bx.org",
+    ]) {
+      const explicit = `https://${text}`;
+
+      expect(scanUrlRanges(explicit)).toEqual([
+        [0, Array.from(explicit).length],
+      ]);
+      expect(filter.censor(explicit)).toBe(mask(explicit));
+    }
+
+    const spaced = "evil.com\u200b x.org";
+    expect(filter.censor(spaced)).toBe(spaced);
+    expect(
+      createUrlFilter({ allowedDomains: ["evil.com-x.org"] }).censor(
+        "evil.com-x.org/path",
+      ),
+    ).toBe("evil.com-x.org/path");
+    expect(
+      createUrlFilter({ allowedDomains: ["evil.com-x.org"] }).censor(
+        "evil.com\u200b-x.org",
+      ),
+    ).toBe("evil.com\u200b-x.org");
+    expect(createUrlFilter().censor("evil.com\u200b,next")).toBe(
+      `${mask("evil.com")}\u200b,next`,
+    );
+  });
+
+  it("fails closed for allowlisted domains glued without whitespace", () => {
+    const scanner = createUrlScanner({
+      allowedDomains: ["evil.com", "x.org"],
+    });
+    const filter = createUrlFilter({
+      allowedDomains: ["evil.com", "x.org"],
+    });
+
+    for (const separator of [
+      "'",
+      '"',
+      ")",
+      "]",
+      "}",
+      ",",
+      ";",
+      "(",
+      "[",
+      "\u200b,",
+    ]) {
+      const text = `https://evil.com${separator}x.org`;
+      const input = { text, codePoints: Array.from(text) };
+      const expectedRange = [0, Array.from(text).length] as const;
+
+      expect(scanner.scan(input)).toEqual({ ranges: [expectedRange] });
+      expect(scanner.check(input)).toBe(true);
+      expect(filter.censor(text)).toBe(mask(text));
+    }
+
+    expect(filter.censor("https://evil.com x.org")).toBe(
+      "https://evil.com x.org",
+    );
+
+    const glued = "https://evil.com,x.org";
+    const suffixStart = Array.from("https://evil.com,").length;
+    const firstOnly = createUrlScanner({ allowedDomains: ["evil.com"] });
+    expect(
+      firstOnly.scan({ text: glued, codePoints: Array.from(glued) }),
+    ).toEqual({ ranges: [[suffixStart, Array.from(glued).length]] });
+    expect(
+      createUrlFilter({ allowedDomains: ["evil.com"] }).censor(glued),
+    ).toBe(`https://evil.com,${mask("x.org")}`);
+    expect(createUrlFilter({ allowedDomains: ["x.org"] }).censor(glued)).toBe(
+      `${mask("https://evil.com")},x.org`,
+    );
+  });
+
+  it("keeps long one-letter domain chains independent", () => {
+    const domains = Array.from(
+      { length: 100 },
+      (_, index) => `${String.fromCharCode(97 + (index % 26))}.com`,
+    );
+    const text = domains.join(" ");
+    let cursor = 0;
+    const expected = domains.map((domain) => {
+      const range = [cursor, cursor + domain.length] as const;
+      cursor += domain.length + 1;
+      return range;
+    });
+
+    expect(scanUrlRanges(text)).toEqual(expected);
+    expect(createUrlFilter().censor(text)).toBe(
+      domains.map((domain) => mask(domain)).join(" "),
+    );
+  });
+
   it("supports custom TLD configuration", () => {
     expect(scanUrlRanges("go svc.internal", new Set(["internal"]))).toEqual([
       [3, 15],
@@ -152,6 +500,7 @@ describe("URL scanner", () => {
   it("keeps allowlist behavior aligned across scanner APIs", () => {
     const scanner = createUrlScanner({ allowedDomains: ["trusted.com"] });
     const allowedText = "visit trusted.com/path now";
+    const spacedSubdomainText = "evil. trusted.com/path";
     const mixedText = "visit trusted.com/path and https://blocked.org/path now";
     const blocked = "https://blocked.org/path";
     const blockedStart = Array.from(
@@ -174,6 +523,31 @@ describe("URL scanner", () => {
       ranges: [[blockedStart, blockedEnd]],
     });
     expect(scanner.check(mixedInput)).toBe(true);
+    expect(
+      scanner.scan({
+        text: spacedSubdomainText,
+        codePoints: Array.from(spacedSubdomainText),
+      }),
+    ).toEqual({ ranges: [[0, Array.from(spacedSubdomainText).length]] });
+    expect(
+      createUrlFilter({ allowedDomains: ["trusted.com"] }).censor(
+        spacedSubdomainText,
+      ),
+    ).toBe(mask(spacedSubdomainText));
+    const exactSubdomainScanner = createUrlScanner({
+      allowedDomains: ["evil.trusted.com"],
+    });
+    expect(
+      exactSubdomainScanner.scan({
+        text: spacedSubdomainText,
+        codePoints: Array.from(spacedSubdomainText),
+      }),
+    ).toEqual({ ranges: [] });
+    expect(
+      createUrlFilter({ allowedDomains: ["evil.trusted.com"] }).censor(
+        spacedSubdomainText,
+      ),
+    ).toBe(spacedSubdomainText);
     expect(
       scanner.scan(mixedInput, (match) => {
         seen.push(match.range);

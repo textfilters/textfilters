@@ -1,3 +1,5 @@
+export const MAX_PHONE_DIGITS = 15;
+
 export const isValidPhoneGroups = (
   groups: readonly string[],
   options: {
@@ -7,7 +9,7 @@ export const isValidPhoneGroups = (
   },
 ): boolean => {
   const digitsCount = groups.reduce((sum, group) => sum + group.length, 0);
-  if (digitsCount < 10 || digitsCount > 15) return false;
+  if (digitsCount < 10 || digitsCount > MAX_PHONE_DIGITS) return false;
   if (groups.length === 0) return false;
   if (groups.length === 1) return true;
   const hasPlusSevenSingleDigitTail =
