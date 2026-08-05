@@ -34,4 +34,10 @@ describe("@textfilters/phone curated regressions", () => {
       expect(filter.censor(input)).toBe(input);
     }
   });
+
+  it("keeps zero-only sequences unchanged", () => {
+    for (const input of ["0000000000000", "000000000000"]) {
+      expect(filter.censor(input)).toBe(input);
+    }
+  });
 });

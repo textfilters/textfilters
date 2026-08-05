@@ -41,14 +41,85 @@ describe("@textfilters/profanity curated regressions", () => {
 
   it("keeps accepted low-risk false-positive locks unchanged", () => {
     const cases = [
+      "блян",
       "бляха-муха",
       "херес, но не мат",
       "ебург как сокращение",
       "х у л и г а н",
+      "пиксебатл",
     ];
 
     for (const input of cases) {
       expect(filter.censor(input)).toBe(input);
     }
+  });
+
+  it("masks the short blya token at punctuation boundaries", () => {
+    const cases: Array<[string, string]> = [
+      ["Бля", "***"],
+      ["бля", "***"],
+      ["Бля!", "***!"],
+      ["(бля)", "(***)"],
+    ];
+
+    for (const [input, expected] of cases) {
+      expect(filter.censor(input)).toBe(expected);
+    }
+  });
+
+  it("keeps source ranges and metadata on the matched token only", () => {
+    const input = "последняя ёбля";
+    const matches = filter.analyze(input);
+
+    expect(
+      matches.map((match) => ({
+        start: match[0],
+        end: match[1],
+        text: input.slice(match[0], match[1]),
+        mode: match.mode,
+        ruleId: match.ruleId,
+        category: match.category,
+        severity: match.severity,
+      })),
+    ).toEqual([
+      {
+        start: 10,
+        end: 14,
+        text: "ёбля",
+        mode: "strict",
+        ruleId: "ru.obscene.eblya",
+        category: "OBSCENE_MAT",
+        severity: "high",
+      },
+      {
+        start: 10,
+        end: 14,
+        text: "ёбля",
+        mode: "loose",
+        ruleId: "ru.obscene.eblya",
+        category: "OBSCENE_MAT",
+        severity: "high",
+      },
+    ]);
+
+    const censored = filter.censor(input);
+    expect(censored).toBe("последняя ****");
+    expect(censored.length).toBe(input.length);
+
+    const astralInput = `🚀 ${input}`;
+    expect(
+      filter.analyze(astralInput).map((match) => ({
+        start: match[0],
+        end: match[1],
+        text: astralInput.slice(match[0], match[1]),
+        mode: match.mode,
+      })),
+    ).toEqual([
+      { start: 13, end: 17, text: "ёбля", mode: "strict" },
+      { start: 13, end: 17, text: "ёбля", mode: "loose" },
+    ]);
+    const astralCensored = filter.censor(astralInput);
+    expect(astralCensored).toBe("🚀 последняя ****");
+    expect(astralCensored.length).toBe(astralInput.length);
   });
 });

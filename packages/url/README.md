@@ -62,8 +62,11 @@ const safeText = urlFilter.censor(
 Allowed domains use case-insensitive exact-host matching. `trusted.com` does
 not allow `www.trusted.com`, `nottrusted.com`, or `trusted.com.evil.test`.
 Schemes, userinfo, ports, paths, queries, and recognized defanged dots do not
-change the hostname decision. Cross-script lookalikes remain distinct.
-Unicode and punycode spellings must be listed separately.
+change the hostname decision. For the ambiguous literal-dot-plus-whitespace
+form, a single leading label is treated as a defanged subdomain, while a
+multi-label prefix is treated as sentence text and the selected suffix is
+checked independently. Cross-script lookalikes remain distinct. Unicode and
+punycode spellings must be listed separately.
 
 The package does not fetch or cache external configuration. Build a new filter
 or scanner from each validated snapshot and replace the active instance

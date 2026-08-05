@@ -12,6 +12,7 @@ export const DEFAULT_TLDS = [
   "gg",
   "me",
   "co",
+  "cc",
   "uk",
   "ly",
   "gl",
