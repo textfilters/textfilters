@@ -1,5 +1,10 @@
-import { PATH_START_CHARS } from "./chars.js";
-import { parseDot } from "./dots.js";
+import { isSentenceDotSymbol, PATH_START_CHARS } from "./chars.js";
+import {
+  isIgnorableFormatting,
+  isRightSpacedDotSymbol,
+  isWhitespaceWrappedDot,
+  parseDot,
+} from "./dots.js";
 import {
   type DomainMatch,
   type Label,
@@ -168,7 +173,7 @@ const trimTldTrailingProse = (
     const symbol = meta.symbol[cursor];
     const canSplit =
       meta.whitespace[cursor] ||
-      meta.zeroWidth[cursor] ||
+      isIgnorableFormatting(meta, cursor) ||
       symbol === "-" ||
       ((symbol === "'" || symbol === "’") &&
         cursor + 1 < label.pos &&
@@ -226,6 +231,9 @@ export const parseDomain = (
 
   const labels: Label[] = [first];
   let pos = first.pos;
+  // Preserve a valid host when an unrelated whitespace-wrapped dot makes the
+  // later candidate invalid.
+  let completedBeforeProseSeparator: DomainMatch | null = null;
 
   while (true) {
     const currentLabel = labels[labels.length - 1];
@@ -257,14 +265,31 @@ export const parseDomain = (
     const dot = parseDot(meta, pos);
     if (!dot) break;
     const currentTld = labels[labels.length - 1];
+    if (
+      !allowUnknownTld &&
+      labels.length >= 2 &&
+      isValidTld(currentTld.raw, currentTld.skeleton, tldSet, tldSkeletonSet) &&
+      (isWhitespaceWrappedDot(meta, dot) || isRightSpacedDotSymbol(meta, dot))
+    ) {
+      completedBeforeProseSeparator = {
+        start: first.start,
+        end: currentTld.end,
+        pos: currentTld.pos,
+        labels: [...labels],
+      };
+    }
     let afterDot = dot.pos;
-    while (afterDot < meta.codePoints.length && meta.zeroWidth[afterDot]) {
+    while (
+      afterDot < meta.codePoints.length &&
+      isIgnorableFormatting(meta, afterDot)
+    ) {
       afterDot++;
     }
     if (
       labels.length >= 2 &&
       dot.start >= pos &&
       dot.end === dot.start + 1 &&
+      isSentenceDotSymbol(meta.raw[dot.start] ?? "") &&
       afterDot < meta.codePoints.length &&
       meta.whitespace[afterDot] &&
       (allowUnknownTld ||
@@ -287,7 +312,7 @@ export const parseDomain = (
       labels.length > MAX_DOMAIN_LABELS ||
       domainTextLength > MAX_DOMAIN_TEXT_LENGTH
     ) {
-      return null;
+      return completedBeforeProseSeparator;
     }
     pos = next.pos;
   }
@@ -300,7 +325,7 @@ export const parseDomain = (
     !isValidTld(tld.raw, tld.skeleton, tldSet, tldSkeletonSet)
   ) {
     const trimmedTld = trimTldTrailingProse(meta, tld, tldSet, tldSkeletonSet);
-    if (!trimmedTld) return null;
+    if (!trimmedTld) return completedBeforeProseSeparator;
     labels[labels.length - 1] = trimmedTld;
     tld = trimmedTld;
     pos = trimmedTld.pos;
@@ -309,7 +334,10 @@ export const parseDomain = (
   let end = tld.end;
   let tailStart = pos;
   let afterDot = pos + 1;
-  while (afterDot < meta.codePoints.length && meta.zeroWidth[afterDot]) {
+  while (
+    afterDot < meta.codePoints.length &&
+    isIgnorableFormatting(meta, afterDot)
+  ) {
     afterDot++;
   }
   if (
@@ -319,7 +347,7 @@ export const parseDomain = (
     PATH_START_CHARS.has(meta.symbol[afterDot])
   ) {
     end = pos + 1;
-    tailStart = pos + 1;
+    tailStart = afterDot;
   }
 
   const pathTail = maybeConsumePathTail(meta, tailStart);

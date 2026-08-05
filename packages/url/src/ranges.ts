@@ -1,7 +1,12 @@
 import { mergeCodePointRanges } from "@textfilters/core";
 
 import { EMPTY_ALLOWED_DOMAINS, isAllowedDomain } from "./allowed-domains.js";
-import { parseDot } from "./dots.js";
+import { isSentenceDotSymbol } from "./chars.js";
+import {
+  isIgnorableFormatting,
+  isWhitespaceWrappedListBullet,
+  parseDot,
+} from "./dots.js";
 import { parseDomain } from "./domain.js";
 import { parseExplicitUrlTarget } from "./explicit-authority.js";
 import {
@@ -13,10 +18,6 @@ import { parseSchemePrefix } from "./scheme.js";
 
 export type UrlRangeSink = (range: CodePointRange) => boolean | void;
 
-// Use the NFKC-normalized raw view so compatibility full stops such as U+FE52
-// and U+2024 behave like their ASCII or ideographic sentence punctuation while
-// middle-dot characters remain obfuscated domain separators.
-const SENTENCE_DOT_SYMBOLS = new Set([".", "。"]);
 const SENTENCE_CLOSER_RE = /[\p{Pe}\p{Pf}]/u;
 
 const hasBareBoundary = (
@@ -103,12 +104,64 @@ const maybeExpandBareSplitPrefix = (
 const isSentenceCloser = (value: string): boolean =>
   value === '"' || value === "'" || SENTENCE_CLOSER_RE.test(value);
 
+const isPlainLabel = (
+  meta: TextMeta,
+  label: DomainMatch["labels"][number],
+): boolean => {
+  for (let cursor = label.start; cursor < label.end; cursor++) {
+    if (!meta.alphaNum[cursor] && meta.raw[cursor] !== "-") return false;
+  }
+  return true;
+};
+
+const isListSpacing = (meta: TextMeta, start: number, end: number): boolean => {
+  for (let cursor = start; cursor < end; cursor++) {
+    if (!meta.whitespace[cursor] && !isIgnorableFormatting(meta, cursor)) {
+      return false;
+    }
+  }
+  return true;
+};
+
+const isStandaloneRepeatedListProse = (
+  meta: TextMeta,
+  domain: DomainMatch,
+): boolean => {
+  if (domain.labels.length !== 2) return false;
+  const [previous, next] = domain.labels;
+  if (!previous || !next || previous.raw !== next.raw) return false;
+  if (!isPlainLabel(meta, previous) || !isPlainLabel(meta, next)) return false;
+  const dot = parseDot(meta, previous.pos);
+  if (
+    !dot ||
+    !isWhitespaceWrappedListBullet(meta, dot) ||
+    !isListSpacing(meta, previous.end, dot.start) ||
+    !isListSpacing(meta, dot.end, next.start)
+  ) {
+    return false;
+  }
+  if (domain.end !== next.end) return false;
+  let afterNext = next.end;
+  while (isIgnorableFormatting(meta, afterNext)) afterNext++;
+  if (
+    meta.alphaNum[afterNext] ||
+    meta.raw[afterNext] === "-" ||
+    meta.raw[afterNext] === "_"
+  ) {
+    return false;
+  }
+
+  return true;
+};
+
 const maybePreferBareDomainAfterSentence = (
   meta: TextMeta,
   domain: DomainMatch,
   tldSet: ReadonlySet<string>,
   tldSkeletonSet: ReadonlySet<string>,
-): DomainMatch => {
+): DomainMatch | null => {
+  if (isStandaloneRepeatedListProse(meta, domain)) return null;
+
   // A sentence-ending literal dot can otherwise turn the preceding prose and
   // the following standalone host into one multi-label domain.
   for (let index = domain.labels.length - 2; index >= 1; index--) {
@@ -121,14 +174,14 @@ const maybePreferBareDomainAfterSentence = (
       !dot ||
       dot.start !== previous.pos ||
       dot.end !== dot.start + 1 ||
-      !SENTENCE_DOT_SYMBOLS.has(meta.raw[dot.start] ?? "")
+      !isSentenceDotSymbol(meta.raw[dot.start] ?? "")
     ) {
       continue;
     }
 
     let afterDot = dot.pos;
     while (afterDot < next.start) {
-      if (meta.zeroWidth[afterDot]) {
+      if (isIgnorableFormatting(meta, afterDot)) {
         afterDot++;
         continue;
       }
@@ -141,7 +194,9 @@ const maybePreferBareDomainAfterSentence = (
     if (afterDot >= next.start || !meta.whitespace[afterDot]) continue;
 
     const suffix = parseDomain(meta, next.start, tldSet, tldSkeletonSet);
-    if (suffix && suffix.end === domain.end) return suffix;
+    if (suffix && suffix.end === domain.end) {
+      return isStandaloneRepeatedListProse(meta, suffix) ? null : suffix;
+    }
   }
 
   return domain;
@@ -254,6 +309,10 @@ export const collectRangeMatches = (
       tldSet,
       tldSkeletonSet,
     );
+    if (!preferredDomain) {
+      i = Math.max(i, parsedDomain.end - 1);
+      continue;
+    }
     const parsedStart = maybeExpandBareSplitPrefix(
       meta,
       parsedDomain,

@@ -3,6 +3,12 @@
 export const LETTER_OR_DIGIT_RE = /[\p{L}\p{N}]/u;
 export const WHITESPACE_RE = /\s/u;
 
+// Use the NFKC-normalized raw view so compatibility full stops such as U+FE52
+// and U+2024 behave like their ASCII or ideographic sentence punctuation while
+// middle-dot characters remain obfuscated domain separators.
+export const isSentenceDotSymbol = (value: string): boolean =>
+  value === "." || value === "。";
+
 export const PATH_START_CHARS = new Set([":", "/", "?", "#"]);
 export const PATH_TRAILING_CHARS = new Set([
   ".",

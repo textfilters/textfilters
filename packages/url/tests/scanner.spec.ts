@@ -12,6 +12,54 @@ import {
 } from "../src/index.js";
 import { mask } from "./helpers.js";
 
+type Range = readonly [number, number];
+
+interface ScannerFixture {
+  readonly text: string;
+  readonly ranges: readonly Range[];
+  readonly allowedDomains?: readonly string[];
+}
+
+const wholeRange = (text: string): readonly Range[] => [
+  [0, Array.from(text).length],
+];
+
+const maskRanges = (text: string, ranges: readonly Range[]): string => {
+  const codePoints = Array.from(text);
+  for (const [start, end] of ranges) {
+    for (let index = start; index < end; index++) {
+      codePoints[index] = "*".repeat(codePoints[index]?.length ?? 0);
+    }
+  }
+  return codePoints.join("");
+};
+
+const expectScannerFixture = ({
+  text,
+  ranges,
+  allowedDomains,
+}: ScannerFixture): void => {
+  const input = { text, codePoints: Array.from(text) };
+  const scanner = createUrlScanner({ allowedDomains });
+  const seen: Range[] = [];
+
+  if (allowedDomains === undefined) {
+    expect(scanUrlRanges(text)).toEqual(ranges);
+    expect(checkUrlRanges(input)).toBe(ranges.length > 0);
+  }
+  expect(scanner.check(input)).toBe(ranges.length > 0);
+  expect(scanner.scan(input)).toEqual({ ranges });
+  expect(
+    scanner.scan(input, (match) => {
+      seen.push(match.range);
+    }),
+  ).toBe(true);
+  expect(seen).toEqual(ranges);
+  expect(createUrlFilter({ allowedDomains }).censor(text)).toBe(
+    maskRanges(text, ranges),
+  );
+};
+
 describe("URL scanner", () => {
   it("keeps scanner contracts compatible with shared range shapes", () => {
     const scanner: UrlRangeScanner = createUrlScanner();
@@ -310,6 +358,184 @@ describe("URL scanner", () => {
 
       expect(scanUrlRanges(text)).toEqual([[0, Array.from(text).length]]);
       expect(createUrlFilter().censor(text)).toBe(mask(text));
+    }
+  });
+
+  it("classifies whitespace-wrapped list bullets by parsed URL context", () => {
+    const prose = [
+      "She was shooting daggers at me • Me reading chapter 1",
+      "me • Me",
+      "info • Info follows",
+      "me • Me.",
+      "me • Me。",
+      "me \u200b•\u200b Me",
+      "me\u00a0•\u00a0Me",
+      "me •\ufe0f Me",
+      "me \ufe0f•\ufe0e Me",
+      "me \u{e0100}•\u{e0100} Me",
+      "foo-bar • Foo-bar follows",
+      "info • Info: details",
+      "me • Me?",
+      "me • Me?.",
+      "me • Me?\u200b",
+      "me • Me?\ufe0f.",
+      "me • Me?#\u200b",
+      "me • Me#\u200b",
+      "me • Me:4x",
+      "gg • GG#",
+      "hello. me • me",
+      "hello。 me • me",
+      "hello.” me • me",
+      "hello.\ufe0f me • me",
+      "hello.\u{e0100} me • me",
+    ];
+    const domains = [
+      "example•com",
+      "example •com",
+      "example• com",
+      "example • com",
+      "example •\ufe0f com",
+      "example \ufe0f•\ufe0e com",
+      "example\u200b•\u200bcom",
+      "example · com",
+      "example ⋅ com",
+      "example ・ com",
+      "m e • me",
+      "me • m e",
+      "m_e • me",
+      "me- • me",
+      "me_ • me",
+      "me • -me",
+      "me • _me",
+      "example.com.\ufe0f/path",
+      "example.com.\u{e0100}/path",
+      "example.com • net",
+      "me • me/path",
+      "me • me\ufe0f/path",
+      "me • me\u{e0100}/path",
+      "me • me\u200b?x=1",
+      "me •\ufe0f me\\path",
+      "gg \ufe0f•\ufe0e gg#frag",
+      "info • info?x=1",
+      "me • me:443/path",
+    ];
+
+    for (const text of prose) expectScannerFixture({ text, ranges: [] });
+    for (const text of domains) {
+      expectScannerFixture({ text, ranges: wholeRange(text) });
+    }
+    for (const selector of ["\ufe0f", "\u{e0100}"]) {
+      for (const text of [
+        `me • me:${selector}443/path`,
+        `me • me:4${selector}43/path`,
+        `me • me:443${selector}/path`,
+      ]) {
+        expectScannerFixture({ text, ranges: wholeRange(text) });
+      }
+    }
+    expectScannerFixture({ text: "me • Me. example.com", ranges: [[9, 20]] });
+    for (const text of ["info • info-other", "info • info\u200b-other"]) {
+      expectScannerFixture({ text, ranges: [[0, 11]] });
+    }
+    for (const text of [
+      "me • me\u200bx",
+      "me • me\ufe0fx",
+      "me • me\u200b_x",
+    ]) {
+      expectScannerFixture({ text, ranges: [[0, 7]] });
+    }
+    expectScannerFixture({
+      text: "hello. me • me. example.com",
+      ranges: [[16, 27]],
+    });
+    for (const text of ["example.com • next", "example.com •\ufe0f next"]) {
+      expectScannerFixture({ text, ranges: [[0, 11]] });
+    }
+    for (const dot of ["·", "⋅", "・"]) {
+      expectScannerFixture({ text: `evil.com ${dot} next`, ranges: [[0, 8]] });
+    }
+    for (const dot of ["•", "·", "⋅", "・"]) {
+      expectScannerFixture({ text: `evil.com${dot} next`, ranges: [[0, 8]] });
+    }
+    for (const text of ["evil.com•\ufe0f next", "evil.com\ufe0f•\ufe0f next"]) {
+      expectScannerFixture({ text, ranges: [[0, 8]] });
+    }
+    for (const dot of ["[.]", "dot", "d o t", "точка"]) {
+      expectScannerFixture({ text: `evil.com ${dot} next`, ranges: [[0, 8]] });
+    }
+    expectScannerFixture({
+      text: "example.com • next",
+      ranges: [],
+      allowedDomains: ["example.com"],
+    });
+  });
+
+  it("detects biz domains through every scanner path", () => {
+    const domain = "freeaccount.biz/path";
+    const text = `visit ${domain} now`;
+    const start = Array.from("visit ").length;
+    const expected = [start, start + Array.from(domain).length] as const;
+    const input = { text, codePoints: Array.from(text) };
+    expectScannerFixture({ text, ranges: [expected] });
+    expect(createUrlScanner({ tlds: ["com"] }).scan(input)).toEqual({
+      ranges: [],
+    });
+    expectScannerFixture({
+      text,
+      ranges: [],
+      allowedDomains: ["freeaccount.biz"],
+    });
+  });
+
+  it("does not let repeated bullet labels broaden exact-host allowlists", () => {
+    const cases = [
+      {
+        allowedDomain: "trusted.com",
+        exactDomain: "trusted.trusted.com",
+        candidates: [
+          "trusted • trusted.com/path",
+          "trusted •\ufe0f trusted.com/path",
+          "trusted \ufe0f•\ufe0e trusted[.]com/path",
+          "trusted • trusted dot com/path",
+        ],
+      },
+      {
+        allowedDomain: "foo-com.com",
+        exactDomain: "foo.foo-com.com",
+        candidates: [
+          "foo • foo-com.com/path",
+          "foo •\ufe0f foo-com.com/path",
+          "foo \ufe0f•\ufe0e foo-com[.]com/path",
+          "foo • foo-com dot com/path",
+        ],
+      },
+      {
+        allowedDomain: "trusted.me",
+        exactDomain: "trusted.me.me",
+        candidates: [
+          "trusted.me • me",
+          "trusted.me •\ufe0f me",
+          "trusted[.]me • me",
+          "trusted dot me • me",
+          "trusted·me • me",
+        ],
+      },
+    ] as const;
+
+    for (const { allowedDomain, exactDomain, candidates } of cases) {
+      for (const text of candidates) {
+        expectScannerFixture({
+          text,
+          ranges: wholeRange(text),
+          allowedDomains: [allowedDomain],
+        });
+      }
+
+      expectScannerFixture({
+        text: candidates[0],
+        ranges: [],
+        allowedDomains: [exactDomain],
+      });
     }
   });
 

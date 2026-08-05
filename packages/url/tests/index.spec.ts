@@ -134,6 +134,10 @@ describe("compatibility behavior", () => {
     expect(filter.censor("discord.gg/example")).toBe(
       mask("discord.gg/example"),
     );
+    expect(filter.censor("freeaccount.biz")).toBe(mask("freeaccount.biz"));
+    expect(filter.censor("FREEACCOUNT.BIZ/path")).toBe(
+      mask("FREEACCOUNT.BIZ/path"),
+    );
     expect(filter.censor("example.com/")).toBe(mask("example.com/"));
     expect(filter.censor("example.com/path\u200b, next")).toBe(
       `${mask("example.com/path")}\u200b, next`,
@@ -315,6 +319,7 @@ describe("compatibility behavior", () => {
     const f = createUrlFilter({ tlds: ["internal"], maskChar: "#" });
     expect(f.censor("svc.internal")).toBe(mask("svc.internal", "#"));
     expect(f.censor("example.com")).toBe("example.com");
+    expect(f.censor("freeaccount.biz")).toBe("freeaccount.biz");
   });
 
   it("normalizes custom uppercase TLDs and preserves path punctuation behavior", () => {

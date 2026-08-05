@@ -3,7 +3,7 @@ import {
   PATH_START_CHARS,
   PATH_TRAILING_CHARS,
 } from "./chars.js";
-import { parseDot } from "./dots.js";
+import { isIgnorableFormatting, parseDot } from "./dots.js";
 import type { Match, TextMeta } from "./meta.js";
 
 export const hasQueryOrFragmentAfter = (
@@ -66,7 +66,7 @@ const scanNumericPort = (meta: TextMeta, start: number): Match | null => {
   let end = -1;
   let hasDigit = false;
   while (cursor < meta.codePoints.length) {
-    if (meta.zeroWidth[cursor]) {
+    if (isIgnorableFormatting(meta, cursor)) {
       cursor++;
       continue;
     }
@@ -102,7 +102,9 @@ export const maybeConsumePathTail = (
   start: number,
 ): Match | null => {
   let pos = start;
-  while (pos < meta.codePoints.length && meta.zeroWidth[pos]) pos++;
+  while (pos < meta.codePoints.length && isIgnorableFormatting(meta, pos)) {
+    pos++;
+  }
   if (pos >= meta.codePoints.length) return null;
   if (!PATH_START_CHARS.has(meta.symbol[pos])) return null;
 
@@ -151,7 +153,9 @@ export const maybeConsumePathTail = (
   let trimmedTrailingPunctuation = false;
   while (end > pos + 1) {
     let cursor = end;
-    while (cursor > pos + 1 && meta.zeroWidth[cursor - 1]) cursor--;
+    while (cursor > pos + 1 && isIgnorableFormatting(meta, cursor - 1)) {
+      cursor--;
+    }
     if (cursor < end) {
       // Handle `path,\u200b next`: trim the punctuation before the invisible
       // separator, then trim the separator on the next pass.
@@ -178,6 +182,19 @@ export const maybeConsumePathTail = (
     }
     break;
   }
+
+  let hasVisibleContent = meta.symbol[pos] === "/";
+  for (
+    let contentPos = pos + 1;
+    !hasVisibleContent && contentPos < end;
+    contentPos++
+  ) {
+    hasVisibleContent =
+      !isIgnorableFormatting(meta, contentPos) &&
+      meta.symbol[contentPos] !== "?" &&
+      meta.symbol[contentPos] !== "#";
+  }
+  if (!hasVisibleContent) return null;
 
   return { start: pos, end, pos: cursor };
 };
