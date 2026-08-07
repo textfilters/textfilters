@@ -1,6 +1,6 @@
 {
   "name": "@textfilters/phone",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "type": "module",
   "description": "TypeScript phone number and phone-like sequence detector for moderation pipelines with false-positive guards.",
   "license": "MIT",

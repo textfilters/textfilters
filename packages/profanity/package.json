@@ -1,6 +1,6 @@
 {
   "name": "@textfilters/profanity",
-  "version": "0.16.4",
+  "version": "0.16.5",
   "type": "module",
   "description": "TypeScript profanity filter with Russian and opt-in English dictionaries, obfuscation handling, taxonomy metadata, and language-pack validation.",
   "license": "MIT",
