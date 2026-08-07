@@ -6,6 +6,7 @@ export const DEFAULT_TLDS = [
   "ru",
   "рф",
   "com",
+  "biz",
   "net",
   "org",
   "io",

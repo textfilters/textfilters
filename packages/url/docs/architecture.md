@@ -101,7 +101,7 @@ Ranges always point back to the original code point indexes. This keeps masking 
 
 Real URL schemes match `http` and `https`. Obfuscated schemes match `hxxp`, split-letter forms such as `h t t p`, and defanged delimiters such as `[:]//` or `[://]`.
 
-Bare domains are parsed from labels separated by real, Unicode, or defanged dots. They require a configured TLD unless the TLD is punycode-like.
+Bare domains are parsed from labels separated by real, Unicode, or defanged dots. They require a configured TLD unless the TLD is punycode-like. A whitespace-wrapped U+2022 list bullet between two repeated standalone words is prose, including at sentence boundaries; complete hosts before unrelated text after whitespace-wrapped dot forms or right-spaced single-character dots and continuations with domain or URL-tail evidence remain detectable.
 
 Explicit authorities are parsed after a scheme and can use broader host syntax than bare domains. That path accepts localhost, ports, IPv6 bracket hosts, userinfo, underscores, IDN and emoji labels, and unknown TLDs.
 

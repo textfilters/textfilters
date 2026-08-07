@@ -114,11 +114,18 @@ Bare domains still require the configured TLD list. For example, `example.unknow
 
 The filter masks:
 
-- known-TLD bare domains such as `example.com`, `t.me/example`, and `discord.gg/example`;
+- known-TLD bare domains such as `example.com`, `freeaccount.biz`, `t.me/example`, and `discord.gg/example`;
 - defanged dot forms such as `example[.]com`, `example dot com`, and `example точка com`;
 - `http`, `https`, and `hxxp` scheme forms, including split-letter obfuscation;
 - explicit-scheme hosts with ports, IPv6 literals, userinfo, IDN/emoji hosts, and unknown TLDs;
 - glued prose around explicit authorities while keeping trailing punctuation outside the masked range.
+
+A whitespace-wrapped U+2022 list bullet between two repeated standalone words is
+treated as prose punctuation, including at sentence boundaries. A complete host
+before unrelated text remains detectable after a whitespace-wrapped dot form or
+a single-character dot followed by whitespace, as in `example.com • next`.
+Different labels, unspaced or one-sided forms, and repeated labels that extend a
+host or URL tail remain detectable and cannot broaden exact-host allowlists.
 
 Configured `allowedDomains` are removed from filter and scanner results after
 parsing. They do not add new TLD detection rules, and subdomains must be listed
