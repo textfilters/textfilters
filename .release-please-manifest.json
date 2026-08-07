@@ -1,8 +1,8 @@
 {
   "packages/core": "0.4.1",
-  "packages/url": "0.3.1",
+  "packages/url": "0.3.2",
   "packages/email": "0.3.2",
-  "packages/phone": "0.2.3",
-  "packages/profanity": "0.16.4",
+  "packages/phone": "0.2.4",
+  "packages/profanity": "0.16.5",
   "packages/spam": "0.3.3"
 }
