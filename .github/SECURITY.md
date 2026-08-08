@@ -4,8 +4,8 @@
 
 | Version | Supported |
 | --- | --- |
-| Current published `0.x` package releases | Yes |
-| Older `0.x` package releases | Best effort |
+| Current published package releases, including `1.x` | Yes |
+| Older published package releases | Best effort |
 | Unpublished code, forks, or unsupported package lines | No |
 
 Packages are versioned and released independently. Security fixes normally
