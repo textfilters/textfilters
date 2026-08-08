@@ -225,8 +225,124 @@ describe("URL scanner", () => {
     );
   });
 
+  it("rejects delegated words after sentence-ending dots", () => {
+    for (const sentenceStart of [
+      "It",
+      "In",
+      "To",
+      "Be",
+      "Do",
+      "Is",
+      "At",
+      "Travel",
+      "Online",
+      "Art",
+      "Life",
+      "Today",
+    ]) {
+      const text = `This is good. ${sentenceStart} is fine.`;
+      expect(scanUrlRanges(text)).toEqual([]);
+      expect(createUrlFilter().censor(text)).toBe(text);
+    }
+
+    for (const closer of ['"', "”", ")", "]"]) {
+      const text = `This is good.${closer} It is fine.`;
+      expect(scanUrlRanges(text)).toEqual([]);
+      expect(createUrlFilter().censor(text)).toBe(text);
+
+      const completedHostText = `Visit example.com.${closer} Today is fine.`;
+      const hostStart = Array.from("Visit ").length;
+      expectScannerFixture({
+        text: completedHostText,
+        ranges: [[hostStart, hostStart + Array.from("example.com").length]],
+      });
+    }
+
+    for (const punctuation of [",", ";", ":", "!", "?", "…", "–", "—"]) {
+      const text = `This is good. Today${punctuation} we leave.`;
+      expect(scanUrlRanges(text), punctuation).toEqual([]);
+      expect(createUrlFilter().censor(text), punctuation).toBe(text);
+    }
+
+    for (const text of [
+      "This is good. Today. We leave.",
+      "This is good. Today... we leave.",
+      "This is good. Today. In another chapter.",
+      "This is good. Today... in another chapter.",
+      "This is good. Today.",
+      "This is good. Travel!",
+      "This is good. Today",
+      "This is good. It's fine.",
+      "This is good. Today’s plan works.",
+      "This is good. It'll work.",
+      "This is good. You’re fine.",
+      "This is good. I'm ready.",
+      "This is good. I’d agree.",
+      "This is good. Can't wait.",
+      "This is good. (Today is fine.)",
+      "This is good. [Today is fine.]",
+      "This is good. “Today is fine.”",
+      "This is good. «Today is fine.»",
+      "This is good. (“It'll work.”)",
+      "This is good. — Today is fine.",
+      "This is good. – Today is fine.",
+      "This is good. ‐ Today is fine.",
+      "This is good. - Today is fine.",
+      "This is good. * Today is fine.",
+      "This is good. **Today** is fine.",
+      "This is good. > Today is fine.",
+      "This is good. # Today is fine.",
+      "This is good. • Today is fine.",
+      "This is good. IT works.",
+      "This is good. US teams agree.",
+      "This is good. IN comes next.",
+      "This is good. IT’LL work.",
+      "This is good. YouTube works.",
+      "This is good. GoDaddy works.",
+      "This is good. PlayStation works.",
+      "This is good. Today-based plans work.",
+      "This is good. Art-based plans work.",
+      "This is good. YouTube-based plans work.",
+      "This is good. IT-based plans work.",
+      "This is good. Today's-based plan works.",
+      "الكلام جيد. مصر جميلة.",
+      "内容很好. 中国 可以使用.",
+      "ข้อความดี. ไทย ใช้งานได้.",
+      "내용이 좋다. 한국 사용 가능.",
+    ]) {
+      expect(scanUrlRanges(text)).toEqual([]);
+      expect(createUrlFilter().censor(text)).toBe(text);
+    }
+
+    const decomposedTitle = "Vermögensberater".normalize("NFD");
+    const decomposedSentence = `Das ist gut. ${decomposedTitle} helfen.`;
+    expect(scanUrlRanges(decomposedSentence)).toEqual([]);
+    expect(createUrlFilter().censor(decomposedSentence)).toBe(
+      decomposedSentence,
+    );
+
+    for (const domain of [
+      "youtu. be",
+      "example. Be/path",
+      "example. com",
+      "example. Travel/path",
+      "example. travel",
+      "example.COM",
+      "example.TRAVEL",
+      "example. مصر/path",
+      "example. 中国/path",
+    ]) {
+      expect(createUrlFilter().censor(domain)).toBe(mask(domain));
+    }
+
+    const hyphenatedDomain = "Today-based.com";
+    expect(
+      createUrlFilter().censor(`This is good. ${hyphenatedDomain} works.`),
+    ).toBe(`This is good. ${mask(hyphenatedDomain)} works.`);
+  });
+
   it("checks allowlists against the selected sentence suffix", () => {
-    const text = "foo.bar. evil.com";
+    const text = "foo.invalid. evil.com";
     const suffix = "evil.com";
     const suffixStart = Array.from(text.slice(0, text.indexOf(suffix))).length;
     const input = { text, codePoints: Array.from(text) };
@@ -234,12 +350,12 @@ describe("URL scanner", () => {
       {
         allowedDomains: [] as string[],
         ranges: [[suffixStart, Array.from(text).length]],
-        censored: `foo.bar. ${mask(suffix)}`,
+        censored: `foo.invalid. ${mask(suffix)}`,
       },
       {
-        allowedDomains: ["foo.bar.evil.com"],
+        allowedDomains: ["foo.invalid.evil.com"],
         ranges: [[suffixStart, Array.from(text).length]],
-        censored: `foo.bar. ${mask(suffix)}`,
+        censored: `foo.invalid. ${mask(suffix)}`,
       },
       {
         allowedDomains: [suffix],
@@ -247,7 +363,7 @@ describe("URL scanner", () => {
         censored: mask(text),
       },
       {
-        allowedDomains: ["foo.bar.evil.com", suffix],
+        allowedDomains: ["foo.invalid.evil.com", suffix],
         ranges: [] as Array<readonly [number, number]>,
         censored: text,
       },
@@ -269,12 +385,15 @@ describe("URL scanner", () => {
       expect(createUrlFilter({ allowedDomains }).censor(text)).toBe(censored);
     }
 
-    for (const sentenceText of ["foo.bar﹒ evil.com", "foo.bar.” evil.com"]) {
+    for (const sentenceText of [
+      "foo.invalid﹒ evil.com",
+      "foo.invalid.” evil.com",
+    ]) {
       const sentenceSuffixStart = Array.from(
         sentenceText.slice(0, sentenceText.indexOf(suffix)),
       ).length;
       const scanner = createUrlScanner({
-        allowedDomains: ["foo.bar.evil.com"],
+        allowedDomains: ["foo.invalid.evil.com"],
       });
 
       expect(
@@ -336,6 +455,18 @@ describe("URL scanner", () => {
       expect(createUrlFilter().censor(text)).toBe(
         `Hello${fullStop} ${mask(domain)}`,
       );
+    }
+  });
+
+  it("keeps multi-dot compatibility expansions as domain separators", () => {
+    for (const dot of ["‥", "︰"]) {
+      const text = `example${dot}com/path`;
+      expectScannerFixture({ text, ranges: wholeRange(text) });
+      expectScannerFixture({
+        text,
+        ranges: [],
+        allowedDomains: [`example${dot}com`],
+      });
     }
   });
 
@@ -461,11 +592,12 @@ describe("URL scanner", () => {
       expectScannerFixture({ text, ranges: [[0, 8]] });
     }
     for (const dot of ["[.]", "dot", "d o t", "точка"]) {
-      expectScannerFixture({ text: `evil.com ${dot} next`, ranges: [[0, 8]] });
+      const text = `evil.com ${dot} next`;
+      expectScannerFixture({ text, ranges: wholeRange(text) });
     }
     expectScannerFixture({
       text: "example.com • next",
-      ranges: [],
+      ranges: wholeRange("example.com • next"),
       allowedDomains: ["example.com"],
     });
   });
@@ -485,6 +617,161 @@ describe("URL scanner", () => {
       ranges: [],
       allowedDomains: ["freeaccount.biz"],
     });
+  });
+
+  it("detects delegated TLDs through every scanner path", () => {
+    for (const domain of [
+      "youtu.be/watch",
+      "example.bar/path",
+      "example.travel/path",
+      "example.भारत/path",
+      "example.বাংলা/path",
+      "example.சிங்கப்பூர்/path",
+    ]) {
+      const text = `visit ${domain} now`;
+      const start = Array.from("visit ").length;
+      const expected = [start, start + Array.from(domain).length] as const;
+      expectScannerFixture({ text, ranges: [expected] });
+    }
+  });
+
+  it("does not broaden a delegated-domain allowlist through defanged continuations", () => {
+    for (const separator of [
+      "dot",
+      "d o t",
+      "точка",
+      "[.]",
+      "•",
+      "·",
+      "⋅",
+      "・",
+      ".",
+    ]) {
+      const text = `foo.travel ${separator} travel`;
+      expectScannerFixture({
+        text,
+        ranges: wholeRange(text),
+        allowedDomains: ["foo.travel"],
+      });
+      expectScannerFixture({
+        text,
+        ranges: [],
+        allowedDomains: ["foo.travel.travel"],
+      });
+    }
+  });
+
+  it("normalizes canonically equivalent decoded IDN suffixes", () => {
+    for (const suffix of ["한국", "онлайн", "vermögensberater"]) {
+      const domain = `example.${suffix.normalize("NFD")}/path`;
+      expectScannerFixture({ text: domain, ranges: wholeRange(domain) });
+    }
+
+    const allowed = `example.${"vermögensberater".normalize("NFD")}/path`;
+    expectScannerFixture({
+      text: allowed,
+      ranges: [],
+      allowedDomains: ["example.vermögensberater"],
+    });
+  });
+
+  it("preserves compatibility expansions in delegated suffixes", () => {
+    for (const suffix of ["coﬀee", "oﬃce", "ﬂowers"]) {
+      const text = `example.${suffix}/path`;
+      expectScannerFixture({ text, ranges: wholeRange(text) });
+    }
+
+    expectScannerFixture({
+      text: "example.coﬀee/path",
+      ranges: [],
+      allowedDomains: ["example.coffee"],
+    });
+  });
+
+  it("skips orphan combining marks at delegated-label starts", () => {
+    for (const text of ["example.\u0301com", "example[.]\u0301com"]) {
+      expectScannerFixture({ text, ranges: wholeRange(text) });
+      expectScannerFixture({
+        text,
+        ranges: [],
+        allowedDomains: ["example.com"],
+      });
+    }
+  });
+
+  it("keeps standalone leading marks outside bare-domain boundaries", () => {
+    for (const prefix of ["\u0301", "text \u0301", "\ufe0f"]) {
+      const domain = "example.com";
+      const text = prefix + domain;
+      const start = Array.from(prefix).length;
+      expectScannerFixture({
+        text,
+        ranges: [[start, start + Array.from(domain).length]],
+      });
+    }
+
+    const attached = "x\u0301example.com";
+    expectScannerFixture({ text: attached, ranges: wholeRange(attached) });
+    expectScannerFixture({
+      text: `text ${attached}`,
+      ranges: [
+        [Array.from("text ").length, Array.from(`text ${attached}`).length],
+      ],
+    });
+  });
+
+  it("keeps variation selectors inside recoverable bare labels", () => {
+    for (const text of ["e\ufe0fxample.com", "ex\ufe0fample[.]com"]) {
+      expectScannerFixture({ text, ranges: wholeRange(text) });
+      expectScannerFixture({
+        text,
+        ranges: [],
+        allowedDomains: ["example.com"],
+      });
+    }
+
+    const configured = "e\ufe0fxample.com";
+    expectScannerFixture({
+      text: configured,
+      ranges: [],
+      allowedDomains: [configured],
+    });
+  });
+
+  it("keeps decoded IDN skeleton matching asymmetric", () => {
+    for (const text of ["module.pyc", "service.kom"]) {
+      expectScannerFixture({ text, ranges: [] });
+    }
+
+    for (const text of ["module.pус/path", "service.kом/path"]) {
+      expectScannerFixture({ text, ranges: wholeRange(text) });
+    }
+  });
+
+  it("preserves valid TLD prefixes before unsupported combining marks", () => {
+    const domain = "example.com";
+    for (const suffix of ["\u0301", "\u0301/path"]) {
+      const text = domain + suffix;
+      expectScannerFixture({
+        text,
+        ranges: [[0, Array.from(domain).length]],
+      });
+      expectScannerFixture({
+        text,
+        ranges: [[0, Array.from(domain).length]],
+        allowedDomains: [domain],
+      });
+      expect(createUrlFilter().censor(text)).toBe(mask(domain) + suffix);
+    }
+
+    for (const formatting of ["\u200b", "\u200b\u2060", "\ufe0f\u200b"]) {
+      const text = `${domain}${formatting}\u0301/path`;
+      expectScannerFixture({
+        text,
+        ranges: [[0, Array.from(domain).length]],
+        allowedDomains: [domain],
+      });
+    }
   });
 
   it("does not let repeated bullet labels broaden exact-host allowlists", () => {
@@ -537,6 +824,42 @@ describe("URL scanner", () => {
         allowedDomains: [exactDomain],
       });
     }
+  });
+
+  it("recovers a repeated bullet host before a delegated continuation", () => {
+    for (const separator of ["[.]", "•", "·", "⋅", "・", "."]) {
+      const text = `foo • foo ${separator} travel`;
+      expectScannerFixture({ text, ranges: wholeRange(text) });
+    }
+  });
+
+  it("recovers one-character delegated continuations during ordinary scans", () => {
+    for (const separator of ["•", "·", "⋅", "・", "."]) {
+      const text = `foo.travel ${separator} travel`;
+      expectScannerFixture({ text, ranges: wholeRange(text) });
+    }
+  });
+
+  it("recovers canonically equivalent repeated delegated continuations", () => {
+    const composed = "vermögensberater";
+    const decomposed = composed.normalize("NFD");
+    for (const [first, second] of [
+      [composed, decomposed],
+      [decomposed, composed],
+    ] as const) {
+      for (const separator of ["•", "·", "⋅", "・", "."]) {
+        const text = `foo.${first} ${separator} ${second}`;
+        expectScannerFixture({ text, ranges: wholeRange(text) });
+      }
+    }
+  });
+
+  it("keeps a real sentence dot outside an exact allowlist continuation", () => {
+    expectScannerFixture({
+      text: "example.com. next",
+      ranges: [],
+      allowedDomains: ["example.com"],
+    });
   });
 
   it("keeps adjacent URL ranges and allowlists independent", () => {
@@ -721,6 +1044,24 @@ describe("URL scanner", () => {
     ]);
     expect(scanUrlRanges("go svc.internal")).toEqual([]);
     expect(scanUrlRanges("go example.com", new Set(["internal"]))).toEqual([]);
+
+    for (const tlds of [[], [""], [" "], ["", "\t"]]) {
+      expect(createUrlFilter({ tlds }).censor("example.com")).toBe(
+        mask("example.com"),
+      );
+    }
+
+    const continuation = "foo.internal dot corp";
+    const scanner = createUrlScanner({ tlds: ["internal", "corp"] });
+    expect(
+      scanner.scan({
+        text: continuation,
+        codePoints: Array.from(continuation),
+      }),
+    ).toEqual({ ranges: wholeRange(continuation) });
+    expect(
+      createUrlFilter({ tlds: ["internal", "corp"] }).censor(continuation),
+    ).toBe(mask(continuation));
   });
 
   it("keeps allowlist behavior aligned across scanner APIs", () => {

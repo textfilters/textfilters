@@ -6,8 +6,10 @@ import {
 
 import {
   DOT_CHAR_SET,
+  HOST_LABEL_CHAR_RE,
   LETTER_OR_DIGIT_RE,
   LOOKALIKE_TO_ASCII,
+  UNICODE_MARK_RE,
   WHITESPACE_RE,
 } from "./chars.js";
 
@@ -19,6 +21,7 @@ export interface TextMeta {
   readonly zeroWidth: readonly boolean[];
   readonly whitespace: readonly boolean[];
   readonly alphaNum: readonly boolean[];
+  readonly labelChar: readonly boolean[];
   readonly separator: readonly boolean[];
   readonly labelJoinSeparator: readonly boolean[];
 }
@@ -45,8 +48,7 @@ export interface DomainMatch extends Match {
 
 export type CodePointRange = TextCodePointRange;
 
-export const toRawChar = (ch: string): string =>
-  Array.from(lowerNfkc(ch))[0] ?? "";
+export const toRawChar = (ch: string): string => lowerNfkc(ch);
 
 export const toSkeleton = (value: unknown): string =>
   Array.from(lowerNfkc(value))
@@ -69,21 +71,32 @@ export const createMeta = (source: string): TextMeta => {
   const zeroWidth: boolean[] = new Array(codePoints.length);
   const whitespace: boolean[] = new Array(codePoints.length);
   const alphaNum: boolean[] = new Array(codePoints.length);
+  const labelChar: boolean[] = new Array(codePoints.length);
   const separator: boolean[] = new Array(codePoints.length);
   const labelJoinSeparator: boolean[] = new Array(codePoints.length);
 
   for (let i = 0; i < codePoints.length; i++) {
     const ch = codePoints[i];
     const rawChar = toRawChar(ch);
-    const skeletonChar = LOOKALIKE_TO_ASCII[rawChar] ?? rawChar;
-    const symbolChar = DOT_CHAR_SET.has(rawChar)
-      ? "."
-      : rawChar === "\\"
-        ? "/"
-        : rawChar;
+    const rawChars = Array.from(rawChar);
+    const skeletonChar = toSkeleton(rawChar);
+    const isDotSymbol =
+      rawChars.length > 0 &&
+      rawChars.every((normalizedChar) => DOT_CHAR_SET.has(normalizedChar));
+    const symbolChar = isDotSymbol ? "." : rawChar === "\\" ? "/" : rawChar;
     const isZeroWidth = ch !== "" && stripZeroWidth(ch) === "";
     const isWhitespace = WHITESPACE_RE.test(ch);
-    const isAlphaNum = LETTER_OR_DIGIT_RE.test(rawChar);
+    const isAlphaNum =
+      rawChars.length > 0 &&
+      rawChars.every((normalizedChar) =>
+        LETTER_OR_DIGIT_RE.test(normalizedChar),
+      );
+    const isLabelChar =
+      HOST_LABEL_CHAR_RE.test(ch) ||
+      (rawChars.length > 0 &&
+        rawChars.every((normalizedChar) =>
+          HOST_LABEL_CHAR_RE.test(normalizedChar),
+        ));
 
     raw[i] = rawChar;
     skeleton[i] = skeletonChar;
@@ -91,12 +104,13 @@ export const createMeta = (source: string): TextMeta => {
     zeroWidth[i] = isZeroWidth;
     whitespace[i] = isWhitespace;
     alphaNum[i] = isAlphaNum;
+    labelChar[i] = isLabelChar;
     separator[i] = isZeroWidth || !isAlphaNum;
     // Dots and path delimiters terminate labels; other separators may be
     // obfuscation joins inside a label.
     labelJoinSeparator[i] =
       isZeroWidth ||
-      (!isAlphaNum &&
+      (!isLabelChar &&
         symbolChar !== "." &&
         symbolChar !== "/" &&
         symbolChar !== ":" &&
@@ -112,6 +126,7 @@ export const createMeta = (source: string): TextMeta => {
     zeroWidth,
     whitespace,
     alphaNum,
+    labelChar,
     separator,
     labelJoinSeparator,
   };
@@ -123,6 +138,31 @@ export const skipSeparators = (meta: TextMeta, start: number): number => {
   return pos;
 };
 
+export const isTokenDelimiterPadding = (meta: TextMeta, pos: number): boolean =>
+  meta.zeroWidth[pos] ||
+  meta.whitespace[pos] ||
+  UNICODE_MARK_RE.test(meta.codePoints[pos] ?? "");
+
+export const skipTokenSuffixMarks = (
+  meta: TextMeta,
+  start: number,
+): { readonly pos: number; readonly hasWhitespace: boolean } => {
+  let pos = start;
+  let sawMark = false;
+  let hasWhitespace = false;
+  let lastMarkEnd = start;
+  while (pos < meta.codePoints.length && isTokenDelimiterPadding(meta, pos)) {
+    const isMark = UNICODE_MARK_RE.test(meta.codePoints[pos] ?? "");
+    sawMark ||= isMark;
+    hasWhitespace ||= meta.whitespace[pos];
+    if (isMark) lastMarkEnd = pos + 1;
+    pos++;
+  }
+  return sawMark
+    ? { pos: lastMarkEnd, hasWhitespace }
+    : { pos: start, hasWhitespace: false };
+};
+
 export const consumeWord = (
   meta: TextMeta,
   start: number,
@@ -132,11 +172,17 @@ export const consumeWord = (
   let pos = start;
   let first = -1;
   let last = -1;
-  for (const expected of expectedChars) {
+  let expectedPos = 0;
+  while (expectedPos < expectedChars.length) {
     pos = skipSeparators(meta, pos);
     if (pos >= meta.codePoints.length) return null;
     const actual = mode === "raw" ? meta.raw[pos] : meta.skeleton[pos];
-    if (actual !== expected) return null;
+    const actualChars = Array.from(actual);
+    if (actualChars.length === 0) return null;
+    for (const actualChar of actualChars) {
+      if (actualChar !== expectedChars[expectedPos]) return null;
+      expectedPos++;
+    }
     if (first < 0) first = pos;
     last = pos;
     pos++;
@@ -150,10 +196,7 @@ export const consumeSymbol = (
   expected: string,
 ): Match | null => {
   let pos = start;
-  while (
-    pos < meta.codePoints.length &&
-    (meta.zeroWidth[pos] || meta.whitespace[pos])
-  ) {
+  while (pos < meta.codePoints.length && isTokenDelimiterPadding(meta, pos)) {
     pos++;
   }
   if (pos >= meta.codePoints.length) return null;

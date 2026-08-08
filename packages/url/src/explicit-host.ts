@@ -104,7 +104,7 @@ const isExplicitIdnSymbol = (meta: TextMeta, pos: number): boolean => {
     !AUTHORITY_TRAILING_CHARS.has(meta.symbol[pos]) &&
     !meta.zeroWidth[pos] &&
     !meta.whitespace[pos] &&
-    !meta.alphaNum[pos] &&
+    !meta.labelChar[pos] &&
     meta.symbol[pos] !== "." &&
     meta.symbol[pos] !== "/" &&
     meta.symbol[pos] !== ":" &&
@@ -132,7 +132,7 @@ export const parseExplicitHostLabel = (
   let hasNonAsciiSymbol = false;
 
   while (pos < authorityEnd) {
-    if (meta.alphaNum[pos] || isExplicitIdnSymbol(meta, pos)) {
+    if (meta.labelChar[pos] || isExplicitIdnSymbol(meta, pos)) {
       if (first < 0) first = pos;
       last = pos;
       raw += meta.raw[pos];

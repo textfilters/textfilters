@@ -44,6 +44,12 @@ describe("compatibility behavior", () => {
     expect(filter.censor("go http:// example.com/path now")).toBe(
       `go ${mask("http:// example.com/path")} now`,
     );
+    for (const input of [
+      "htt㎰://example.unknown/path",
+      "hxx㎰://example.unknown/path",
+    ]) {
+      expect(filter.censor(input)).toBe(mask(input));
+    }
   });
 
   it("keeps trailing punctuation outside masked URL ranges", () => {
@@ -134,6 +140,11 @@ describe("compatibility behavior", () => {
     expect(filter.censor("discord.gg/example")).toBe(
       mask("discord.gg/example"),
     );
+    expect(filter.censor("youtu.be/watch")).toBe(mask("youtu.be/watch"));
+    expect(filter.censor("example.bar/path")).toBe(mask("example.bar/path"));
+    expect(filter.censor("example.travel/path")).toBe(
+      mask("example.travel/path"),
+    );
     expect(filter.censor("freeaccount.biz")).toBe(mask("freeaccount.biz"));
     expect(filter.censor("FREEACCOUNT.BIZ/path")).toBe(
       mask("FREEACCOUNT.BIZ/path"),
@@ -220,6 +231,13 @@ describe("compatibility behavior", () => {
   it("censors defanged dots", () => {
     expect(filter.censor("example[.]com")).toBe(mask("example[.]com"));
     expect(filter.censor("example dot com")).toBe(mask("example dot com"));
+    expect(filter.censor("example d\u0301o\u0301t com")).toBe(
+      mask("example d\u0301o\u0301t com"),
+    );
+    expect(filter.censor("example dot\u0301 com")).toBe(
+      mask("example dot\u0301 com"),
+    );
+    expect(filter.censor("example dót com")).toBe("example dót com");
     expect(filter.censor("go to dot com now")).toBe(
       `go ${mask("to dot com")} now`,
     );
@@ -260,12 +278,18 @@ describe("compatibility behavior", () => {
     expect(filter.censor(input)).toBe(mask(input));
   });
 
-  it("keeps zero-width marks inside host labels", () => {
+  it("keeps zero-width and combining marks inside host labels", () => {
     expect(filter.censor("go exa\u200bmple.com now")).toBe(
       `go ${mask("exa\u200bmple.com")} now`,
     );
     expect(filter.censor("go https://exa\u200bmple.com/path now")).toBe(
       `go ${mask("https://exa\u200bmple.com/path")} now`,
+    );
+    expect(filter.censor("go exa\u0301mple.com now")).toBe(
+      `go ${mask("exa\u0301mple.com")} now`,
+    );
+    expect(filter.censor("go https://exa\u0301mple.com/path now")).toBe(
+      `go ${mask("https://exa\u0301mple.com/path")} now`,
     );
   });
 
@@ -278,6 +302,12 @@ describe("compatibility behavior", () => {
   it("does not censor neutral non-url text", () => {
     const input = "welcome to sample text and enjoy the canvas";
     expect(filter.censor(input)).toBe(input);
+    expect(filter.censor(".be alone is not a domain")).toBe(
+      ".be alone is not a domain",
+    );
+    expect(filter.censor("version 1.2 and package.json stay visible")).toBe(
+      "version 1.2 and package.json stay visible",
+    );
   });
 
   it("preserves input length and is idempotent", () => {
@@ -403,6 +433,13 @@ describe("compatibility behavior", () => {
       "https://evil.com@trusted.com/path",
     );
     expect(f.censor(homograph)).toBe(mask(homograph));
+  });
+
+  it("allows an exact delegated domain without trusting subdomains", () => {
+    const f = createUrlFilter({ allowedDomains: ["youtu.be"] });
+
+    expect(f.censor("youtu.be/watch")).toBe("youtu.be/watch");
+    expect(f.censor("www.youtu.be/watch")).toBe(mask("www.youtu.be/watch"));
   });
 
   it("normalizes Unicode allowed domains without broadening scripts", () => {

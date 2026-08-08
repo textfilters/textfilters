@@ -1,4 +1,10 @@
-import { isSentenceDotSymbol, PATH_START_CHARS } from "./chars.js";
+import { lowerNfkc } from "@textfilters/core";
+
+import {
+  isSentenceDotSymbol,
+  PATH_START_CHARS,
+  UNICODE_MARK_RE,
+} from "./chars.js";
 import {
   isIgnorableFormatting,
   isRightSpacedDotSymbol,
@@ -10,23 +16,38 @@ import {
   type Label,
   type LabelText,
   type TextMeta,
+  toSkeleton,
 } from "./meta.js";
 import { maybeConsumePathTail } from "./path.js";
+import { DEFAULT_TLD_CONTINUATIONS, DEFAULT_TLD_SET } from "./tlds.js";
 
 const MAX_DOMAIN_TEXT_LENGTH = 253;
 const MAX_DOMAIN_LABELS = 127;
+const ASCII_ONLY_RE = /^[A-Za-z0-9-]+$/u;
+const ENGLISH_CONTRACTION_SUFFIXES = [
+  "re",
+  "ve",
+  "ll",
+  "s",
+  "d",
+  "m",
+  "t",
+] as const;
+const DEFAULT_TLD_CONTINUATION_SET: ReadonlySet<string> = new Set(
+  DEFAULT_TLD_CONTINUATIONS,
+);
 
 // Zero-width marks are host obfuscation, not prose boundaries; measure visible
 // runs through them before deciding whether a whitespace gap belongs to a host.
-const measureAlphaNumRun = (meta: TextMeta, start: number): number => {
+const measureLabelRun = (meta: TextMeta, start: number): number => {
   let cursor = start;
   let runLen = 0;
   while (cursor < meta.codePoints.length) {
-    if (meta.zeroWidth[cursor]) {
+    if (isIgnorableFormatting(meta, cursor)) {
       cursor++;
       continue;
     }
-    if (!meta.alphaNum[cursor]) break;
+    if (!meta.labelChar[cursor]) break;
     runLen++;
     cursor++;
   }
@@ -41,7 +62,13 @@ export const parseLabel = (
   }: { readonly joinSingleCharacterWhitespaceRuns?: boolean } = {},
 ): Label | null => {
   let pos = start;
-  while (pos < meta.codePoints.length && meta.labelJoinSeparator[pos]) pos++;
+  while (
+    pos < meta.codePoints.length &&
+    (meta.labelJoinSeparator[pos] ||
+      UNICODE_MARK_RE.test(meta.codePoints[pos] ?? ""))
+  ) {
+    pos++;
+  }
   let first = -1;
   let last = -1;
   let raw = "";
@@ -52,7 +79,7 @@ export const parseLabel = (
   };
 
   while (pos < meta.codePoints.length) {
-    if (meta.alphaNum[pos]) {
+    if (meta.labelChar[pos]) {
       const rawChar = meta.raw[pos];
       if (rawChar) {
         if (first < 0) first = pos;
@@ -67,15 +94,16 @@ export const parseLabel = (
     if (meta.labelJoinSeparator[pos]) {
       const gapStart = pos;
       let gapHasWhitespace = false;
-      let gapHasZeroWidth = false;
+      let gapHasIgnorableFormatting = false;
       let gapHasNonZeroWidthSymbol = false;
       let visibleGapRaw = "";
       while (pos < meta.codePoints.length && meta.labelJoinSeparator[pos]) {
+        const gapSymbolIsIgnorable = isIgnorableFormatting(meta, pos);
         gapHasWhitespace ||= meta.whitespace[pos];
-        gapHasZeroWidth ||= meta.zeroWidth[pos];
+        gapHasIgnorableFormatting ||= gapSymbolIsIgnorable;
         gapHasNonZeroWidthSymbol ||=
-          !meta.zeroWidth[pos] && !meta.whitespace[pos];
-        if (!meta.zeroWidth[pos] && !meta.whitespace[pos]) {
+          !gapSymbolIsIgnorable && !meta.whitespace[pos];
+        if (!gapSymbolIsIgnorable && !meta.whitespace[pos]) {
           visibleGapRaw += meta.raw[pos];
         }
         pos++;
@@ -91,9 +119,9 @@ export const parseLabel = (
       if (
         gapHasWhitespace &&
         pos < meta.codePoints.length &&
-        meta.alphaNum[pos]
+        meta.labelChar[pos]
       ) {
-        const runLen = measureAlphaNumRun(meta, pos);
+        const runLen = measureLabelRun(meta, pos);
         if (!joinSingleCharacterWhitespaceRuns || runLen > 1) {
           pos = gapStart;
           break;
@@ -109,11 +137,11 @@ export const parseLabel = (
       // A zero-width mark followed by punctuation should split at the valid TLD
       // instead of appending glued prose such as `,next` to the label.
       if (
-        gapHasZeroWidth &&
+        gapHasIgnorableFormatting &&
         gapHasNonZeroWidthSymbol &&
         !hasOnlyHostnameJoinSymbols &&
         pos < meta.codePoints.length &&
-        meta.alphaNum[pos]
+        meta.labelChar[pos]
       ) {
         pos = gapStart;
         break;
@@ -121,20 +149,20 @@ export const parseLabel = (
 
       if (
         !gapHasWhitespace &&
-        !gapHasZeroWidth &&
+        !gapHasIgnorableFormatting &&
         gapRaw &&
         !/^-+$/u.test(gapRaw) &&
         pos < meta.codePoints.length &&
-        meta.alphaNum[pos]
+        meta.labelChar[pos]
       ) {
-        const runLen = measureAlphaNumRun(meta, pos);
+        const runLen = measureLabelRun(meta, pos);
         if (runLen > 1) {
           pos = gapStart;
           break;
         }
       }
 
-      if (pos < meta.codePoints.length && meta.alphaNum[pos]) {
+      if (pos < meta.codePoints.length && meta.labelChar[pos]) {
         continue;
       }
       pos = gapStart;
@@ -147,17 +175,55 @@ export const parseLabel = (
   return { start: first, end: last + 1, pos, raw, skeleton };
 };
 
-const isValidTld = (
+export const isValidTld = (
   tldRaw: string,
   tldSkeleton: string,
   tldSet: ReadonlySet<string>,
   tldSkeletonSet: ReadonlySet<string>,
 ): boolean => {
-  if (!tldRaw) return false;
-  if (tldRaw.startsWith("xn--") || tldSkeleton.startsWith("xn--")) {
+  const normalizedRaw = lowerNfkc(tldRaw);
+  const normalizedSkeleton = toSkeleton(normalizedRaw);
+  if (!normalizedRaw) return false;
+  if (
+    normalizedRaw.startsWith("xn--") ||
+    normalizedSkeleton.startsWith("xn--")
+  ) {
     return true;
   }
-  return tldSet.has(tldRaw) || tldSkeletonSet.has(tldSkeleton);
+  if (tldSet.has(normalizedRaw)) return true;
+  if (
+    ASCII_ONLY_RE.test(normalizedRaw) &&
+    normalizedRaw === normalizedSkeleton
+  ) {
+    return false;
+  }
+  return (
+    tldSkeletonSet.has(normalizedSkeleton) || tldSkeletonSet.has(tldSkeleton)
+  );
+};
+
+export const consumeEnglishContractionSuffix = (
+  meta: TextMeta,
+  start: number,
+  limit: number = meta.codePoints.length,
+): number => {
+  if (meta.raw[start] !== "'" && meta.raw[start] !== "’") return start;
+
+  for (const suffix of ENGLISH_CONTRACTION_SUFFIXES) {
+    const suffixChars = Array.from(suffix);
+    const end = start + 1 + suffixChars.length;
+    if (end > limit) continue;
+    if (
+      suffixChars.every(
+        (expected, index) => meta.skeleton[start + 1 + index] === expected,
+      ) &&
+      (end === limit || !meta.alphaNum[end])
+    ) {
+      return end;
+    }
+  }
+
+  return start;
 };
 
 const trimTldTrailingProse = (
@@ -171,18 +237,21 @@ const trimTldTrailingProse = (
   let last = -1;
   for (let cursor = label.start; cursor < label.pos; cursor++) {
     const symbol = meta.symbol[cursor];
+    const contractionEnd = consumeEnglishContractionSuffix(
+      meta,
+      cursor,
+      label.pos,
+    );
     const canSplit =
       meta.whitespace[cursor] ||
       isIgnorableFormatting(meta, cursor) ||
+      UNICODE_MARK_RE.test(meta.raw[cursor] ?? "") ||
       symbol === "-" ||
-      ((symbol === "'" || symbol === "’") &&
-        cursor + 1 < label.pos &&
-        meta.skeleton[cursor + 1] === "s" &&
-        cursor + 2 === label.pos);
+      contractionEnd === label.pos;
     if (canSplit && raw && isValidTld(raw, skeleton, tldSet, tldSkeletonSet)) {
       return { start: label.start, end: last + 1, pos: cursor, raw, skeleton };
     }
-    if (meta.alphaNum[cursor]) {
+    if (meta.labelChar[cursor]) {
       raw += meta.raw[cursor];
       skeleton += meta.skeleton[cursor];
       last = cursor;
@@ -215,12 +284,16 @@ export const parseDomain = (
   tldSet: ReadonlySet<string>,
   tldSkeletonSet: ReadonlySet<string>,
   {
+    forceContinuationDotAt,
     allowUnknownTld = false,
     joinSingleCharacterWhitespaceRuns = true,
+    preferCompletedDomainBeforeProseSeparator = tldSet === DEFAULT_TLD_SET,
     splitAdjacentDomains = true,
   }: {
+    readonly forceContinuationDotAt?: number;
     readonly allowUnknownTld?: boolean;
     readonly joinSingleCharacterWhitespaceRuns?: boolean;
+    readonly preferCompletedDomainBeforeProseSeparator?: boolean;
     readonly splitAdjacentDomains?: boolean;
   } = {},
 ): DomainMatch | null => {
@@ -290,6 +363,7 @@ export const parseDomain = (
       dot.start >= pos &&
       dot.end === dot.start + 1 &&
       isSentenceDotSymbol(meta.raw[dot.start] ?? "") &&
+      dot.start !== forceContinuationDotAt &&
       afterDot < meta.codePoints.length &&
       meta.whitespace[afterDot] &&
       (allowUnknownTld ||
@@ -354,6 +428,23 @@ export const parseDomain = (
   if (pathTail && pathTail.end > end) {
     end = pathTail.end;
     pos = pathTail.pos;
+  }
+
+  const continuationDot = completedBeforeProseSeparator
+    ? parseDot(meta, completedBeforeProseSeparator.pos)
+    : null;
+  const hasExplicitContinuationMarker =
+    continuationDot !== null && continuationDot.end > continuationDot.start + 1;
+  if (
+    preferCompletedDomainBeforeProseSeparator &&
+    completedBeforeProseSeparator &&
+    !hasExplicitContinuationMarker &&
+    labels.length === completedBeforeProseSeparator.labels.length + 1 &&
+    end === tld.end &&
+    !DEFAULT_TLD_CONTINUATION_SET.has(tld.raw) &&
+    !DEFAULT_TLD_CONTINUATION_SET.has(tld.skeleton)
+  ) {
+    return completedBeforeProseSeparator;
   }
 
   return { start: first.start, end, pos, labels };

@@ -11,6 +11,30 @@ describe("explicit URL authority behavior", () => {
     expect(filter.censor("go example.unknown/path now")).toBe(
       "go example.unknown/path now",
     );
+    expect(filter.censor("\u0301https://example.unknown/path")).toBe(
+      `\u0301${mask("https://example.unknown/path")}`,
+    );
+    expect(filter.censor("x\u0301https://example.unknown/path")).toBe(
+      "x\u0301https://example.unknown/path",
+    );
+    const markedScheme = "h\u0301t\u0301t\u0301p://example.unknown/path";
+    expect(filter.censor(`go ${markedScheme} now`)).toBe(
+      `go ${mask(markedScheme)} now`,
+    );
+    const markedSchemeSuffix = "http\u0301://example.unknown/path";
+    expect(filter.censor(`go ${markedSchemeSuffix} now`)).toBe(
+      `go ${mask(markedSchemeSuffix)} now`,
+    );
+    for (const markedDelimiter of [
+      "http\u0301[:]//example.unknown/path",
+      "http\u0301[://]example.unknown/path",
+      "http\u0301s://example.unknown/path",
+      "http[\u0301:\u0301/\u0301/]example.unknown/path",
+    ]) {
+      expect(filter.censor(`go ${markedDelimiter} now`)).toBe(
+        `go ${mask(markedDelimiter)} now`,
+      );
+    }
   });
 
   it("censors explicit authority forms", () => {
@@ -180,6 +204,12 @@ describe("explicit URL authority behavior", () => {
     ).toBe(`go ${mask("https://svc. internal/path")} now`);
     expect(filter.censor("go https://example dot com/path now")).toBe(
       `go ${mask("https://example dot com/path")} now`,
+    );
+    expect(
+      filter.censor("go https://example d\u0301o\u0301t com/path now"),
+    ).toBe(`go ${mask("https://example d\u0301o\u0301t com/path")} now`);
+    expect(filter.censor("go https://example dot\u0301 com/path now")).toBe(
+      `go ${mask("https://example dot\u0301 com/path")} now`,
     );
     expect(filter.censor("go https://example dot com n\u200bext now")).toBe(
       `go ${mask("https://example dot com")} n\u200bext now`,

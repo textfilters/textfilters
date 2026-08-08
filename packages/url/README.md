@@ -110,11 +110,16 @@ scanner.scan(
 
 The package preserves the existing URL filtering behavior and adds stricter explicit-scheme URL handling for common authority forms such as localhost, ports, IPv6, userinfo, and explicit-scheme unknown TLDs.
 
-Bare domains still require the configured TLD list. For example, `example.unknown/path` is left unchanged by the default filter, while `https://example.unknown/path` is masked because it has an explicit scheme.
+Bare domains require a recognized TLD. By default, the package embeds the
+complete delegated IANA root-zone list in both ASCII and decoded IDN forms.
+A non-empty custom `tlds` list replaces that default snapshot. For example,
+`example.unknown/path` is left unchanged by the default filter, while
+`https://example.unknown/path` is masked because it has an explicit scheme.
 
 The filter masks:
 
-- known-TLD bare domains such as `example.com`, `freeaccount.biz`, `t.me/example`, and `discord.gg/example`;
+- delegated-TLD bare domains such as `example.com`, `youtu.be/example`, and
+  `example.travel`;
 - defanged dot forms such as `example[.]com`, `example dot com`, and `example точка com`;
 - `http`, `https`, and `hxxp` scheme forms, including split-letter obfuscation;
 - explicit-scheme hosts with ports, IPv6 literals, userinfo, IDN/emoji hosts, and unknown TLDs;
@@ -129,7 +134,7 @@ host or URL tail remain detectable and cannot broaden exact-host allowlists.
 
 Configured `allowedDomains` are removed from filter and scanner results after
 parsing. They do not add new TLD detection rules, and subdomains must be listed
-explicitly.
+explicitly. This exact-host allowlist is the only default-domain exemption.
 
 `censor()` preserves the original JavaScript string length and is idempotent.
 

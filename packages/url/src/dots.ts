@@ -2,6 +2,7 @@ import { DOT_LITERALS, DOT_WORDS_RAW, DOT_WORDS_SKELETON } from "./chars.js";
 import {
   consumeWord,
   matchesRawChars,
+  skipTokenSuffixMarks,
   toRawChars,
   toSkeletonChars,
   type Match,
@@ -13,8 +14,11 @@ const DOT_WORDS_SKELETON_CHARS = DOT_WORDS_SKELETON.map(toSkeletonChars);
 const DOT_WORDS_RAW_CHARS = DOT_WORDS_RAW.map(toRawChars);
 const VARIATION_SELECTOR_RE = /^[\u{fe00}-\u{fe0f}\u{e0100}-\u{e01ef}]$/u;
 
+export const isVariationSelectorSymbol = (value: string): boolean =>
+  VARIATION_SELECTOR_RE.test(value);
+
 const isVariationSelector = (meta: TextMeta, pos: number): boolean =>
-  VARIATION_SELECTOR_RE.test(meta.codePoints[pos] ?? "");
+  isVariationSelectorSymbol(meta.codePoints[pos] ?? "");
 
 export const isIgnorableFormatting = (meta: TextMeta, pos: number): boolean =>
   meta.zeroWidth[pos] || isVariationSelector(meta, pos);
@@ -86,11 +90,21 @@ export const parseDot = (meta: TextMeta, start: number): Match | null => {
 
   for (const word of DOT_WORDS_SKELETON_CHARS) {
     const matched = consumeWord(meta, pos, word, "skeleton");
-    if (matched && hasDotWordBoundary(meta, matched.pos)) return matched;
+    if (matched) {
+      const suffix = skipTokenSuffixMarks(meta, matched.pos);
+      if (suffix.hasWhitespace || hasDotWordBoundary(meta, suffix.pos)) {
+        return { ...matched, end: suffix.pos, pos: suffix.pos };
+      }
+    }
   }
   for (const word of DOT_WORDS_RAW_CHARS) {
     const matched = consumeWord(meta, pos, word, "raw");
-    if (matched && hasDotWordBoundary(meta, matched.pos)) return matched;
+    if (matched) {
+      const suffix = skipTokenSuffixMarks(meta, matched.pos);
+      if (suffix.hasWhitespace || hasDotWordBoundary(meta, suffix.pos)) {
+        return { ...matched, end: suffix.pos, pos: suffix.pos };
+      }
+    }
   }
 
   return null;

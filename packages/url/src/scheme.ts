@@ -1,7 +1,14 @@
-import { DEFANGED_DELIMITER_PAIRS, HTTP_CHARS, HXXP_CHARS } from "./chars.js";
+import {
+  DEFANGED_DELIMITER_PAIRS,
+  HTTP_CHARS,
+  HTTPS_CHARS,
+  HXXP_CHARS,
+  HXXPS_CHARS,
+} from "./chars.js";
 import {
   consumeSymbol,
   consumeWord,
+  isTokenDelimiterPadding,
   type Match,
   type TextMeta,
 } from "./meta.js";
@@ -11,10 +18,7 @@ const consumeBracketedSchemeDelimiter = (
   start: number,
 ): Match | null => {
   let pos = start;
-  while (
-    pos < meta.codePoints.length &&
-    (meta.zeroWidth[pos] || meta.whitespace[pos])
-  ) {
+  while (pos < meta.codePoints.length && isTokenDelimiterPadding(meta, pos)) {
     pos++;
   }
 
@@ -39,7 +43,7 @@ const consumeBracketedSchemeDelimiter = (
       return null;
     }
 
-    if (!meta.zeroWidth[cursor] && !meta.whitespace[cursor]) {
+    if (!isTokenDelimiterPadding(meta, cursor)) {
       const symbol = meta.symbol[cursor];
       if (symbol !== ":" && symbol !== "/") return null;
       symbols += symbol;
@@ -70,10 +74,7 @@ const consumeSchemeDelimiter = (
 
 const consumeSchemeSuffixS = (meta: TextMeta, start: number): Match | null => {
   let pos = start;
-  while (
-    pos < meta.codePoints.length &&
-    (meta.zeroWidth[pos] || meta.whitespace[pos])
-  ) {
+  while (pos < meta.codePoints.length && isTokenDelimiterPadding(meta, pos)) {
     pos++;
   }
   if (pos >= meta.codePoints.length || meta.skeleton[pos] !== "s") return null;
@@ -87,6 +88,16 @@ export const parseSchemePrefix = (
   meta: TextMeta,
   start: number,
 ): Match | null => {
+  const secure =
+    consumeWord(meta, start, HTTPS_CHARS, "skeleton") ??
+    consumeWord(meta, start, HXXPS_CHARS, "skeleton");
+  if (secure) {
+    const delimiter = consumeSchemeDelimiter(meta, secure.pos);
+    if (delimiter) {
+      return { start: secure.start, end: delimiter.end, pos: delimiter.pos };
+    }
+  }
+
   const base =
     consumeWord(meta, start, HTTP_CHARS, "skeleton") ??
     consumeWord(meta, start, HXXP_CHARS, "skeleton");

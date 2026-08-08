@@ -23,7 +23,35 @@ import {
 } from "./allowed-domains.js";
 import { createMeta, toSkeleton } from "./meta.js";
 import { collectRangeMatches, collectRanges } from "./ranges.js";
-import { DEFAULT_TLDS, normalizeTlds } from "./tlds.js";
+import { DEFAULT_TLDS, DEFAULT_TLD_SET, normalizeTlds } from "./tlds.js";
+const DEFAULT_TLD_SKELETON_SET: ReadonlySet<string> = new Set(
+  DEFAULT_TLDS.map((tld) => toSkeleton(tld)),
+);
+const COMBINING_MARK_RE = /\p{M}/u;
+
+const createPrefilterViews = (
+  source: string,
+): { readonly normalized: string; readonly skeleton: string } => {
+  const normalized = stripZeroWidth(lowerNfkc(source));
+  if (!COMBINING_MARK_RE.test(source)) {
+    return { normalized, skeleton: toSkeleton(normalized) };
+  }
+
+  // Whole-string normalization can compose an inserted mark with the previous
+  // token letter. Preserve original code-point boundaries so the full parser
+  // can treat marks as skippable scheme and dot-word separators.
+  return {
+    normalized: Array.from(source, (char) =>
+      stripZeroWidth(lowerNfkc(char)),
+    ).join(""),
+    skeleton: Array.from(source, (char) =>
+      toSkeleton(stripZeroWidth(char)),
+    ).join(""),
+  };
+};
+
+const createTldSkeletonSet = (tlds: Iterable<string>): ReadonlySet<string> =>
+  new Set(Array.from(tlds, (tld) => toSkeleton(tld)));
 
 export interface UrlScannerConfig {
   readonly tlds?: readonly string[];
@@ -33,9 +61,15 @@ export interface UrlScannerConfig {
 export function createUrlScanner(
   config: UrlScannerConfig = {},
 ): UrlRangeScanner {
-  const tlds = normalizeTlds(config.tlds);
-  const tldSet = new Set(tlds);
-  const tldSkeletonSet = new Set(tlds.map((tld) => toSkeleton(tld)));
+  const customTlds = normalizeTlds(config.tlds);
+  const hasCustomTlds = customTlds.length > 0;
+  const tlds = hasCustomTlds ? customTlds : DEFAULT_TLDS;
+  const tldSet: ReadonlySet<string> = hasCustomTlds
+    ? new Set(tlds)
+    : DEFAULT_TLD_SET;
+  const tldSkeletonSet = hasCustomTlds
+    ? createTldSkeletonSet(tlds)
+    : DEFAULT_TLD_SKELETON_SET;
   const allowedDomainSet = normalizeAllowedDomains(config.allowedDomains);
 
   function scan(input: UrlScanInput): { ranges: readonly TextCodePointRange[] };
@@ -73,10 +107,10 @@ export function createUrlScanner(
 
 export function scanUrlRanges(
   text: unknown,
-  tldSet: ReadonlySet<string> = new Set(DEFAULT_TLDS),
-  tldSkeletonSet: ReadonlySet<string> = new Set(
-    Array.from(tldSet, (tld) => toSkeleton(tld)),
-  ),
+  tldSet: ReadonlySet<string> = DEFAULT_TLD_SET,
+  tldSkeletonSet: ReadonlySet<string> = tldSet === DEFAULT_TLD_SET
+    ? DEFAULT_TLD_SKELETON_SET
+    : createTldSkeletonSet(tldSet),
   allowedDomainSet: ReadonlySet<string> = EMPTY_ALLOWED_DOMAINS,
 ): readonly TextCodePointRange[] {
   const source = String(text ?? "");
@@ -88,10 +122,10 @@ export function scanUrlRanges(
 
 export function checkUrlRanges(
   input: UrlScanInput,
-  tldSet: ReadonlySet<string> = new Set(DEFAULT_TLDS),
-  tldSkeletonSet: ReadonlySet<string> = new Set(
-    Array.from(tldSet, (tld) => toSkeleton(tld)),
-  ),
+  tldSet: ReadonlySet<string> = DEFAULT_TLD_SET,
+  tldSkeletonSet: ReadonlySet<string> = tldSet === DEFAULT_TLD_SET
+    ? DEFAULT_TLD_SKELETON_SET
+    : createTldSkeletonSet(tldSet),
   allowedDomainSet: ReadonlySet<string> = EMPTY_ALLOWED_DOMAINS,
 ): boolean {
   if (!hasUrlCandidateInput(input)) return false;
@@ -108,10 +142,10 @@ export function checkUrlRanges(
 export function scanUrlRangeMatches(
   input: UrlScanInput,
   sink: UrlRangeMatchSink,
-  tldSet: ReadonlySet<string> = new Set(DEFAULT_TLDS),
-  tldSkeletonSet: ReadonlySet<string> = new Set(
-    Array.from(tldSet, (tld) => toSkeleton(tld)),
-  ),
+  tldSet: ReadonlySet<string> = DEFAULT_TLD_SET,
+  tldSkeletonSet: ReadonlySet<string> = tldSet === DEFAULT_TLD_SET
+    ? DEFAULT_TLD_SKELETON_SET
+    : createTldSkeletonSet(tldSet),
   allowedDomainSet: ReadonlySet<string> = EMPTY_ALLOWED_DOMAINS,
 ): boolean {
   if (!hasUrlCandidateInput(input)) return true;
@@ -145,8 +179,7 @@ function hasUrlCandidateInput(input: UrlScanInput): boolean {
 }
 
 function hasUrlCandidate(source: string): boolean {
-  const normalized = stripZeroWidth(lowerNfkc(source));
-  const skeleton = toSkeleton(normalized);
+  const { normalized, skeleton } = createPrefilterViews(source);
   return (
     hasLikelyDomainDot(normalized) ||
     normalized.includes(":") ||
@@ -165,8 +198,7 @@ function hasUrlCandidate(source: string): boolean {
 }
 
 function hasUrlWordCandidate(source: string): boolean {
-  const normalized = stripZeroWidth(lowerNfkc(source));
-  const skeleton = toSkeleton(normalized);
+  const { normalized, skeleton } = createPrefilterViews(source);
   return (
     normalized.includes("http") ||
     normalized.includes("hxxp") ||

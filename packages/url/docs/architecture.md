@@ -6,7 +6,9 @@ The package provides composable URL censoring while preserving existing URL matc
 
 The matcher keeps two URL paths intentionally separate:
 
-- bare domains use the configured TLD list, which keeps prose and unknown internal names from being masked by default;
+- bare domains use the complete embedded IANA root-zone snapshot unless a
+  non-empty custom TLD list is configured, which keeps unknown internal names
+  from being masked by default;
 - explicit-scheme URLs are treated as stronger evidence, so they can match localhost, ports, IPv6, userinfo, IDN or emoji hosts, and unknown TLDs.
 
 ## Public API
@@ -55,6 +57,7 @@ graph TD
   scanner --> meta["meta.ts"]
   scanner --> ranges["ranges.ts"]
   scanner --> tlds
+  tlds --> tldData["tld-data.ts"]
   ranges --> allowed
   ranges --> scheme["scheme.ts"]
   ranges --> domain["domain.ts"]
@@ -80,7 +83,8 @@ graph TD
 | `src/index.ts`              | Public entrypoint, public exports, and censor wrapper orchestration.                                       | Parser details or matching policy.         |
 | `src/contracts.ts`          | Public types and constants.                                                                                | Internal parser types.                     |
 | `src/scanner.ts`            | URL scanner factory, range scanner output, boolean checks, sink streaming, and cheap clean-text prefilter. | Low-level parser rules.                    |
-| `src/tlds.ts`               | Default TLDs and TLD normalization.                                                                        | Host parsing or URL range collection.      |
+| `src/tlds.ts`               | Default TLD selection and custom TLD normalization.                                                        | Host parsing or URL range collection.      |
+| `src/tld-data.ts`           | Generated ASCII and decoded-IDN IANA root-zone snapshot.                                                   | Runtime parsing policy.                    |
 | `src/allowed-domains.ts`    | Exact allowed-domain normalization and parsed-host comparison.                                             | Network loading, caching, or suffix trust. |
 | `src/chars.ts`              | Shared character sets, punctuation policy, lookalike map, and static parser character arrays.              | Parser control flow.                       |
 | `src/meta.ts`               | Source metadata, raw and skeleton views, and low-level consume helpers.                                    | URL-specific matching policy.              |
@@ -95,15 +99,32 @@ graph TD
 
 ## Matching Strategy
 
-The parser reads the original input as code points and builds parallel metadata arrays. `raw` text is NFKC-normalized and lowercased through `@textfilters/core`. `skeleton` additionally folds common Cyrillic and Latin lookalikes so obfuscated hosts and schemes can be compared against ASCII rules.
+The parser reads the original input as code points and builds parallel metadata arrays. `raw` text is NFKC-normalized and lowercased through `@textfilters/core`. `skeleton` additionally folds common Cyrillic and Latin lookalikes so obfuscated hosts and schemes can be compared against ASCII rules. Token alphanumerics and host-label characters are classified separately: combining marks remain label content, while scheme and defanged-dot word parsers may skip them as obfuscation separators between letters or immediately before a delimiter or token boundary.
 
 Ranges always point back to the original code point indexes. This keeps masking length-preserving and avoids recalculating offsets after normalization.
 
 Real URL schemes match `http` and `https`. Obfuscated schemes match `hxxp`, split-letter forms such as `h t t p`, and defanged delimiters such as `[:]//` or `[://]`.
 
-Bare domains are parsed from labels separated by real, Unicode, or defanged dots. They require a configured TLD unless the TLD is punycode-like. A whitespace-wrapped U+2022 list bullet between two repeated standalone words is prose, including at sentence boundaries; complete hosts before unrelated text after whitespace-wrapped dot forms or right-spaced single-character dots and continuations with domain or URL-tail evidence remain detectable.
+Bare domains are parsed from labels separated by real, Unicode, or defanged
+dots. They require a delegated TLD from the embedded IANA snapshot, a TLD from
+an explicit non-empty custom list, or a punycode-like TLD. Custom lists without
+any non-empty normalized entries fall back to the embedded snapshot. Plain
+ASCII suffixes that only collide with a decoded IDN skeleton remain unknown. A
+whitespace-wrapped U+2022 list bullet between two repeated standalone words is
+prose, including at sentence boundaries; complete hosts before unrelated text
+after whitespace-wrapped dot forms or right-spaced single-character dots and
+continuations with repeated delegated-suffix or URL-tail evidence remain
+detectable.
+Capitalized delegated suffix words followed by more prose stay outside a
+two-label candidate after a literal sentence dot and optional closing or clause
+punctuation, including following sentence periods, while lowercase or URL-tail
+evidence remains detectable. If that
+prose follows an already-complete host, only the completed host is emitted.
+Unsupported trailing combining marks do not invalidate an otherwise delegated
+TLD prefix, but a prefix recovered before a remaining mark cannot inherit an
+exact-host allowlist entry.
 
-Explicit authorities are parsed after a scheme and can use broader host syntax than bare domains. That path accepts localhost, ports, IPv6 bracket hosts, userinfo, underscores, IDN and emoji labels, and unknown TLDs.
+Explicit authorities are parsed after a scheme and can use broader host syntax than bare domains. That path accepts localhost, ports, IPv6 bracket hosts, userinfo, underscores, IDN and emoji labels, and unknown TLDs. A combining mark immediately before a scheme does not hide that explicit URL.
 
 Allowed-domain checks use parsed hostname labels, not the full URL range. NFKC,
 case, recognized dot variants, zero-width marks, and a trailing DNS root dot
@@ -150,6 +171,7 @@ Masking is idempotent because ranges are collected from the original text before
 
 | Change                                  | Primary files                                      |
 | --------------------------------------- | -------------------------------------------------- |
+| Update delegated TLD data               | `src/tld-data.ts` + public API tests               |
 | Add a new TLD behavior                  | `src/tlds.ts` + public API tests                   |
 | Change defanged dot behavior            | `src/dots.ts` + public API tests                   |
 | Change hxxp/scheme parsing              | `src/scheme.ts` + public API tests                 |

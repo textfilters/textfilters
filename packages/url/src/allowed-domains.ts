@@ -1,15 +1,21 @@
 import { lowerNfkc, stripZeroWidth } from "@textfilters/core";
 
 import { DOT_CHAR_SET } from "./chars.js";
+import { isIgnorableFormatting, isVariationSelectorSymbol } from "./dots.js";
 import type { DomainMatch, TextMeta } from "./meta.js";
 
 export const EMPTY_ALLOWED_DOMAINS: ReadonlySet<string> = new Set();
 
 const normalizeDomainLiteral = (value: unknown): string | null => {
-  const normalized = Array.from(
-    stripZeroWidth(lowerNfkc(String(value ?? "").trim())),
-    (char) => (DOT_CHAR_SET.has(char) ? "." : char),
-  ).join("");
+  const normalized = Array.from(String(value ?? "").trim(), (sourceChar) => {
+    if (isVariationSelectorSymbol(sourceChar)) return "";
+    const normalizedChar = stripZeroWidth(lowerNfkc(sourceChar));
+    const normalizedChars = Array.from(normalizedChar);
+    return normalizedChars.length > 0 &&
+      normalizedChars.every((char) => DOT_CHAR_SET.has(char))
+      ? "."
+      : normalizedChar;
+  }).join("");
   const domain = normalized.endsWith(".")
     ? normalized.slice(0, -1)
     : normalized;
@@ -66,10 +72,11 @@ export const isAllowedDomain = (
       const start = index === 0 ? firstLabelStart : label.start;
       let normalized = "";
       for (let cursor = start; cursor < label.end; cursor++) {
+        if (isIgnorableFormatting(meta, cursor)) continue;
         const source = meta.codePoints[cursor] ?? "";
         const symbol = meta.symbol[cursor] ?? "";
         if (
-          meta.alphaNum[cursor] ||
+          meta.labelChar[cursor] ||
           symbol === "-" ||
           symbol === "_" ||
           /[\p{M}\p{S}]/u.test(source)
@@ -77,7 +84,7 @@ export const isAllowedDomain = (
           normalized += stripZeroWidth(lowerNfkc(source));
         }
       }
-      return normalized;
+      return lowerNfkc(normalized);
     })
     .join(".");
   return allowedDomains.has(hostname);

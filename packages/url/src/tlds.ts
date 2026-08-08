@@ -1,8 +1,16 @@
 import { lowerNfkc } from "@textfilters/core";
 
-// Default TLDs are intentionally small and domain-only; explicit schemes can
-// accept unknown TLDs because the scheme is stronger URL evidence.
-export const DEFAULT_TLDS = [
+import { IANA_TLDS } from "./tld-data.js";
+
+// Bare domains use the complete embedded IANA root-zone snapshot. Explicit
+// schemes still accept unknown TLDs because the scheme is stronger evidence.
+export const DEFAULT_TLDS = IANA_TLDS;
+export const DEFAULT_TLD_SET: ReadonlySet<string> = new Set(DEFAULT_TLDS);
+
+// Ambiguous whitespace-wrapped dots may extend an already complete host only
+// through the compact compatibility set that historically carried that
+// behavior. Other delegated TLD words remain detectable as direct domains.
+export const DEFAULT_TLD_CONTINUATIONS = [
   "ru",
   "рф",
   "com",
@@ -39,8 +47,7 @@ export const normalizeTlds = (
   rawList: readonly string[] | undefined,
 ): string[] => {
   // Preserve caller order while removing empty and duplicate normalized values.
-  const source =
-    Array.isArray(rawList) && rawList.length ? rawList : DEFAULT_TLDS;
+  const source = Array.isArray(rawList) ? rawList : [];
   const seen = new Set<string>();
   const out: string[] = [];
   for (const item of source) {
