@@ -18,6 +18,7 @@ import {
   type CodePointRange,
   type DomainMatch,
   type TextMeta,
+  haveConfusableTldMatch,
 } from "./meta.js";
 import { maybeConsumePathTail } from "./path.js";
 import { parseSchemePrefix } from "./scheme.js";
@@ -406,6 +407,7 @@ const maybePreferBareDomainAfterSentence = (
           completedTld.skeleton,
           tldSet,
           tldSkeletonSet,
+          completedTld.source,
         )
       ) {
         return null;
@@ -474,7 +476,10 @@ const repeatsCompletedTld = (
     completedTld !== undefined &&
     continuedTld !== undefined &&
     (haveCanonicallyEquivalentLabelText(completedTld, continuedTld) ||
-      lowerNfkc(completedTld.skeleton) === lowerNfkc(continuedTld.skeleton))
+      haveConfusableTldMatch(
+        completedTld.source ?? completedTld.raw,
+        continuedTld.source ?? continuedTld.raw,
+      ))
   );
 };
 

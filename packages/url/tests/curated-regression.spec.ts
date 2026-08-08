@@ -16,6 +16,8 @@ describe("@textfilters/url curated regressions", () => {
       ["example.भारत", mask("example.भारत")],
       ["example.বাংলা", mask("example.বাংলা")],
       ["example.சிங்கப்பூர்", mask("example.சிங்கப்பூர்")],
+      ["freeaccount.b\u0131z/path", mask("freeaccount.b\u0131z/path")],
+      ["example.r\u03c5", mask("example.r\u03c5")],
       ["пример.рф", mask("пример.рф")],
       ["https://пример.рф/путь", mask("https://пример.рф/путь")],
       ["site dot com", mask("site dot com")],
@@ -34,6 +36,7 @@ describe("@textfilters/url curated regressions", () => {
   it("keeps unknown bare domains and prose locks unchanged", () => {
     const cases = [
       "example.unknown/path",
+      "example.ey/path",
       "the dotcom bubble",
       "hello dotnet now",
       "not dotorg",

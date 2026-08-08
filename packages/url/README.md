@@ -120,6 +120,7 @@ The filter masks:
 
 - delegated-TLD bare domains such as `example.com`, `youtu.be/example`, and
   `example.travel`;
+- Unicode-confusable TLD spellings that resolve to a delegated ASCII suffix;
 - defanged dot forms such as `example[.]com`, `example dot com`, and `example точка com`;
 - `http`, `https`, and `hxxp` scheme forms, including split-letter obfuscation;
 - explicit-scheme hosts with ports, IPv6 literals, userinfo, IDN/emoji hosts, and unknown TLDs;
@@ -134,7 +135,8 @@ host or URL tail remain detectable and cannot broaden exact-host allowlists.
 
 Configured `allowedDomains` are removed from filter and scanner results after
 parsing. They do not add new TLD detection rules, and subdomains must be listed
-explicitly. This exact-host allowlist is the only default-domain exemption.
+explicitly. Visually similar cross-script spellings remain blocked. This
+exact-host allowlist is the only default-domain exemption.
 
 `censor()` preserves the original JavaScript string length and is idempotent.
 

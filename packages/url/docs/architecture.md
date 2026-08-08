@@ -58,6 +58,7 @@ graph TD
   scanner --> ranges["ranges.ts"]
   scanner --> tlds
   tlds --> tldData["tld-data.ts"]
+  meta --> tldConfusables["tld-confusables.ts"]
   ranges --> allowed
   ranges --> scheme["scheme.ts"]
   ranges --> domain["domain.ts"]
@@ -85,6 +86,7 @@ graph TD
 | `src/scanner.ts`            | URL scanner factory, range scanner output, boolean checks, sink streaming, and cheap clean-text prefilter. | Low-level parser rules.                    |
 | `src/tlds.ts`               | Default TLD selection and custom TLD normalization.                                                        | Host parsing or URL range collection.      |
 | `src/tld-data.ts`           | Generated ASCII and decoded-IDN IANA root-zone snapshot.                                                   | Runtime parsing policy.                    |
+| `src/tld-confusables.ts`    | Generated Unicode confusables subset and explicitly ambiguous TLD glyphs.                                  | General URL normalization policy.          |
 | `src/allowed-domains.ts`    | Exact allowed-domain normalization and parsed-host comparison.                                             | Network loading, caching, or suffix trust. |
 | `src/chars.ts`              | Shared character sets, punctuation policy, lookalike map, and static parser character arrays.              | Parser control flow.                       |
 | `src/meta.ts`               | Source metadata, raw and skeleton views, and low-level consume helpers.                                    | URL-specific matching policy.              |
@@ -101,15 +103,36 @@ graph TD
 
 The parser reads the original input as code points and builds parallel metadata arrays. `raw` text is NFKC-normalized and lowercased through `@textfilters/core`. `skeleton` additionally folds common Cyrillic and Latin lookalikes so obfuscated hosts and schemes can be compared against ASCII rules. Token alphanumerics and host-label characters are classified separately: combining marks remain label content, while scheme and defanged-dot word parsers may skip them as obfuscation separators between letters or immediately before a delimiter or token boundary.
 
+TLD validation has a separate finite-pattern matcher based on Unicode
+confusables. It compares alternative mappings with memoized intersection
+instead of enumerating or truncating combinations, including legacy mappings
+and source-code-point readings that differ from lowercase compatibility
+normalization. An unknown candidate that compatibility-folds to plain ASCII is
+accepted only when its per-code-point pattern matches the configured TLD set
+while using at least one original-source Unicode reading; other positions may
+retain their normalized alternatives. Plain ASCII and unsupported compatibility
+forms remain rejected. The same source-aware matcher is used when deciding
+whether a label continues an already-complete host. Explicit ASCII digit targets
+retain their `0`/`o` and `1`/`l` compatibility alternatives only when the source
+glyph at the substituted position provides that reading.
+Default and custom TLD-set patterns are preindexed by reachable first and last
+skeleton boundaries and output-length intervals, with a bounded per-set result
+cache for repeated candidates. Custom indexes are weakly held and refreshed
+once per scan if a low-level caller changes the set contents.
+It is applied only to the final bare-domain label, which keeps broader host and
+scheme normalization unchanged while recognizing cross-script suffix spellings
+that resolve to a configured delegated TLD.
+
 Ranges always point back to the original code point indexes. This keeps masking length-preserving and avoids recalculating offsets after normalization.
 
 Real URL schemes match `http` and `https`. Obfuscated schemes match `hxxp`, split-letter forms such as `h t t p`, and defanged delimiters such as `[:]//` or `[://]`.
 
 Bare domains are parsed from labels separated by real, Unicode, or defanged
 dots. They require a delegated TLD from the embedded IANA snapshot, a TLD from
-an explicit non-empty custom list, or a punycode-like TLD. Custom lists without
-any non-empty normalized entries fall back to the embedded snapshot. Plain
-ASCII suffixes that only collide with a decoded IDN skeleton remain unknown. A
+an explicit non-empty custom list, a Unicode-confusable spelling resolving to
+one of those TLDs, or a punycode-like TLD. Custom lists without any non-empty
+normalized entries fall back to the embedded snapshot. Plain ASCII suffixes
+that only collide with a decoded IDN skeleton remain unknown. A
 whitespace-wrapped U+2022 list bullet between two repeated standalone words is
 prose, including at sentence boundaries; complete hosts before unrelated text
 after whitespace-wrapped dot forms or right-spaced single-character dots and
@@ -172,6 +195,7 @@ Masking is idempotent because ranges are collected from the original text before
 | Change                                  | Primary files                                      |
 | --------------------------------------- | -------------------------------------------------- |
 | Update delegated TLD data               | `src/tld-data.ts` + public API tests               |
+| Update TLD confusable data              | `src/tld-confusables.ts` + public API tests        |
 | Add a new TLD behavior                  | `src/tlds.ts` + public API tests                   |
 | Change defanged dot behavior            | `src/dots.ts` + public API tests                   |
 | Change hxxp/scheme parsing              | `src/scheme.ts` + public API tests                 |

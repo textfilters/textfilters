@@ -16,6 +16,8 @@ import {
   type Label,
   type LabelText,
   type TextMeta,
+  hasOriginalSourceTldSkeletonMatch,
+  hasTldSkeletonMatch,
   toSkeleton,
 } from "./meta.js";
 import { maybeConsumePathTail } from "./path.js";
@@ -73,9 +75,11 @@ export const parseLabel = (
   let last = -1;
   let raw = "";
   let skeleton = "";
+  let source = "";
   const appendLabelText = (text: LabelText): void => {
     raw += text.raw;
     skeleton += text.skeleton;
+    source += text.source ?? text.raw;
   };
 
   while (pos < meta.codePoints.length) {
@@ -84,7 +88,11 @@ export const parseLabel = (
       if (rawChar) {
         if (first < 0) first = pos;
         last = pos;
-        appendLabelText({ raw: rawChar, skeleton: meta.skeleton[pos] });
+        appendLabelText({
+          raw: rawChar,
+          skeleton: meta.skeleton[pos],
+          source: meta.codePoints[pos],
+        });
         if (raw.length > 63) return null;
       }
       pos++;
@@ -111,7 +119,11 @@ export const parseLabel = (
       const gapRaw = meta.raw.slice(gapStart, pos).join("");
       const hasOnlyHostnameJoinSymbols = /^[-_]+$/u.test(visibleGapRaw);
       if (!gapHasWhitespace && /^-+$/u.test(visibleGapRaw)) {
-        appendLabelText({ raw: visibleGapRaw, skeleton: visibleGapRaw });
+        appendLabelText({
+          raw: visibleGapRaw,
+          skeleton: visibleGapRaw,
+          source: visibleGapRaw,
+        });
         if (raw.length > 63) return null;
       }
       // Join only very short whitespace-split pieces. Longer visible runs are
@@ -172,7 +184,7 @@ export const parseLabel = (
   }
 
   if (first < 0 || raw.length === 0 || raw.length > 63) return null;
-  return { start: first, end: last + 1, pos, raw, skeleton };
+  return { start: first, end: last + 1, pos, raw, skeleton, source };
 };
 
 export const isValidTld = (
@@ -180,6 +192,7 @@ export const isValidTld = (
   tldSkeleton: string,
   tldSet: ReadonlySet<string>,
   tldSkeletonSet: ReadonlySet<string>,
+  tldSource: string = tldRaw,
 ): boolean => {
   const normalizedRaw = lowerNfkc(tldRaw);
   const normalizedSkeleton = toSkeleton(normalizedRaw);
@@ -195,11 +208,16 @@ export const isValidTld = (
     ASCII_ONLY_RE.test(normalizedRaw) &&
     normalizedRaw === normalizedSkeleton
   ) {
-    return false;
+    if (ASCII_ONLY_RE.test(tldSource)) return false;
+    return hasOriginalSourceTldSkeletonMatch(tldSource, tldSet);
   }
-  return (
-    tldSkeletonSet.has(normalizedSkeleton) || tldSkeletonSet.has(tldSkeleton)
-  );
+  if (
+    tldSkeletonSet.has(normalizedSkeleton) ||
+    tldSkeletonSet.has(tldSkeleton)
+  ) {
+    return true;
+  }
+  return hasTldSkeletonMatch(tldSource, tldSet);
 };
 
 export const consumeEnglishContractionSuffix = (
@@ -234,6 +252,7 @@ const trimTldTrailingProse = (
 ): Label | null => {
   let raw = "";
   let skeleton = "";
+  let source = "";
   let last = -1;
   for (let cursor = label.start; cursor < label.pos; cursor++) {
     const symbol = meta.symbol[cursor];
@@ -248,18 +267,31 @@ const trimTldTrailingProse = (
       UNICODE_MARK_RE.test(meta.raw[cursor] ?? "") ||
       symbol === "-" ||
       contractionEnd === label.pos;
-    if (canSplit && raw && isValidTld(raw, skeleton, tldSet, tldSkeletonSet)) {
-      return { start: label.start, end: last + 1, pos: cursor, raw, skeleton };
+    if (
+      canSplit &&
+      raw &&
+      isValidTld(raw, skeleton, tldSet, tldSkeletonSet, source)
+    ) {
+      return {
+        start: label.start,
+        end: last + 1,
+        pos: cursor,
+        raw,
+        skeleton,
+        source,
+      };
     }
     if (meta.labelChar[cursor]) {
       raw += meta.raw[cursor];
       skeleton += meta.skeleton[cursor];
+      source += meta.codePoints[cursor] ?? meta.raw[cursor];
       last = cursor;
       continue;
     }
     if (symbol === "-" && !meta.whitespace[cursor] && !meta.zeroWidth[cursor]) {
       raw += meta.raw[cursor];
       skeleton += meta.raw[cursor];
+      source += meta.codePoints[cursor] ?? meta.raw[cursor];
       last = cursor;
     }
   }
@@ -341,7 +373,13 @@ export const parseDomain = (
     if (
       !allowUnknownTld &&
       labels.length >= 2 &&
-      isValidTld(currentTld.raw, currentTld.skeleton, tldSet, tldSkeletonSet) &&
+      isValidTld(
+        currentTld.raw,
+        currentTld.skeleton,
+        tldSet,
+        tldSkeletonSet,
+        currentTld.source,
+      ) &&
       (isWhitespaceWrappedDot(meta, dot) || isRightSpacedDotSymbol(meta, dot))
     ) {
       completedBeforeProseSeparator = {
@@ -367,7 +405,13 @@ export const parseDomain = (
       afterDot < meta.codePoints.length &&
       meta.whitespace[afterDot] &&
       (allowUnknownTld ||
-        isValidTld(currentTld.raw, currentTld.skeleton, tldSet, tldSkeletonSet))
+        isValidTld(
+          currentTld.raw,
+          currentTld.skeleton,
+          tldSet,
+          tldSkeletonSet,
+          currentTld.source,
+        ))
     ) {
       // `example.com. next` is sentence punctuation after a valid TLD, not a
       // third label that should make the whole candidate fail.
@@ -396,7 +440,7 @@ export const parseDomain = (
   let tld = labels[labels.length - 1];
   if (
     !allowUnknownTld &&
-    !isValidTld(tld.raw, tld.skeleton, tldSet, tldSkeletonSet)
+    !isValidTld(tld.raw, tld.skeleton, tldSet, tldSkeletonSet, tld.source)
   ) {
     const trimmedTld = trimTldTrailingProse(meta, tld, tldSet, tldSkeletonSet);
     if (!trimmedTld) return completedBeforeProseSeparator;
@@ -442,7 +486,8 @@ export const parseDomain = (
     labels.length === completedBeforeProseSeparator.labels.length + 1 &&
     end === tld.end &&
     !DEFAULT_TLD_CONTINUATION_SET.has(tld.raw) &&
-    !DEFAULT_TLD_CONTINUATION_SET.has(tld.skeleton)
+    !DEFAULT_TLD_CONTINUATION_SET.has(tld.skeleton) &&
+    !hasTldSkeletonMatch(tld.source ?? tld.raw, DEFAULT_TLD_CONTINUATION_SET)
   ) {
     return completedBeforeProseSeparator;
   }

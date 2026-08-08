@@ -21,7 +21,7 @@ import {
   EMPTY_ALLOWED_DOMAINS,
   normalizeAllowedDomains,
 } from "./allowed-domains.js";
-import { createMeta, toSkeleton } from "./meta.js";
+import { createMeta, prepareTldSkeletonIndex, toSkeleton } from "./meta.js";
 import { collectRangeMatches, collectRanges } from "./ranges.js";
 import { DEFAULT_TLDS, DEFAULT_TLD_SET, normalizeTlds } from "./tlds.js";
 const DEFAULT_TLD_SKELETON_SET: ReadonlySet<string> = new Set(
@@ -116,6 +116,7 @@ export function scanUrlRanges(
   const source = String(text ?? "");
   if (!source || !hasUrlCandidate(source)) return [];
 
+  prepareTldSkeletonIndex(tldSet);
   const meta = createMeta(source);
   return collectRanges(meta, tldSet, tldSkeletonSet, allowedDomainSet);
 }
@@ -130,6 +131,7 @@ export function checkUrlRanges(
 ): boolean {
   if (!hasUrlCandidateInput(input)) return false;
 
+  prepareTldSkeletonIndex(tldSet);
   const meta = createMeta(input.text);
   let found = false;
   collectRangeMatches(meta, tldSet, tldSkeletonSet, allowedDomainSet, () => {
@@ -150,6 +152,7 @@ export function scanUrlRangeMatches(
 ): boolean {
   if (!hasUrlCandidateInput(input)) return true;
 
+  prepareTldSkeletonIndex(tldSet);
   const meta = createMeta(input.text);
   return collectRangeMatches(
     meta,
@@ -170,7 +173,8 @@ function hasUrlCandidateInput(input: UrlScanInput): boolean {
     hints.hasSlash === false &&
     hints.hasColon === false &&
     hints.hasNonAscii === false &&
-    !hasUrlWordCandidate(input.text)
+    !hasUrlWordCandidate(input.text) &&
+    !hasLikelyDomainDot(input.text)
   ) {
     return false;
   }
@@ -181,6 +185,7 @@ function hasUrlCandidateInput(input: UrlScanInput): boolean {
 function hasUrlCandidate(source: string): boolean {
   const { normalized, skeleton } = createPrefilterViews(source);
   return (
+    hasLikelyDomainDot(source) ||
     hasLikelyDomainDot(normalized) ||
     normalized.includes(":") ||
     normalized.includes("/") ||

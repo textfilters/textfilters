@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   createUrlFilter,
   filter,
+  scanUrlRanges,
   URL_FILTER_NAME,
   urlFilter,
 } from "../src/index.js";
@@ -228,6 +229,106 @@ describe("compatibility behavior", () => {
     );
   });
 
+  it("censors Unicode-confusable TLD variants", () => {
+    const compound = "freeaccount.b\u0131z/account/source.r\u03c5";
+
+    expect(filter.censor(compound)).toBe(mask(compound));
+    expect(filter.censor("example.r\u03c5/path")).toBe(
+      mask("example.r\u03c5/path"),
+    );
+    expect(filter.censor("example.r\u0443/path")).toBe(
+      mask("example.r\u0443/path"),
+    );
+    for (const iota of ["\u03b9", "\u0399"]) {
+      const domain = `example.b${iota}z`;
+      expect(filter.censor(domain)).toBe(mask(domain));
+    }
+    const multiCharacterSkeleton = "example.co\u{11700}";
+    expect(filter.censor(multiCharacterSkeleton)).toBe(
+      "*".repeat(multiCharacterSkeleton.length),
+    );
+    expect(filter.censor("example.corn")).toBe("example.corn");
+    expect(filter.censor("x.сorn")).toBe("x.сorn");
+    const rnSource = "x.co\u{11700}";
+    expect(filter.censor(rnSource)).toBe("*".repeat(rnSource.length));
+  });
+
+  it("matches every ambiguous TLD branch without configuration asymmetry", () => {
+    const ambiguous = "\u03c5".repeat(6);
+    const mixed = `x.u${"\u03c5".repeat(5)}`;
+    expect(createUrlFilter({ tlds: [ambiguous] }).censor(mixed)).toBe(
+      mask(mixed),
+    );
+
+    for (const [configured, candidate] of [
+      ["b\u0456z", "b\u0131z"],
+      ["b\u0131z", "b\u0456z"],
+      ["c0m", "cοm"],
+      ["c1", "cⅼ"],
+    ] as const) {
+      const domain = `x.${candidate}`;
+      expect(createUrlFilter({ tlds: [configured] }).censor(domain)).toBe(
+        mask(domain),
+      );
+    }
+
+    expect(createUrlFilter({ tlds: ["c1"] }).censor("x.cl")).toBe("x.cl");
+    expect(createUrlFilter({ tlds: ["c1"] }).censor("x.сl")).toBe("x.сl");
+    expect(createUrlFilter({ tlds: ["c1"] }).censor("x.сⅼ")).toBe(mask("x.сⅼ"));
+    expect(createUrlFilter({ tlds: ["c0m"] }).censor("x.ｃom")).toBe("x.ｃom");
+    expect(createUrlFilter({ tlds: ["c0m"] }).censor("x.cｏm")).toBe(
+      mask("x.cｏm"),
+    );
+    expect(createUrlFilter({ tlds: ["l0m"] }).censor("x.ℐom")).toBe("x.ℐom");
+    expect(createUrlFilter({ tlds: ["l0m"] }).censor("x.ℐｏm")).toBe(
+      mask("x.ℐｏm"),
+    );
+    expect(createUrlFilter({ tlds: ["i"] }).censor("x.ͺ")).toBe(mask("x.ͺ"));
+    expect(filter.censor("example.c０m")).toBe(mask("example.c０m"));
+    expect(filter.censor("example.on１ine")).toBe(mask("example.on１ine"));
+    expect(filter.censor("example.c0m")).toBe("example.c0m");
+    expect(filter.censor("example.on1ine")).toBe("example.on1ine");
+
+    const rnFilter = createUrlFilter({ tlds: ["corn"] });
+    expect(rnFilter.censor("x.com")).toBe("x.com");
+    expect(rnFilter.censor("x.coм")).toBe(mask("x.coм"));
+  });
+
+  it("keeps repeated Unicode TLD misses bounded for default and custom sets", () => {
+    const texts = [
+      "x.\u00e9\u00e9\u00e9 ".repeat(100),
+      "x.ｚｚｚ ".repeat(100),
+    ];
+    const customFilter = createUrlFilter({
+      tlds: Array.from({ length: 1_600 }, (_, index) => `custom${index}`),
+    });
+
+    for (const text of texts) {
+      expect(filter.censor(text)).toBe(text);
+      expect(customFilter.censor(text)).toBe(text);
+    }
+  });
+
+  it("does not rescan custom registries for repeated compatibility misses", () => {
+    class IterationCountingSet extends Set<string> {
+      iterations = 0;
+
+      override [Symbol.iterator](): SetIterator<string> {
+        this.iterations++;
+        return super[Symbol.iterator]();
+      }
+    }
+
+    const tlds = new IterationCountingSet(
+      Array.from({ length: 1_600 }, (_, index) => `custom${index}`),
+    );
+    const skeletons = new Set(tlds);
+    tlds.iterations = 0;
+
+    expect(scanUrlRanges("x.ｚｚｚ ".repeat(100), tlds, skeletons)).toEqual([]);
+    expect(tlds.iterations).toBeLessThanOrEqual(2);
+  });
+
   it("censors defanged dots", () => {
     expect(filter.censor("example[.]com")).toBe(mask("example[.]com"));
     expect(filter.censor("example dot com")).toBe(mask("example dot com"));
@@ -437,9 +538,11 @@ describe("compatibility behavior", () => {
 
   it("allows an exact delegated domain without trusting subdomains", () => {
     const f = createUrlFilter({ allowedDomains: ["youtu.be"] });
+    const lookalike = "youtu.b\u0435/watch";
 
     expect(f.censor("youtu.be/watch")).toBe("youtu.be/watch");
     expect(f.censor("www.youtu.be/watch")).toBe(mask("www.youtu.be/watch"));
+    expect(f.censor(lookalike)).toBe(mask(lookalike));
   });
 
   it("normalizes Unicode allowed domains without broadening scripts", () => {

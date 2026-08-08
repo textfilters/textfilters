@@ -174,6 +174,24 @@ describe("URL scanner", () => {
     expect(seen).toEqual([[6, 23]]);
   });
 
+  it("does not let false shared hints hide source-only TLD glyphs", () => {
+    const text = "x.ͺ";
+    const input = {
+      text,
+      codePoints: Array.from(text),
+      hints: {
+        hasNonAscii: false,
+        hasDot: false,
+        hasSlash: false,
+        hasColon: false,
+      },
+    };
+    const scanner = createUrlScanner({ tlds: ["i"] });
+
+    expect(scanner.check(input)).toBe(true);
+    expect(scanner.scan(input)).toEqual({ ranges: wholeRange(text) });
+  });
+
   it("streams prefixed, bare-domain, and punctuation-trimmed ranges", () => {
     const text = "go https://example.com/path, then example.org.";
     const seen: Array<readonly [number, number]> = [];
@@ -686,6 +704,7 @@ describe("URL scanner", () => {
       ranges: [],
       allowedDomains: ["example.coffee"],
     });
+    expectScannerFixture({ text: "x.oﬃce", ranges: wholeRange("x.oﬃce") });
   });
 
   it("skips orphan combining marks at delegated-label starts", () => {
@@ -774,6 +793,58 @@ describe("URL scanner", () => {
     }
   });
 
+  it("detects Unicode-confusable TLDs through every scanner path", () => {
+    for (const domain of [
+      "freeaccount.b\u0131z/path",
+      "example.r\u03c5/path",
+      "example.r\u0443/path",
+      "example.onℐine/path",
+      "example.inſo/path",
+      "example.ſℐsh/path",
+      "example.\u037anfo/path",
+    ]) {
+      const text = `visit ${domain} now`;
+      const start = Array.from("visit ").length;
+      const expected = [start, start + Array.from(domain).length] as const;
+      expectScannerFixture({ text, ranges: [expected] });
+    }
+
+    expectScannerFixture({
+      text: "youtu.b\u0435/watch",
+      ranges: [[0, Array.from("youtu.b\u0435/watch").length]],
+      allowedDomains: ["youtu.be"],
+    });
+
+    expectScannerFixture({ text: "example.ey/path", ranges: [] });
+    expectScannerFixture({
+      text: "example.\uff45\uff59/path",
+      ranges: [],
+    });
+    expectScannerFixture({ text: "example.onIine/path", ranges: [] });
+    expectScannerFixture({ text: "example.inso/path", ranges: [] });
+  });
+
+  it("does not broaden allowlists before confusable TLD continuations", () => {
+    for (const { text, exactAllowedDomain } of [
+      {
+        text: "foo.com • c\u03bfm",
+        exactAllowedDomain: "foo.com.c\u03bfm",
+      },
+      { text: "foo.com • inſo", exactAllowedDomain: "foo.com.inso" },
+    ]) {
+      expectScannerFixture({
+        text,
+        ranges: wholeRange(text),
+        allowedDomains: ["foo.com"],
+      });
+      expectScannerFixture({
+        text,
+        ranges: [],
+        allowedDomains: [exactAllowedDomain],
+      });
+    }
+  });
+
   it("does not let repeated bullet labels broaden exact-host allowlists", () => {
     const cases = [
       {
@@ -846,6 +917,18 @@ describe("URL scanner", () => {
     for (const [first, second] of [
       [composed, decomposed],
       [decomposed, composed],
+    ] as const) {
+      for (const separator of ["•", "·", "⋅", "・", "."]) {
+        const text = `foo.${first} ${separator} ${second}`;
+        expectScannerFixture({ text, ranges: wholeRange(text) });
+      }
+    }
+  });
+
+  it("recovers confusable repeated delegated continuations", () => {
+    for (const [first, second] of [
+      ["ru", "rυ"],
+      ["rυ", "ru"],
     ] as const) {
       for (const separator of ["•", "·", "⋅", "・", "."]) {
         const text = `foo.${first} ${separator} ${second}`;
@@ -1062,6 +1145,13 @@ describe("URL scanner", () => {
     expect(
       createUrlFilter({ tlds: ["internal", "corp"] }).censor(continuation),
     ).toBe(mask(continuation));
+
+    const mutableTlds = new Set(["internal"]);
+    expect(scanUrlRanges("svc.internal", mutableTlds)).toEqual([[0, 12]]);
+    mutableTlds.delete("internal");
+    mutableTlds.add("corp");
+    expect(scanUrlRanges("svc.internal", mutableTlds)).toEqual([]);
+    expect(scanUrlRanges("svc.corp", mutableTlds)).toEqual([[0, 8]]);
   });
 
   it("keeps allowlist behavior aligned across scanner APIs", () => {
