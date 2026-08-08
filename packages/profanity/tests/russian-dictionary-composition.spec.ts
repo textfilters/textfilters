@@ -129,14 +129,14 @@ describe("Russian dictionary composition", () => {
           severity: "high",
         }),
         expect.objectContaining({
-          id: "ru.vulgar.pizdec.digit.split.loose",
-          category: "VULGAR",
-          severity: "medium",
+          id: "ru.obscene.pizdec.digit.split.loose",
+          category: "OBSCENE_MAT",
+          severity: "high",
         }),
         expect.objectContaining({
           id: "ru.insult.suka.family",
           category: "STRONG_INSULT",
-          severity: "high",
+          severity: "medium",
         }),
         expect.objectContaining({
           id: "ru.obscene.zalupa.family",
@@ -146,7 +146,7 @@ describe("Russian dictionary composition", () => {
         expect.objectContaining({
           id: "ru.vulgar.govno.family",
           category: "VULGAR",
-          severity: "medium",
+          severity: "low",
         }),
       ]),
     );
@@ -179,7 +179,7 @@ describe("Russian dictionary composition", () => {
     ).toContainEqual({
       id: "ru.obscene.blya",
       category: "OBSCENE_MAT",
-      severity: "medium",
+      severity: "high",
     });
     expect(
       RUSSIAN_PROFANITY_DICTIONARY.rules.map((rule) => ({
@@ -198,7 +198,7 @@ describe("Russian dictionary composition", () => {
     expect(filter.analyze("бля")[0]).toMatchObject({
       ruleId: "ru.obscene.blya",
       category: "OBSCENE_MAT",
-      severity: "medium",
+      severity: "high",
       mode: "strict",
     });
     expect(filter.analyze("хули")[0]).toMatchObject({
@@ -226,7 +226,7 @@ describe("Russian dictionary composition", () => {
         expect.objectContaining({
           ruleId: "ru.obscene.blya",
           category: "OBSCENE_MAT",
-          severity: "medium",
+          severity: "high",
         }),
       ]),
     );

@@ -81,7 +81,7 @@ export default russianFamilyDictionary([
   russianRule({
     id: "ru.vulgar.droch.family",
     category: "VULGAR",
-    severity: "medium",
+    severity: "low",
     source: token(regexGroup(DROCH_FORMS)),
     match: "strict",
   }),

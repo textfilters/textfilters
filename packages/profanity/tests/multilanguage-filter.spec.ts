@@ -34,7 +34,7 @@ describe("configured multi-language profanity filter", () => {
 
     expect(configured.censor(text)).toBe("*** ****");
     expect(new Set(ruleIds)).toEqual(
-      new Set(["ru.obscene.blya", "en.obscene.shit"]),
+      new Set(["ru.obscene.blya", "en.vulgar.shit"]),
     );
   });
 
@@ -208,8 +208,8 @@ describe("configured multi-language profanity filter", () => {
       },
     ]);
 
-    expect(configured.check("dick")).toBe(true);
-    expect(configured.check("shit")).toBe(false);
+    expect(configured.check("dick")).toBe(false);
+    expect(configured.check("shit")).toBe(true);
     expect(configured.check("dick", { minSeverity: "high" })).toBe(false);
   });
 

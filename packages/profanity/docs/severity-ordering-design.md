@@ -29,8 +29,8 @@ metadata required by the requested filter. Empty arrays intentionally act as
 empty filters.
 
 Runtime string terms remain unclassified and omit taxonomy metadata. Object
-terms can carry `category` and `severity`. The built-in Russian dictionary is
-object-backed but its current rules do not attach taxonomy metadata yet.
+terms can carry `category` and `severity`. Every built-in Russian and English
+rule attaches reviewed taxonomy metadata.
 
 ## Audit Findings
 
@@ -38,6 +38,8 @@ Severity values are present in four places:
 
 - `src/types.ts` defines the public `ProfanitySeverity` union.
 - `src/match-options.ts` applies exact and minimum-severity filtering.
+- [Built-in Taxonomy And Severity Policy](severity-policy.md) defines how every
+  built-in rule uses the scale.
 - `README.md`, [Match Metadata Design](match-metadata-design.md), and
   [Profanity Taxonomy Metadata Plan](profanity-taxonomy-plan.md) describe
   severity as rule metadata, not as final moderation policy.

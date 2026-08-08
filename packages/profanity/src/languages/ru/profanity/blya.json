@@ -4,7 +4,7 @@
     {
       "id": "ru.obscene.blya",
       "category": "OBSCENE_MAT",
-      "severity": "medium",
+      "severity": "high",
       "source": "[б6]ля",
       "match": {
         "strict": {},
@@ -34,7 +34,7 @@
     {
       "id": "ru.obscene.blea",
       "category": "OBSCENE_MAT",
-      "severity": "medium",
+      "severity": "high",
       "source": "[б6]л[еэ]а+(?:[а-яё]+)?",
       "match": {
         "strict": {},
@@ -44,7 +44,7 @@
     {
       "id": "ru.obscene.bleat.family",
       "category": "OBSCENE_MAT",
-      "severity": "medium",
+      "severity": "high",
       "source": "[б6]л[еэ]а+[тд]ь(?:[а-яё]+)?",
       "match": {
         "strict": {},
@@ -54,7 +54,7 @@
     {
       "id": "ru.obscene.blya.translit",
       "category": "OBSCENE_MAT",
-      "severity": "medium",
+      "severity": "high",
       "source": "(?<!\\p{L})[bьв]l(?:[yу][aа]|i[aа]|j[aа])(?!\\p{L})",
       "match": {
         "strict": {},
@@ -78,7 +78,7 @@
     {
       "id": "ru.obscene.bleat.translit",
       "category": "OBSCENE_MAT",
-      "severity": "medium",
+      "severity": "high",
       "source": "(?<!\\p{L})[bьв]l[eе][aа]d(?:[a-zа-яё]+)?(?!\\p{L})",
       "match": {
         "strict": {},
@@ -86,9 +86,9 @@
       }
     },
     {
-      "id": "ru.obscene.lyat",
-      "category": "OBSCENE_MAT",
-      "severity": "medium",
+      "id": "ru.euphemism.lyat",
+      "category": "EUPHEMISM",
+      "severity": "soft",
       "source": "(?<!\\p{L})ля[тд]ь(?:[а-яё]+)?(?!\\p{L})",
       "match": {
         "strict": {},
@@ -111,7 +111,7 @@
     {
       "id": "ru.obscene.blyad.short.loose",
       "category": "OBSCENE_MAT",
-      "severity": "medium",
+      "severity": "high",
       "source": "(?<!\\p{L})[б6]л[я9@][дт](?!\\p{L})",
       "match": {
         "loose": {

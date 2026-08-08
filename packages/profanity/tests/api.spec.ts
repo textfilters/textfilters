@@ -272,7 +272,7 @@ describe("public entrypoint and dictionary lifecycle", () => {
     expect(dictionaryFilter.analyze("бля")[0]).toMatchObject({
       ruleId: "ru.obscene.blya",
       category: "OBSCENE_MAT",
-      severity: "medium",
+      severity: "high",
       mode: "strict",
     });
   });
@@ -285,7 +285,7 @@ describe("public entrypoint and dictionary lifecycle", () => {
     expect(dictionaryFilter.analyze("бля")[0]).toMatchObject({
       ruleId: "ru.obscene.blya",
       category: "OBSCENE_MAT",
-      severity: "medium",
+      severity: "high",
       mode: "strict",
     });
   });

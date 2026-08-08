@@ -164,12 +164,16 @@ behavior of calls that omit options.
 
 ## Corpus Taxonomy Audit Status
 
-The built-in Russian dictionary is object-backed so each package-owned rule can
-carry source, match behavior, and optional taxonomy metadata in one place. The
-current Russian rules do not attach taxonomy metadata yet. Runtime object-backed
-terms and future taxonomy-backed corpus rules can carry metadata, and tests
-enforce that any taxonomy-backed built-in rule uses a valid category and
-severity.
+The built-in Russian and English dictionaries are object-backed, and every
+package-owned rule carries source, match behavior, and reviewed taxonomy
+metadata in one place. Tests enforce category-specific severity bands, complete
+metadata coverage, audited cross-language distributions, representative
+threshold behavior, and consistency across overlapping matcher views. Runtime
+object-backed terms can also carry metadata; runtime string terms remain
+unclassified.
+
+See [Built-in Taxonomy And Severity Policy](severity-policy.md) for the current
+classification rubric and compatibility notes.
 
 ## Composition Evidence
 

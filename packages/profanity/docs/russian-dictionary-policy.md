@@ -38,9 +38,23 @@ impact:
 | `VULGAR`        | Vulgar but less severe expletives, reactions, and scatology.     |
 | `EUPHEMISM`     | Soft euphemistic forms when intentionally covered.               |
 
-Severity is ordered as `soft < low < medium < high`. Do not use severity to
-mark implementation confidence. If a rule is risky, narrow the source or add
-false-positive locks instead.
+Severity is ordered as `soft < low < medium < high`:
+
+- `high` covers core explicit mat and the strongest direct insults;
+- `medium` covers mat derivatives and ordinary direct vulgar insults;
+- `low` covers everyday scatology, body terms, weak sexual vulgarity, and
+  mild substitutes;
+- `soft` covers shortened or intentionally softened euphemisms.
+
+This keeps `бля` and `пиздец` at `high`, forms such as `прихуел`, `хуйня`,
+`сука`, and `гандон` at `medium`, and `говно`, `жопа`, `сру`, and `дрочить`
+at `low`. Euphemistic `лять`, `ёпт`, and `пох` are `soft`.
+
+Do not use severity to mark implementation confidence. If a rule is risky,
+narrow the source or add false-positive locks instead. Strict, loose, split,
+and transliterated views of the same expression must keep the same taxonomy.
+See [Built-in taxonomy and severity policy](severity-policy.md) for the shared
+cross-language rubric and migration notes.
 
 ## Strict And Loose Policy
 

@@ -164,9 +164,9 @@ describe("Russian coverage audit", () => {
       {
         input: "п1и1з1д1е1ц",
         expected: {
-          ruleId: "ru.vulgar.pizdec.digit.split.loose",
-          category: "VULGAR",
-          severity: "medium",
+          ruleId: "ru.obscene.pizdec.digit.split.loose",
+          category: "OBSCENE_MAT",
+          severity: "high",
           mode: "loose",
         },
       },
@@ -1391,7 +1391,7 @@ describe("Russian coverage audit", () => {
         expected: {
           ruleId: "ru.insult.suka.family",
           category: "STRONG_INSULT",
-          severity: "high",
+          severity: "medium",
         },
       },
       {
@@ -1399,7 +1399,7 @@ describe("Russian coverage audit", () => {
         expected: {
           ruleId: "ru.insult.gandon.family",
           category: "STRONG_INSULT",
-          severity: "high",
+          severity: "medium",
         },
       },
       {
@@ -1413,9 +1413,9 @@ describe("Russian coverage audit", () => {
       {
         input: "херня",
         expected: {
-          ruleId: "ru.vulgar.her.family",
-          category: "VULGAR",
-          severity: "medium",
+          ruleId: "ru.euphemism.her.family",
+          category: "EUPHEMISM",
+          severity: "low",
         },
       },
       {
@@ -1471,7 +1471,7 @@ describe("Russian coverage audit", () => {
         expected: {
           ruleId: "ru.vulgar.srat.family",
           category: "VULGAR",
-          severity: "medium",
+          severity: "low",
         },
       },
       {
@@ -1503,9 +1503,9 @@ describe("Russian coverage audit", () => {
     expect(filter.check("залупа", { categories: ["OBSCENE_MAT"] })).toBe(true);
     expect(filter.check("залупа", { categories: ["VULGAR"] })).toBe(false);
     expect(filter.check("сука", { categories: ["STRONG_INSULT"] })).toBe(true);
-    expect(filter.check("сука", { minSeverity: "high" })).toBe(true);
-    expect(filter.check("говно", { severities: ["low"] })).toBe(false);
-    expect(filter.check("говно", { minSeverity: "medium" })).toBe(true);
+    expect(filter.check("сука", { minSeverity: "high" })).toBe(false);
+    expect(filter.check("говно", { severities: ["low"] })).toBe(true);
+    expect(filter.check("говно", { minSeverity: "medium" })).toBe(false);
     expect(filter.check("zasranca", { categories: ["STRONG_INSULT"] })).toBe(
       true,
     );

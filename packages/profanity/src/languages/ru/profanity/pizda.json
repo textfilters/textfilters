@@ -115,9 +115,9 @@
       }
     },
     {
-      "id": "ru.vulgar.pizdec.loose",
-      "category": "VULGAR",
-      "severity": "medium",
+      "id": "ru.obscene.pizdec.loose",
+      "category": "OBSCENE_MAT",
+      "severity": "high",
       "source": "п[иuiі1]+[з3]де+ц",
       "match": {
         "loose": {
@@ -126,9 +126,9 @@
       }
     },
     {
-      "id": "ru.vulgar.pizdec.digit.split.loose",
-      "category": "VULGAR",
-      "severity": "medium",
+      "id": "ru.obscene.pizdec.digit.split.loose",
+      "category": "OBSCENE_MAT",
+      "severity": "high",
       "source": "(?<!\\p{L})п(?=1[иuiі])1[иuiі]1?[з3]1?д(?=1е)1е(?=1ц)1ц(?!\\p{L})",
       "match": {
         "loose": {}

@@ -143,7 +143,7 @@ export const drochCoverageMetadataCases: readonly ReviewedGapMetadataCase[] = [
     expected: {
       ruleId: "ru.vulgar.droch.family",
       category: "VULGAR",
-      severity: "medium",
+      severity: "low",
     },
   },
   {
@@ -151,7 +151,7 @@ export const drochCoverageMetadataCases: readonly ReviewedGapMetadataCase[] = [
     expected: {
       ruleId: "ru.vulgar.droch.family",
       category: "VULGAR",
-      severity: "medium",
+      severity: "low",
     },
   },
 ];

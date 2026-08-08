@@ -124,9 +124,10 @@ for (const match of matches) {
 ```
 
 `ruleId`, `category`, and `severity` are present when the matched rule has
-taxonomy metadata. Built-in Russian dictionary rules include semantic rule ids
-and taxonomy metadata. Runtime string terms remain unclassified and omit those
-fields unless callers provide structured runtime rules with metadata.
+taxonomy metadata. Every built-in Russian and English dictionary rule includes
+an id and reviewed taxonomy metadata. Runtime string terms remain unclassified
+and omit those fields unless callers provide structured runtime rules with
+metadata.
 
 Taxonomy options can narrow matches to rules with specific metadata:
 
@@ -176,6 +177,12 @@ The taxonomy filtering contract is:
 - `severities` combined with `minSeverity` is the intersection between the
   exact severity set and the threshold.
 - The severity order is `soft < low < medium < high`.
+
+The built-in scale classifies core explicit obscenity as `high`, obscene
+derivatives and ordinary direct vulgar insults as `medium`, everyday scatology
+and weak vulgarity as `low`, and shortened substitutes as `soft`. See
+[Built-in taxonomy and severity policy](docs/severity-policy.md) for the full
+cross-language rubric, representative thresholds, and rule-id migration table.
 
 ### `createProfanityScanner(options?)`
 
@@ -464,8 +471,10 @@ toxicity or hate-speech classifier.
 The Russian dictionary is maintained as split family data with an explicit rule
 order. New high-risk family rules are expected to add nearby coverage and
 false-positive tests. See [Russian dictionary policy](docs/russian-dictionary-policy.md)
-for the built-in taxonomy, transliteration, and false-positive review policy,
-and [Russian profanity coverage map](docs/russian-coverage-map.md) for covered,
+for the language-specific transliteration and false-positive review policy,
+[Built-in taxonomy and severity policy](docs/severity-policy.md) for the shared
+classification rubric, and
+[Russian profanity coverage map](docs/russian-coverage-map.md) for covered,
 partial, missing, and intentionally unsupported Russian family areas.
 
 `validateProfanityLanguageDictionary(dictionary)` checks the source dictionary
@@ -642,6 +651,8 @@ public fallback for long clean and matching inputs.
 - Allocation-aware composed streaming is available only when every selected
   profile exposes the internal streaming capability.
 - Built-in corpus behavior is intentionally locked by compatibility tests.
+- Taxonomy-aware callers must review built-in severity changes when upgrading;
+  calls without taxonomy options retain the same detection and masking behavior.
 
 ## Compatibility And Intentional Changes
 

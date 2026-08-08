@@ -13,9 +13,9 @@ const YOPT_FORMS = [
 
 export default russianFamilyDictionary([
   russianRule({
-    id: "ru.vulgar.yopt.family",
-    category: "VULGAR",
-    severity: "medium",
+    id: "ru.euphemism.yopt.family",
+    category: "EUPHEMISM",
+    severity: "soft",
     source: token(regexGroup(YOPT_FORMS)),
     match: "strict",
   }),

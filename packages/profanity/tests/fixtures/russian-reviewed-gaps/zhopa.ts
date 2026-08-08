@@ -73,7 +73,7 @@ export const zhopaCoverageMetadataCases: readonly ReviewedGapMetadataCase[] = [
     expected: {
       ruleId: "ru.vulgar.zhopa.family",
       category: "VULGAR",
-      severity: "medium",
+      severity: "low",
     },
   },
   {
@@ -81,7 +81,7 @@ export const zhopaCoverageMetadataCases: readonly ReviewedGapMetadataCase[] = [
     expected: {
       ruleId: "ru.vulgar.zhopa.family",
       category: "VULGAR",
-      severity: "medium",
+      severity: "low",
     },
   },
 ];

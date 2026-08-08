@@ -22,8 +22,9 @@ The taxonomy metadata exposure work is complete for the current public contract:
 - taxonomy filtering options support category, exact severity, and minimum
   severity filtering with intersection semantics when options are combined.
 
-The package version is still managed by Release Please from Conventional Commit
-history. This plan does not require a manual version bump or manual release.
+The package version remains managed by Release Please from Conventional Commit
+history. Built-in taxonomy reclassification is a breaking change because
+callers can observe it through taxonomy options and match metadata.
 
 ## Current Metadata State
 
@@ -71,9 +72,8 @@ The current public scope includes:
 - guidance that runtime string terms remain unclassified and omit taxonomy
   metadata.
 
-Public exposure remains separate from corpus conversion. The current
-implementation proves the API shape and compatibility behavior without moving
-all built-in terms to public corpus metadata.
+Public exposure is backed by complete metadata on the built-in Russian and
+English dictionaries. Runtime string terms remain separate and unclassified.
 
 ## Why Category And Severity Are Needed
 
@@ -143,16 +143,9 @@ should not encode final product moderation policy.
 
 ### Derived Or Explicit Severity
 
-One option is to derive `severity` from `category`, keeping rule definitions
-smaller and making the taxonomy easier to audit. The tradeoff is that every term
-in a category would share the same severity unless an override system is added.
-
-The other option is to store `severity` explicitly on each rule. This gives the
-corpus more flexibility and makes exceptions visible, but it increases review
-surface and creates a risk of inconsistent classifications.
-
-The first implementation should choose one approach before corpus objects are
-introduced, because the decision affects schema shape and tests.
+Severity is stored explicitly on each built-in rule. Category-specific allowed
+bands, complete distribution locks, and representative threshold tests keep the
+flexible per-rule model auditable without deriving severity from category.
 
 ### Slurs Versus Strong Insults
 
@@ -207,11 +200,11 @@ caller-provided metadata semantics.
 
 ## Semver And Release Implications
 
-This documentation-only status update does not require a package version change,
-lockfile update, or release.
+Release Please should decide the next release from Conventional Commit history.
 
-Release Please should decide the next release from Conventional Commit history
-after this work reaches `main`. No manual release is needed for this plan.
+Changing existing built-in categories, severities, or taxonomy-sensitive rule
+ids is a breaking package change even when default detection and masking stay
+the same.
 
 Any implementation that changes existing return types, narrows default matching,
 changes `censor()` output, renames already exported metadata values, or requires

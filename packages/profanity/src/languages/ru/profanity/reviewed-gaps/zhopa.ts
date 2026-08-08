@@ -22,7 +22,7 @@ export default russianFamilyDictionary([
   russianRule({
     id: "ru.vulgar.zhopa.family",
     category: "VULGAR",
-    severity: "medium",
+    severity: "low",
     source: token(regexGroup(ZHOPA_FORMS)),
     match: "strict",
   }),
