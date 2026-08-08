@@ -251,9 +251,9 @@
       }
     },
     {
-      "id": "ru.vulgar.poh",
-      "category": "VULGAR",
-      "severity": "low",
+      "id": "ru.euphemism.poh",
+      "category": "EUPHEMISM",
+      "severity": "soft",
       "source": "(?<!\\p{L})пох(?!\\p{L})",
       "match": {
         "strict": {},
@@ -373,7 +373,7 @@
     {
       "id": "ru.vulgar.huynya.loose",
       "category": "VULGAR",
-      "severity": "low",
+      "severity": "medium",
       "source": "хуйня",
       "match": {
         "loose": {

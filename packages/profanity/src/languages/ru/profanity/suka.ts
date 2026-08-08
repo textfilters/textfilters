@@ -255,19 +255,19 @@ export default russianFamilyDictionary([
   russianRule({
     id: "ru.insult.suka.family",
     category: "STRONG_INSULT",
-    severity: "high",
+    severity: "medium",
     source: String.raw`сук(?:ар(?:ами?|ой|а|ы|е|у)?|ин${cyrillicSuffix}|ами?|ах|ой|а|и|е|у)`,
   }),
   russianRule({
     id: "ru.insult.suchka.family",
     category: "STRONG_INSULT",
-    severity: "high",
+    severity: "medium",
     source: SUCHKA_FAMILY_SOURCE,
   }),
   russianRule({
     id: "ru.insult.suka.translit",
     category: "STRONG_INSULT",
-    severity: "high",
+    severity: "medium",
     source: SUKA_TRANSLIT_GLOBAL_SOURCE,
     match: "loose",
     loose: {},
@@ -275,7 +275,7 @@ export default russianFamilyDictionary([
   russianRule({
     id: "ru.insult.suka.token.loose",
     category: "STRONG_INSULT",
-    severity: "high",
+    severity: "medium",
     source: token(String.raw`с(?:у|y)к(?:ара|ачка|учка|ин|ой|а|и|у)`),
     match: "loose",
   }),

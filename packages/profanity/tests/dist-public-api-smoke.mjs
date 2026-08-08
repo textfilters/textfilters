@@ -89,6 +89,15 @@ if (
   throw new Error("Dist English language pack was not exported read-only.");
 }
 
+if (
+  englishProfanityFilter.analyze("shit")[0]?.ruleId !== "en.vulgar.shit" ||
+  englishProfanityFilter.analyze("shit")[0]?.category !== "VULGAR" ||
+  englishProfanityFilter.analyze("shit")[0]?.severity !== "low" ||
+  englishProfanityFilter.analyze("dickhead")[0]?.ruleId !== "en.insult.dickhead"
+) {
+  throw new Error("Dist English taxonomy metadata failed.");
+}
+
 const mutableEnglishFilter = createEnglishProfanityFilter();
 mutableEnglishFilter.addStrict("tenant-only-term");
 
@@ -119,7 +128,8 @@ if (
 
 if (
   dictionaryFilter.analyze("бля")[0]?.ruleId !== "ru.obscene.blya" ||
-  dictionaryFilter.analyze("бля")[0]?.category !== "OBSCENE_MAT"
+  dictionaryFilter.analyze("бля")[0]?.category !== "OBSCENE_MAT" ||
+  dictionaryFilter.analyze("бля")[0]?.severity !== "high"
 ) {
   throw new Error("Dist dictionary filter did not preserve metadata.");
 }

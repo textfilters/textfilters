@@ -51,9 +51,9 @@ export const yoptCoverageMetadataCases: readonly ReviewedGapMetadataCase[] = [
   {
     input: "ёпт",
     expected: {
-      ruleId: "ru.vulgar.yopt.family",
-      category: "VULGAR",
-      severity: "medium",
+      ruleId: "ru.euphemism.yopt.family",
+      category: "EUPHEMISM",
+      severity: "soft",
     },
   },
 ];

@@ -47,9 +47,9 @@ describe("Russian reviewed gaps from issue 149", () => {
       {
         input: "пиздец",
         expected: {
-          ruleId: "ru.vulgar.pizdec.loose",
-          category: "VULGAR",
-          severity: "medium",
+          ruleId: "ru.obscene.pizdec.loose",
+          category: "OBSCENE_MAT",
+          severity: "high",
           mode: "loose",
         },
       },

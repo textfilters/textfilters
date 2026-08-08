@@ -92,13 +92,13 @@ export default russianFamilyDictionary([
   russianRule({
     id: "ru.insult.gandon.family",
     category: "STRONG_INSULT",
-    severity: "high",
+    severity: "medium",
     source: String.raw`г[ао]ндо(?:н|ш(?:а|и|е|у|ой))${cyrillicSuffix}`,
   }),
   russianRule({
     id: "ru.insult.gandon.translit",
     category: "STRONG_INSULT",
-    severity: "high",
+    severity: "medium",
     source: neutralContextGuard(GANDON_TRANSLIT_SOURCE, GANDON_NEUTRAL_TAIL),
     match: "loose",
     loose: {},
@@ -106,7 +106,7 @@ export default russianFamilyDictionary([
   russianRule({
     id: "ru.insult.gandon.split.loose",
     category: "STRONG_INSULT",
-    severity: "high",
+    severity: "medium",
     source: GANDON_SPLIT_GUARDED_SOURCE,
     match: "loose",
     loose: {},
