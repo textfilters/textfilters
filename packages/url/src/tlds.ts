@@ -37,17 +37,17 @@ export const DEFAULT_TLDS = [
 
 export const normalizeTlds = (
   rawList: readonly string[] | undefined,
-): string[] => {
+): readonly string[] => {
   // Preserve caller order while removing empty and duplicate normalized values.
-  const source =
-    Array.isArray(rawList) && rawList.length ? rawList : DEFAULT_TLDS;
+  if (!Array.isArray(rawList) || rawList.length === 0) return DEFAULT_TLDS;
+
   const seen = new Set<string>();
   const out: string[] = [];
-  for (const item of source) {
+  for (const item of rawList) {
     const tld = lowerNfkc(String(item ?? "").trim());
     if (!tld || seen.has(tld)) continue;
     seen.add(tld);
     out.push(tld);
   }
-  return out.length ? out : [...DEFAULT_TLDS];
+  return out.length ? out : DEFAULT_TLDS;
 };

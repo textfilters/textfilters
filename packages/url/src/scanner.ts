@@ -30,12 +30,20 @@ export interface UrlScannerConfig {
   readonly allowedDomains?: readonly string[];
 }
 
+const DEFAULT_TLD_SET: ReadonlySet<string> = new Set(DEFAULT_TLDS);
+const DEFAULT_TLD_SKELETON_SET: ReadonlySet<string> = new Set(
+  DEFAULT_TLDS.map((tld) => toSkeleton(tld)),
+);
+
 export function createUrlScanner(
   config: UrlScannerConfig = {},
 ): UrlRangeScanner {
   const tlds = normalizeTlds(config.tlds);
-  const tldSet = new Set(tlds);
-  const tldSkeletonSet = new Set(tlds.map((tld) => toSkeleton(tld)));
+  const usesDefaults = tlds === DEFAULT_TLDS;
+  const tldSet = usesDefaults ? DEFAULT_TLD_SET : new Set(tlds);
+  const tldSkeletonSet = usesDefaults
+    ? DEFAULT_TLD_SKELETON_SET
+    : new Set(tlds.map((tld) => toSkeleton(tld)));
   const allowedDomainSet = normalizeAllowedDomains(config.allowedDomains);
 
   function scan(input: UrlScanInput): { ranges: readonly TextCodePointRange[] };
@@ -73,10 +81,10 @@ export function createUrlScanner(
 
 export function scanUrlRanges(
   text: unknown,
-  tldSet: ReadonlySet<string> = new Set(DEFAULT_TLDS),
-  tldSkeletonSet: ReadonlySet<string> = new Set(
-    Array.from(tldSet, (tld) => toSkeleton(tld)),
-  ),
+  tldSet: ReadonlySet<string> = DEFAULT_TLD_SET,
+  tldSkeletonSet: ReadonlySet<string> = tldSet === DEFAULT_TLD_SET
+    ? DEFAULT_TLD_SKELETON_SET
+    : new Set(Array.from(tldSet, (tld) => toSkeleton(tld))),
   allowedDomainSet: ReadonlySet<string> = EMPTY_ALLOWED_DOMAINS,
 ): readonly TextCodePointRange[] {
   const source = String(text ?? "");
@@ -88,10 +96,10 @@ export function scanUrlRanges(
 
 export function checkUrlRanges(
   input: UrlScanInput,
-  tldSet: ReadonlySet<string> = new Set(DEFAULT_TLDS),
-  tldSkeletonSet: ReadonlySet<string> = new Set(
-    Array.from(tldSet, (tld) => toSkeleton(tld)),
-  ),
+  tldSet: ReadonlySet<string> = DEFAULT_TLD_SET,
+  tldSkeletonSet: ReadonlySet<string> = tldSet === DEFAULT_TLD_SET
+    ? DEFAULT_TLD_SKELETON_SET
+    : new Set(Array.from(tldSet, (tld) => toSkeleton(tld))),
   allowedDomainSet: ReadonlySet<string> = EMPTY_ALLOWED_DOMAINS,
 ): boolean {
   if (!hasUrlCandidateInput(input)) return false;
@@ -108,10 +116,10 @@ export function checkUrlRanges(
 export function scanUrlRangeMatches(
   input: UrlScanInput,
   sink: UrlRangeMatchSink,
-  tldSet: ReadonlySet<string> = new Set(DEFAULT_TLDS),
-  tldSkeletonSet: ReadonlySet<string> = new Set(
-    Array.from(tldSet, (tld) => toSkeleton(tld)),
-  ),
+  tldSet: ReadonlySet<string> = DEFAULT_TLD_SET,
+  tldSkeletonSet: ReadonlySet<string> = tldSet === DEFAULT_TLD_SET
+    ? DEFAULT_TLD_SKELETON_SET
+    : new Set(Array.from(tldSet, (tld) => toSkeleton(tld))),
   allowedDomainSet: ReadonlySet<string> = EMPTY_ALLOWED_DOMAINS,
 ): boolean {
   if (!hasUrlCandidateInput(input)) return true;
