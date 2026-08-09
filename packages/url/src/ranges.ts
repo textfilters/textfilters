@@ -190,6 +190,42 @@ const isSentenceWordLabel = (
   return UPPERCASE_LETTER_RE.test(source) || !CASED_LETTER_RE.test(source);
 };
 
+const isLowercaseExactOnlySentenceLabel = (
+  meta: TextMeta,
+  label: DomainMatch["labels"][number],
+  tldSet: ReadonlySet<string>,
+  tldSkeletonSet: ReadonlySet<string>,
+): boolean => {
+  const source = meta.codePoints.slice(label.start, label.end).join("");
+  if (
+    !LETTER_RE.test(source) ||
+    !CASED_LETTER_RE.test(source) ||
+    UPPERCASE_LETTER_RE.test(source) ||
+    !tldSet.has(label.raw) ||
+    tldSkeletonSet.has(label.skeleton)
+  ) {
+    return false;
+  }
+
+  let cursor = label.end;
+  let hasWhitespace = false;
+  while (
+    cursor < meta.codePoints.length &&
+    (meta.whitespace[cursor] || isIgnorableFormatting(meta, cursor))
+  ) {
+    hasWhitespace ||= meta.whitespace[cursor];
+    cursor++;
+  }
+  if (!hasWhitespace || !meta.alphaNum[cursor]) return false;
+
+  let wordLength = 0;
+  while (meta.alphaNum[cursor]) {
+    wordLength++;
+    cursor++;
+  }
+  return wordLength >= 2;
+};
+
 const hasSentenceProsePrefix = (
   meta: TextMeta,
   domain: DomainMatch,
@@ -246,7 +282,8 @@ const maybeTrimTrailingSentenceProse = (
       !previous ||
       !next ||
       !hasLiteralSentenceBoundary(meta, previous, next) ||
-      !isSentenceWordLabel(meta, next)
+      (!isSentenceWordLabel(meta, next) &&
+        !isLowercaseExactOnlySentenceLabel(meta, next, tldSet, tldSkeletonSet))
     ) {
       break;
     }

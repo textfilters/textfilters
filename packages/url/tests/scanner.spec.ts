@@ -317,26 +317,34 @@ describe("URL scanner", () => {
   it("checks allowlists against the selected sentence suffix", () => {
     const text = "foo.bar. evil.com";
     const suffix = "evil.com";
+    const prefix = "foo.bar";
+    const prefixRange = [0, Array.from(prefix).length] as const;
     const suffixStart = Array.from(text.slice(0, text.indexOf(suffix))).length;
+    const suffixRange = [suffixStart, Array.from(text).length] as const;
     const input = { text, codePoints: Array.from(text) };
     const cases = [
       {
         allowedDomains: [] as string[],
-        ranges: [[suffixStart, Array.from(text).length]],
-        censored: `foo.bar. ${mask(suffix)}`,
+        ranges: [prefixRange, suffixRange],
+        censored: `${mask(prefix)}. ${mask(suffix)}`,
       },
       {
         allowedDomains: ["foo.bar.evil.com"],
-        ranges: [[suffixStart, Array.from(text).length]],
-        censored: `foo.bar. ${mask(suffix)}`,
+        ranges: [prefixRange, suffixRange],
+        censored: `${mask(prefix)}. ${mask(suffix)}`,
       },
       {
         allowedDomains: [suffix],
-        ranges: [[0, Array.from(text).length]],
-        censored: mask(text),
+        ranges: [prefixRange],
+        censored: `${mask(prefix)}. ${suffix}`,
       },
       {
         allowedDomains: ["foo.bar.evil.com", suffix],
+        ranges: [prefixRange],
+        censored: `${mask(prefix)}. ${suffix}`,
+      },
+      {
+        allowedDomains: [prefix, suffix],
         ranges: [] as Array<readonly [number, number]>,
         censored: text,
       },
@@ -358,10 +366,20 @@ describe("URL scanner", () => {
       expect(createUrlFilter({ allowedDomains }).censor(text)).toBe(censored);
     }
 
-    for (const sentenceText of ["foo.bar﹒ evil.com", "foo.bar.” evil.com"]) {
+    for (const { sentenceText, includePrefix } of [
+      { sentenceText: "foo.bar﹒ evil.com", includePrefix: true },
+      { sentenceText: "foo.bar.” evil.com", includePrefix: false },
+    ]) {
       const sentenceSuffixStart = Array.from(
         sentenceText.slice(0, sentenceText.indexOf(suffix)),
       ).length;
+      const sentenceSuffixRange = [
+        sentenceSuffixStart,
+        Array.from(sentenceText).length,
+      ] as const;
+      const ranges = includePrefix
+        ? [prefixRange, sentenceSuffixRange]
+        : [sentenceSuffixRange];
       const scanner = createUrlScanner({
         allowedDomains: ["foo.bar.evil.com"],
       });
@@ -372,14 +390,16 @@ describe("URL scanner", () => {
           codePoints: Array.from(sentenceText),
         }),
       ).toEqual({
-        ranges: [[sentenceSuffixStart, Array.from(sentenceText).length]],
+        ranges,
       });
       expect(
         createUrlFilter({ allowedDomains: ["foo.bar.evil.com"] }).censor(
           sentenceText,
         ),
       ).toBe(
-        sentenceText.slice(0, sentenceText.indexOf(suffix)) + mask(suffix),
+        (includePrefix ? mask(prefix) : prefix) +
+          sentenceText.slice(prefix.length, sentenceText.indexOf(suffix)) +
+          mask(suffix),
       );
     }
 
@@ -462,7 +482,6 @@ describe("URL scanner", () => {
       "me •\ufe0f Me",
       "me \ufe0f•\ufe0e Me",
       "me \u{e0100}•\u{e0100} Me",
-      "foo-bar • Foo-bar follows",
       "info • Info: details",
       "me • Me?",
       "me • Me?.",
@@ -513,6 +532,10 @@ describe("URL scanner", () => {
     for (const text of domains) {
       expectScannerFixture({ text, ranges: wholeRange(text) });
     }
+    expectScannerFixture({
+      text: "foo-bar • Foo-bar follows",
+      ranges: [[0, Array.from("foo-bar • Foo").length]],
+    });
     for (const selector of ["\ufe0f", "\u{e0100}"]) {
       for (const text of [
         `me • me:${selector}443/path`,
@@ -550,7 +573,8 @@ describe("URL scanner", () => {
       expectScannerFixture({ text, ranges: [[0, 8]] });
     }
     for (const dot of ["[.]", "dot", "d o t", "точка"]) {
-      expectScannerFixture({ text: `evil.com ${dot} next`, ranges: [[0, 8]] });
+      const text = `evil.com ${dot} next`;
+      expectScannerFixture({ text, ranges: wholeRange(text) });
     }
     expectScannerFixture({
       text: "example.com • next",

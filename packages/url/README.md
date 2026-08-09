@@ -44,6 +44,10 @@ const urlFilter = createUrlFilter({ tlds: ["com", "org"], maskChar: "#" });
 const safeText = urlFilter.censor("visit example[.]com");
 ```
 
+By default, bare domains are matched against a bundled, versioned snapshot of
+the IANA root zone. A nonempty normalized `tlds` list replaces that snapshot;
+an empty or whitespace-only list keeps the default fail-closed behavior.
+
 Use `allowedDomains` when an application has already loaded a trusted domain
 snapshot from configuration or an external service:
 
@@ -111,7 +115,10 @@ scanner.scan(
 
 The package preserves the existing URL filtering behavior and adds stricter explicit-scheme URL handling for common authority forms such as localhost, ports, IPv6, userinfo, and explicit-scheme unknown TLDs.
 
-Bare domains still require the configured TLD list. For example, `example.unknown/path` is left unchanged by the default filter, while `https://example.unknown/path` is masked because it has an explicit scheme.
+Bare domains still require the bundled IANA snapshot or a configured custom TLD
+list. For example, `example.unknown/path` is left unchanged by the default
+filter, while `https://example.unknown/path` is masked because it has an
+explicit scheme.
 
 The filter masks:
 

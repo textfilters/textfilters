@@ -1,4 +1,5 @@
 import { normalizeHostText } from "./host-normalization.js";
+import { IANA_TLDS } from "./tld-data.js";
 
 // Keep exact membership and lookalike matching as separate policy inputs. They
 // share the current compact baseline, while either policy can evolve without
@@ -36,7 +37,7 @@ export const DEFAULT_LOOKALIKE_TLDS = [
   "kz",
 ] as const;
 
-export const DEFAULT_TLDS: readonly string[] = DEFAULT_LOOKALIKE_TLDS;
+export const DEFAULT_TLDS: readonly string[] = IANA_TLDS;
 
 export const normalizeTlds = (
   rawList: readonly string[] | undefined,
