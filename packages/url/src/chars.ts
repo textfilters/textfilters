@@ -80,6 +80,7 @@ export const LOOKALIKE_TO_ASCII: Readonly<Record<string, string>> = {
   е: "e",
   н: "h",
   і: "i",
+  ı: "i",
   ј: "j",
   к: "k",
   м: "m",
