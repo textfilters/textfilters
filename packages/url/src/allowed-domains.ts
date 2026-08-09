@@ -1,13 +1,18 @@
-import { lowerNfkc, stripZeroWidth } from "@textfilters/core";
-
 import { DOT_CHAR_SET } from "./chars.js";
+import {
+  normalizeHostText,
+  stripIgnorableHostFormatting,
+} from "./host-normalization.js";
 import type { DomainMatch, TextMeta } from "./meta.js";
 
 export const EMPTY_ALLOWED_DOMAINS: ReadonlySet<string> = new Set();
+const NORMALIZED_ALLOWED_DOMAIN_SETS = new WeakSet<ReadonlySet<string>>([
+  EMPTY_ALLOWED_DOMAINS,
+]);
 
 const normalizeDomainLiteral = (value: unknown): string | null => {
   const normalized = Array.from(
-    stripZeroWidth(lowerNfkc(String(value ?? "").trim())),
+    normalizeHostText(stripIgnorableHostFormatting(String(value ?? "").trim())),
     (char) => (DOT_CHAR_SET.has(char) ? "." : char),
   ).join("");
   const domain = normalized.endsWith(".")
@@ -51,8 +56,17 @@ export const normalizeAllowedDomains = (
     const domain = normalizeDomainLiteral(item);
     if (domain) domains.add(domain);
   }
-  return domains.size ? domains : EMPTY_ALLOWED_DOMAINS;
+  if (domains.size === 0) return EMPTY_ALLOWED_DOMAINS;
+  NORMALIZED_ALLOWED_DOMAIN_SETS.add(domains);
+  return domains;
 };
+
+export const normalizeAllowedDomainSet = (
+  rawSet: ReadonlySet<string>,
+): ReadonlySet<string> =>
+  NORMALIZED_ALLOWED_DOMAIN_SETS.has(rawSet)
+    ? rawSet
+    : normalizeAllowedDomains(Array.from(rawSet));
 
 export const isAllowedDomain = (
   meta: TextMeta,
@@ -61,23 +75,24 @@ export const isAllowedDomain = (
   firstLabelStart: number = domain.labels[0]?.start ?? domain.start,
 ): boolean => {
   if (allowedDomains.size === 0) return false;
+  if (domain.labels.some((label) => label.hasUnconsumedLabelMark)) return false;
   const hostname = domain.labels
     .map((label, index) => {
       const start = index === 0 ? firstLabelStart : label.start;
-      let normalized = "";
+      let source = "";
       for (let cursor = start; cursor < label.end; cursor++) {
-        const source = meta.codePoints[cursor] ?? "";
+        const codePoint = meta.codePoints[cursor] ?? "";
         const symbol = meta.symbol[cursor] ?? "";
         if (
           meta.alphaNum[cursor] ||
           symbol === "-" ||
           symbol === "_" ||
-          /[\p{M}\p{S}]/u.test(source)
+          /[\p{M}\p{S}]/u.test(codePoint)
         ) {
-          normalized += stripZeroWidth(lowerNfkc(source));
+          source += codePoint;
         }
       }
-      return normalized;
+      return normalizeHostText(stripIgnorableHostFormatting(source));
     })
     .join(".");
   return allowedDomains.has(hostname);

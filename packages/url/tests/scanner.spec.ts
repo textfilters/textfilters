@@ -812,6 +812,215 @@ describe("URL scanner", () => {
     expect(scanUrlRanges("go example.com", new Set(["internal"]))).toEqual([]);
   });
 
+  it("normalizes complete Unicode TLD labels", () => {
+    const fixtures = [
+      { configured: "भारत", input: "भारत" },
+      { configured: "বাংলা", input: "বাংলা" },
+      { configured: "தமிழ்", input: "தமிழ்" },
+      { configured: "한국", input: "한국".normalize("NFD") },
+      { configured: "онлайн", input: "онлайн".normalize("NFD") },
+      {
+        configured: "vermögensberater",
+        input: "vermögensberater".normalize("NFD"),
+      },
+      { configured: "office", input: "oﬃce" },
+    ];
+
+    for (const { configured, input: tld } of fixtures) {
+      const text = `example.${tld}/path`;
+      const input = { text, codePoints: Array.from(text) };
+      const scanner = createUrlScanner({ tlds: [configured] });
+      const seen: Range[] = [];
+
+      expect(scanner.check(input)).toBe(true);
+      expect(scanner.scan(input)).toEqual({ ranges: wholeRange(text) });
+      expect(
+        scanner.scan(input, (match) => {
+          seen.push(match.range);
+        }),
+      ).toBe(true);
+      expect(seen).toEqual(wholeRange(text));
+      expect(createUrlFilter({ tlds: [configured] }).censor(text)).toBe(
+        mask(text),
+      );
+    }
+  });
+
+  it("case-folds Greek final sigma across TLDs and allowlists", () => {
+    for (const configured of ["ασ", "ας"]) {
+      const scanner = createUrlScanner({ tlds: [configured] });
+      for (const text of ["example.ασ", "example.ας", "example.ΑΣ"]) {
+        const input = { text, codePoints: Array.from(text) };
+        expect(scanner.check(input)).toBe(true);
+        expect(scanner.scan(input)).toEqual({ ranges: wholeRange(text) });
+      }
+    }
+
+    const allowedText = "example.ΑΣ";
+    expect(
+      createUrlFilter({
+        tlds: ["ασ"],
+        allowedDomains: ["example.ας"],
+      }).censor(allowedText),
+    ).toBe(allowedText);
+  });
+
+  it("renormalizes host labels after case folding and zero-width removal", () => {
+    const decomposedLowercase = "example.t\u0308";
+    const decomposedUppercase = "example.T\u0308";
+    const tld = "T\u0308";
+
+    expect(
+      createUrlScanner({ tlds: [tld] }).scan({
+        text: decomposedLowercase,
+        codePoints: Array.from(decomposedLowercase),
+      }),
+    ).toEqual({ ranges: wholeRange(decomposedLowercase) });
+    expect(
+      createUrlFilter({
+        tlds: [tld],
+        allowedDomains: [decomposedUppercase],
+      }).censor(decomposedLowercase),
+    ).toBe(decomposedLowercase);
+
+    const markedText = "https://example.a\u0301";
+    expect(
+      createUrlFilter({
+        tlds: ["á"],
+        allowedDomains: ["example.a\u200b\u0301"],
+      }).censor(markedText),
+    ).toBe(markedText);
+  });
+
+  it("checks label limits after complete canonical normalization", () => {
+    const configuredTld = "á".repeat(32);
+    const sourceTld = "a\u0301".repeat(32);
+    const text = `example.${sourceTld}`;
+
+    expect(
+      createUrlScanner({ tlds: [configuredTld] }).scan({
+        text,
+        codePoints: Array.from(text),
+      }),
+    ).toEqual({ ranges: wholeRange(text) });
+  });
+
+  it("keeps combining marks after ignorable formatting joins", () => {
+    const configuredTld = "vermögensberater";
+    for (const joiner of ["\u200b", "\ufe0f"]) {
+      const sourceTld = `vermo${joiner}\u0308gensberater`;
+      const text = `example.${sourceTld}`;
+
+      expect(
+        createUrlScanner({ tlds: [configuredTld] }).scan({
+          text,
+          codePoints: Array.from(text),
+        }),
+      ).toEqual({ ranges: wholeRange(text) });
+      expect(createUrlFilter({ tlds: [configuredTld] }).censor(text)).toBe(
+        mask(text),
+      );
+      expect(
+        createUrlFilter({
+          tlds: [configuredTld],
+          allowedDomains: [`example.${configuredTld}`],
+        }).censor(text),
+      ).toBe(text);
+    }
+  });
+
+  it("normalizes direct public API allowlist sets", () => {
+    const text = "example.t\u0308";
+    const input = { text, codePoints: Array.from(text) };
+    const tldSet = new Set(["ẗ"]);
+    const allowedDomainSet = new Set([text]);
+    const seen: Range[] = [];
+
+    expect(scanUrlRanges(text, tldSet, tldSet, allowedDomainSet)).toEqual([]);
+    expect(checkUrlRanges(input, tldSet, tldSet, allowedDomainSet)).toBe(false);
+    expect(
+      scanUrlRangeMatches(
+        input,
+        (match) => {
+          seen.push(match.range);
+        },
+        tldSet,
+        tldSet,
+        allowedDomainSet,
+      ),
+    ).toBe(true);
+    expect(seen).toEqual([]);
+  });
+
+  it("bounds oversized labels during incremental parsing", () => {
+    for (const label of ["a".repeat(16_000), "é".repeat(16_000)]) {
+      const text = `x.${label}`;
+      const input = { text, codePoints: Array.from(text) };
+
+      expect(checkUrlRanges(input)).toBe(false);
+    }
+  });
+
+  it("keeps canonical allowlists exact around unsupported TLD marks", () => {
+    const canonicalTld = "vermögensberater";
+    const decomposedTld = canonicalTld.normalize("NFD");
+    const allowedText = `example.${decomposedTld}/path`;
+    const allowedDomain = `example.${canonicalTld}`;
+    const allowedScanner = createUrlScanner({
+      tlds: [canonicalTld],
+      allowedDomains: [allowedDomain],
+    });
+
+    expect(
+      allowedScanner.scan({
+        text: allowedText,
+        codePoints: Array.from(allowedText),
+      }),
+    ).toEqual({ ranges: [] });
+    expect(
+      createUrlFilter({
+        tlds: [canonicalTld],
+        allowedDomains: [allowedDomain],
+      }).censor(allowedText),
+    ).toBe(allowedText);
+
+    const markedText = "example.com\u0301/path";
+    const prefixRange = [[0, Array.from("example.com").length]] as const;
+    const markedScanner = createUrlScanner({
+      allowedDomains: ["example.com"],
+    });
+    expect(
+      markedScanner.scan({
+        text: markedText,
+        codePoints: Array.from(markedText),
+      }),
+    ).toEqual({ ranges: prefixRange });
+    expect(
+      createUrlFilter({ allowedDomains: ["example.com"] }).censor(markedText),
+    ).toBe(`${mask("example.com")}\u0301/path`);
+
+    const completeMarkedText = "example.com\u0301 x.org";
+    const suffix = "x.org";
+    const suffixStart = Array.from(
+      completeMarkedText.slice(0, completeMarkedText.indexOf(suffix)),
+    ).length;
+    const completeMarkedConfig = {
+      tlds: ["com", "coḿ", "org"],
+      allowedDomains: ["example.coḿ"],
+    };
+    expect(
+      createUrlScanner(completeMarkedConfig).scan({
+        text: completeMarkedText,
+        codePoints: Array.from(completeMarkedText),
+      }),
+    ).toEqual({
+      ranges: [[suffixStart, Array.from(completeMarkedText).length]],
+    });
+    expect(
+      createUrlFilter(completeMarkedConfig).censor(completeMarkedText),
+    ).toBe(`example.com\u0301 ${mask(suffix)}`);
+  });
+
   it("keeps default TLDs when a custom list normalizes to empty", () => {
     const text = "go example.com";
     const input = { text, codePoints: Array.from(text) };

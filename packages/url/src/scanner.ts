@@ -19,6 +19,7 @@ import {
 } from "./contracts.js";
 import {
   EMPTY_ALLOWED_DOMAINS,
+  normalizeAllowedDomainSet,
   normalizeAllowedDomains,
 } from "./allowed-domains.js";
 import { createMeta, toSkeleton } from "./meta.js";
@@ -91,7 +92,12 @@ export function scanUrlRanges(
   if (!source || !hasUrlCandidate(source)) return [];
 
   const meta = createMeta(source);
-  return collectRanges(meta, tldSet, tldSkeletonSet, allowedDomainSet);
+  return collectRanges(
+    meta,
+    tldSet,
+    tldSkeletonSet,
+    normalizeAllowedDomainSet(allowedDomainSet),
+  );
 }
 
 export function checkUrlRanges(
@@ -105,11 +111,19 @@ export function checkUrlRanges(
   if (!hasUrlCandidateInput(input)) return false;
 
   const meta = createMeta(input.text);
+  const normalizedAllowedDomainSet =
+    normalizeAllowedDomainSet(allowedDomainSet);
   let found = false;
-  collectRangeMatches(meta, tldSet, tldSkeletonSet, allowedDomainSet, () => {
-    found = true;
-    return false;
-  });
+  collectRangeMatches(
+    meta,
+    tldSet,
+    tldSkeletonSet,
+    normalizedAllowedDomainSet,
+    () => {
+      found = true;
+      return false;
+    },
+  );
   return found;
 }
 
@@ -129,7 +143,7 @@ export function scanUrlRangeMatches(
     meta,
     tldSet,
     tldSkeletonSet,
-    allowedDomainSet,
+    normalizeAllowedDomainSet(allowedDomainSet),
     (range) => sink({ range }),
   );
 }

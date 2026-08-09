@@ -1,4 +1,4 @@
-import { lowerNfkc } from "@textfilters/core";
+import { normalizeHostText } from "./host-normalization.js";
 
 // Default TLDs are intentionally small and domain-only; explicit schemes can
 // accept unknown TLDs because the scheme is stronger URL evidence.
@@ -44,7 +44,7 @@ export const normalizeTlds = (
   const seen = new Set<string>();
   const out: string[] = [];
   for (const item of rawList) {
-    const tld = lowerNfkc(String(item ?? "").trim());
+    const tld = normalizeHostText(String(item ?? "").trim());
     if (!tld || seen.has(tld)) continue;
     seen.add(tld);
     out.push(tld);

@@ -32,6 +32,7 @@ export interface Match {
 export interface Label extends Match {
   readonly raw: string;
   readonly skeleton: string;
+  readonly hasUnconsumedLabelMark?: boolean;
 }
 
 export interface LabelText {

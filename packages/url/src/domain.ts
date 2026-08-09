@@ -10,11 +10,31 @@ import {
   type Label,
   type LabelText,
   type TextMeta,
+  toSkeleton,
 } from "./meta.js";
+import { normalizeHostText } from "./host-normalization.js";
 import { maybeConsumePathTail } from "./path.js";
 
 const MAX_DOMAIN_TEXT_LENGTH = 253;
 const MAX_DOMAIN_LABELS = 127;
+const MAX_LABEL_NORMALIZATION_SOURCE_LENGTH = 63 * 8;
+const LABEL_MARK_RE = /\p{M}/u;
+
+const isAsciiSourceText = (value: string): boolean => {
+  for (let index = 0; index < value.length; index++) {
+    if (value.charCodeAt(index) > 0x7f) return false;
+  }
+  return true;
+};
+
+const isLabelMark = (meta: TextMeta, pos: number): boolean =>
+  !isIgnorableFormatting(meta, pos) &&
+  LABEL_MARK_RE.test(meta.codePoints[pos] ?? "");
+
+const normalizeLabelText = (source: string): LabelText => {
+  const raw = normalizeHostText(source);
+  return { raw, skeleton: toSkeleton(raw) };
+};
 
 // Zero-width marks are host obfuscation, not prose boundaries; measure visible
 // runs through them before deciding whether a whitespace gap belongs to a host.
@@ -46,19 +66,44 @@ export const parseLabel = (
   let last = -1;
   let raw = "";
   let skeleton = "";
-  const appendLabelText = (text: LabelText): void => {
+  let normalizationSource: string | null = null;
+  let normalizationSourceLength = 0;
+  let nextNormalizationLengthCheck = 64;
+  const appendLabelText = (text: LabelText, sourceText: string): void => {
+    const previousRaw = raw;
     raw += text.raw;
     skeleton += text.skeleton;
+    if (normalizationSource !== null) {
+      normalizationSource += sourceText;
+      normalizationSourceLength += Array.from(sourceText).length;
+    } else if (!isAsciiSourceText(sourceText)) {
+      normalizationSource = previousRaw + sourceText;
+      normalizationSourceLength =
+        previousRaw.length + Array.from(sourceText).length;
+    }
+  };
+  const exceedsLabelLength = (): boolean => {
+    if (normalizationSource === null) return raw.length > 63;
+    if (normalizationSourceLength > MAX_LABEL_NORMALIZATION_SOURCE_LENGTH) {
+      return true;
+    }
+    if (normalizationSourceLength < nextNormalizationLengthCheck) return false;
+    nextNormalizationLengthCheck += 64;
+    return Array.from(normalizeHostText(normalizationSource)).length > 63;
   };
 
   while (pos < meta.codePoints.length) {
-    if (meta.alphaNum[pos]) {
+    if (meta.alphaNum[pos] || (first >= 0 && isLabelMark(meta, pos))) {
       const rawChar = meta.raw[pos];
+      const sourceChar = meta.codePoints[pos] ?? "";
       if (rawChar) {
         if (first < 0) first = pos;
         last = pos;
-        appendLabelText({ raw: rawChar, skeleton: meta.skeleton[pos] });
-        if (raw.length > 63) return null;
+        appendLabelText(
+          { raw: rawChar, skeleton: meta.skeleton[pos] },
+          sourceChar,
+        );
+        if (exceedsLabelLength()) return null;
       }
       pos++;
       continue;
@@ -67,24 +112,41 @@ export const parseLabel = (
     if (meta.labelJoinSeparator[pos]) {
       const gapStart = pos;
       let gapHasWhitespace = false;
-      let gapHasZeroWidth = false;
+      let gapHasIgnorableFormatting = false;
       let gapHasNonZeroWidthSymbol = false;
       let visibleGapRaw = "";
-      while (pos < meta.codePoints.length && meta.labelJoinSeparator[pos]) {
+      while (
+        pos < meta.codePoints.length &&
+        meta.labelJoinSeparator[pos] &&
+        !isLabelMark(meta, pos)
+      ) {
+        const ignorableFormatting = isIgnorableFormatting(meta, pos);
         gapHasWhitespace ||= meta.whitespace[pos];
-        gapHasZeroWidth ||= meta.zeroWidth[pos];
+        gapHasIgnorableFormatting ||= ignorableFormatting;
         gapHasNonZeroWidthSymbol ||=
-          !meta.zeroWidth[pos] && !meta.whitespace[pos];
-        if (!meta.zeroWidth[pos] && !meta.whitespace[pos]) {
+          !ignorableFormatting && !meta.whitespace[pos];
+        if (!ignorableFormatting && !meta.whitespace[pos]) {
           visibleGapRaw += meta.raw[pos];
         }
         pos++;
       }
       const gapRaw = meta.raw.slice(gapStart, pos).join("");
       const hasOnlyHostnameJoinSymbols = /^[-_]+$/u.test(visibleGapRaw);
+      if (
+        first >= 0 &&
+        pos < meta.codePoints.length &&
+        isLabelMark(meta, pos) &&
+        !gapHasWhitespace &&
+        !gapHasNonZeroWidthSymbol
+      ) {
+        continue;
+      }
       if (!gapHasWhitespace && /^-+$/u.test(visibleGapRaw)) {
-        appendLabelText({ raw: visibleGapRaw, skeleton: visibleGapRaw });
-        if (raw.length > 63) return null;
+        appendLabelText(
+          { raw: visibleGapRaw, skeleton: visibleGapRaw },
+          visibleGapRaw,
+        );
+        if (exceedsLabelLength()) return null;
       }
       // Join only very short whitespace-split pieces. Longer visible runs are
       // usually prose before a normal URL, even if the run contains zero-width.
@@ -106,10 +168,10 @@ export const parseLabel = (
         break;
       }
 
-      // A zero-width mark followed by punctuation should split at the valid TLD
-      // instead of appending glued prose such as `,next` to the label.
+      // Ignorable formatting followed by punctuation should split at the valid
+      // TLD instead of appending glued prose such as `,next` to the label.
       if (
-        gapHasZeroWidth &&
+        gapHasIgnorableFormatting &&
         gapHasNonZeroWidthSymbol &&
         !hasOnlyHostnameJoinSymbols &&
         pos < meta.codePoints.length &&
@@ -121,7 +183,7 @@ export const parseLabel = (
 
       if (
         !gapHasWhitespace &&
-        !gapHasZeroWidth &&
+        !gapHasIgnorableFormatting &&
         gapRaw &&
         !/^-+$/u.test(gapRaw) &&
         pos < meta.codePoints.length &&
@@ -143,8 +205,18 @@ export const parseLabel = (
     break;
   }
 
-  if (first < 0 || raw.length === 0 || raw.length > 63) return null;
-  return { start: first, end: last + 1, pos, raw, skeleton };
+  const normalized =
+    normalizationSource === null
+      ? { raw, skeleton }
+      : normalizeLabelText(normalizationSource);
+  if (
+    first < 0 ||
+    normalized.raw.length === 0 ||
+    Array.from(normalized.raw).length > 63
+  ) {
+    return null;
+  }
+  return { start: first, end: last + 1, pos, ...normalized };
 };
 
 export const isValidTld = (
@@ -166,35 +238,48 @@ const trimTldTrailingProse = (
   tldSet: ReadonlySet<string>,
   tldSkeletonSet: ReadonlySet<string>,
 ): Label | null => {
-  let raw = "";
-  let skeleton = "";
+  let source = "";
   let last = -1;
+  let markSplitCandidate: Label | null = null;
   for (let cursor = label.start; cursor < label.pos; cursor++) {
     const symbol = meta.symbol[cursor];
+    const labelMark = isLabelMark(meta, cursor);
     const canSplit =
       meta.whitespace[cursor] ||
       isIgnorableFormatting(meta, cursor) ||
+      labelMark ||
       symbol === "-" ||
       ((symbol === "'" || symbol === "’") &&
         cursor + 1 < label.pos &&
         meta.skeleton[cursor + 1] === "s" &&
         cursor + 2 === label.pos);
-    if (canSplit && raw && isValidTld(raw, skeleton, tldSet, tldSkeletonSet)) {
-      return { start: label.start, end: last + 1, pos: cursor, raw, skeleton };
+    if (canSplit && source) {
+      const normalized = normalizeLabelText(source);
+      if (
+        isValidTld(normalized.raw, normalized.skeleton, tldSet, tldSkeletonSet)
+      ) {
+        const candidate: Label = {
+          start: label.start,
+          end: last + 1,
+          pos: cursor,
+          ...normalized,
+          ...(labelMark ? { hasUnconsumedLabelMark: true } : {}),
+        };
+        if (!labelMark) return candidate;
+        markSplitCandidate = candidate;
+      }
     }
-    if (meta.alphaNum[cursor]) {
-      raw += meta.raw[cursor];
-      skeleton += meta.skeleton[cursor];
+    if (meta.alphaNum[cursor] || labelMark) {
+      source += meta.codePoints[cursor] ?? "";
       last = cursor;
       continue;
     }
     if (symbol === "-" && !meta.whitespace[cursor] && !meta.zeroWidth[cursor]) {
-      raw += meta.raw[cursor];
-      skeleton += meta.raw[cursor];
+      source += meta.raw[cursor] ?? "";
       last = cursor;
     }
   }
-  return null;
+  return markSplitCandidate;
 };
 
 const hasWhitespaceInLabelSeparatorRun = (
