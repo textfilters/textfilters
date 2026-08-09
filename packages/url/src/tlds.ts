@@ -49,5 +49,5 @@ export const normalizeTlds = (
     seen.add(tld);
     out.push(tld);
   }
-  return out;
+  return out.length ? out : [...DEFAULT_TLDS];
 };

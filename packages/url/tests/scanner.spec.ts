@@ -812,6 +812,20 @@ describe("URL scanner", () => {
     expect(scanUrlRanges("go example.com", new Set(["internal"]))).toEqual([]);
   });
 
+  it("keeps default TLDs when a custom list normalizes to empty", () => {
+    const text = "go example.com";
+    const input = { text, codePoints: Array.from(text) };
+
+    for (const tlds of [[], ["", " ", "\t"]]) {
+      const scanner = createUrlScanner({ tlds });
+      expect(scanner.check(input)).toBe(true);
+      expect(scanner.scan(input)).toEqual({ ranges: [[3, 14]] });
+      expect(createUrlFilter({ tlds }).censor(text)).toBe(
+        `go ${mask("example.com")}`,
+      );
+    }
+  });
+
   it("keeps allowlist behavior aligned across scanner APIs", () => {
     const scanner = createUrlScanner({ allowedDomains: ["trusted.com"] });
     const allowedText = "visit trusted.com/path now";
