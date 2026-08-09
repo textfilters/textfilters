@@ -4,6 +4,8 @@ import { EMPTY_ALLOWED_DOMAINS, isAllowedDomain } from "./allowed-domains.js";
 import { isSentenceDotSymbol } from "./chars.js";
 import {
   isIgnorableFormatting,
+  isRightSpacedDotSymbol,
+  isWhitespaceWrappedDot,
   isWhitespaceWrappedListBullet,
   parseDot,
 } from "./dots.js";
@@ -117,6 +119,28 @@ const isPlainLabel = (
   return true;
 };
 
+const hasPlainLabelBoundaries = (
+  meta: TextMeta,
+  label: DomainMatch["labels"][number],
+  dot: NonNullable<ReturnType<typeof parseDot>>,
+): boolean => {
+  for (
+    let cursor = label.start - 1;
+    cursor >= dot.end && !meta.whitespace[cursor];
+    cursor--
+  ) {
+    if (meta.labelJoinSeparator[cursor]) return false;
+  }
+
+  const trailing = label.end;
+  return !(
+    meta.zeroWidth[trailing] ||
+    isIgnorableFormatting(meta, trailing) ||
+    meta.raw[trailing] === "_" ||
+    meta.raw[trailing] === "-"
+  );
+};
+
 const isListSpacing = (meta: TextMeta, start: number, end: number): boolean => {
   for (let cursor = start; cursor < end; cursor++) {
     if (!meta.whitespace[cursor] && !isIgnorableFormatting(meta, cursor)) {
@@ -164,6 +188,23 @@ const isSentenceWordLabel = (
   const source = meta.codePoints.slice(label.start, label.end).join("");
   if (!LETTER_RE.test(source)) return false;
   return UPPERCASE_LETTER_RE.test(source) || !CASED_LETTER_RE.test(source);
+};
+
+const hasSentenceProsePrefix = (
+  meta: TextMeta,
+  domain: DomainMatch,
+  suffix: DomainMatch,
+): boolean => {
+  const suffixStart = suffix.labels[0]?.start;
+  if (suffixStart === undefined || suffixStart <= domain.start) return false;
+  let boundaryLabel: DomainMatch["labels"][number] | undefined;
+  for (const label of domain.labels) {
+    if (label.end > suffixStart) break;
+    boundaryLabel = label;
+  }
+  return (
+    boundaryLabel !== undefined && isSentenceWordLabel(meta, boundaryLabel)
+  );
 };
 
 const hasLiteralSentenceBoundary = (
@@ -227,6 +268,52 @@ const maybeTrimTrailingSentenceProse = (
   };
 };
 
+const maybePreferCompletedDomainBeforeSpacedLabel = (
+  meta: TextMeta,
+  domain: DomainMatch,
+  tldSet: ReadonlySet<string>,
+  tldSkeletonSet: ReadonlySet<string>,
+): DomainMatch => {
+  let preferred = domain;
+  while (preferred.labels.length >= 3) {
+    const next = preferred.labels.at(-1);
+    const previous = preferred.labels.at(-2);
+    if (!next || !previous || preferred.end !== next.end) break;
+
+    const dot = parseDot(meta, previous.pos);
+    const isSingleSpacedDot =
+      dot !== null &&
+      dot.end === dot.start + 1 &&
+      (isWhitespaceWrappedDot(meta, dot) || isRightSpacedDotSymbol(meta, dot));
+    const isImplicitPunycodeTld =
+      next.raw.startsWith("xn--") || next.skeleton.startsWith("xn--");
+    if (
+      !dot ||
+      !isSingleSpacedDot ||
+      !isPlainLabel(meta, next) ||
+      !hasPlainLabelBoundaries(meta, next, dot) ||
+      next.hasUnconsumedLabelMark === true ||
+      !isValidTld(previous.raw, previous.skeleton, tldSet, tldSkeletonSet) ||
+      tldSkeletonSet.has(next.skeleton) ||
+      isImplicitPunycodeTld ||
+      previous.raw === next.raw ||
+      previous.skeleton === next.skeleton
+    ) {
+      break;
+    }
+
+    const completedDomain: DomainMatch = {
+      start: preferred.start,
+      end: previous.end,
+      pos: previous.pos,
+      labels: preferred.labels.slice(0, -1),
+    };
+    if (isStandaloneRepeatedListProse(meta, completedDomain)) break;
+    preferred = completedDomain;
+  }
+  return preferred;
+};
+
 const maybePreferBareDomainAfterSentence = (
   meta: TextMeta,
   domain: DomainMatch,
@@ -242,7 +329,6 @@ const maybePreferBareDomainAfterSentence = (
   if (!trimmedDomain || isStandaloneRepeatedListProse(meta, trimmedDomain)) {
     return null;
   }
-
   // A sentence-ending literal dot can otherwise turn the preceding prose and
   // the following standalone host into one multi-label domain.
   for (let index = trimmedDomain.labels.length - 2; index >= 1; index--) {
@@ -382,18 +468,31 @@ export const collectRangeMatches = (
     }
 
     if (!meta.alphaNum[i]) continue;
-    const parsedDomain = parseDomain(meta, i, tldSet, tldSkeletonSet);
+    let parsedDomain = parseDomain(meta, i, tldSet, tldSkeletonSet);
     if (!parsedDomain) continue;
-    const preferredDomain = maybePreferBareDomainAfterSentence(
+    const parsedCandidateEnd = parsedDomain.end;
+    const sentenceDomain = maybePreferBareDomainAfterSentence(
       meta,
       parsedDomain,
       tldSet,
       tldSkeletonSet,
     );
-    if (!preferredDomain) {
-      i = Math.max(i, parsedDomain.end - 1);
+    if (!sentenceDomain) {
+      i = Math.max(i, parsedCandidateEnd - 1);
       continue;
     }
+    const preferredDomain = maybePreferCompletedDomainBeforeSpacedLabel(
+      meta,
+      sentenceDomain,
+      tldSet,
+      tldSkeletonSet,
+    );
+    parsedDomain = maybePreferCompletedDomainBeforeSpacedLabel(
+      meta,
+      parsedDomain,
+      tldSet,
+      tldSkeletonSet,
+    );
     const parsedStart = maybeExpandBareSplitPrefix(
       meta,
       parsedDomain,
@@ -421,7 +520,8 @@ export const collectRangeMatches = (
       allowedDomainSet.size > 0 &&
       preferredDomain !== parsedDomain &&
       !parsedDomainIsAllowed &&
-      preferredDomainIsAllowed;
+      preferredDomainIsAllowed &&
+      !hasSentenceProsePrefix(meta, parsedDomain, preferredDomain);
     const preferredFirstLabelStart = preferredDomain.labels[0]?.start;
     const preserveAllowedSingleLabelSubdomain =
       parsedDomainIsAllowed &&
@@ -439,7 +539,7 @@ export const collectRangeMatches = (
       if (sink([start, domain.end]) === false) return false;
     }
     consumedRanges.push([start, domain.end]);
-    i = Math.max(i, domain.end - 1);
+    i = Math.max(i, domain.end - 1, parsedCandidateEnd - 1);
   }
   return true;
 };
