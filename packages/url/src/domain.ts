@@ -303,10 +303,12 @@ export const parseDomain = (
     allowUnknownTld = false,
     joinSingleCharacterWhitespaceRuns = true,
     splitAdjacentDomains = true,
+    stopAtSentenceDot = true,
   }: {
     readonly allowUnknownTld?: boolean;
     readonly joinSingleCharacterWhitespaceRuns?: boolean;
     readonly splitAdjacentDomains?: boolean;
+    readonly stopAtSentenceDot?: boolean;
   } = {},
 ): DomainMatch | null => {
   const first = parseLabel(meta, start, {
@@ -335,6 +337,7 @@ export const parseDomain = (
         parseDomain(meta, trimmedTld.pos, tldSet, tldSkeletonSet, {
           joinSingleCharacterWhitespaceRuns: false,
           splitAdjacentDomains: false,
+          stopAtSentenceDot,
         })
       ) {
         // A one-character first label can otherwise be joined through
@@ -371,6 +374,7 @@ export const parseDomain = (
       afterDot++;
     }
     if (
+      stopAtSentenceDot &&
       labels.length >= 2 &&
       dot.start >= pos &&
       dot.end === dot.start + 1 &&
