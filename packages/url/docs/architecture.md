@@ -80,6 +80,7 @@ graph TD
 | `src/index.ts`              | Public entrypoint, public exports, and censor wrapper orchestration.                                       | Parser details or matching policy.         |
 | `src/contracts.ts`          | Public types and constants.                                                                                | Internal parser types.                     |
 | `src/scanner.ts`            | URL scanner factory, range scanner output, boolean checks, sink streaming, and cheap clean-text prefilter. | Low-level parser rules.                    |
+| `src/tld-data.ts`           | Generated, versioned IANA ASCII and decoded IDN snapshot.                                                  | Matching policy or parser control flow.    |
 | `src/tlds.ts`               | Default TLDs and TLD normalization.                                                                        | Host parsing or URL range collection.      |
 | `src/allowed-domains.ts`    | Exact allowed-domain normalization and parsed-host comparison.                                             | Network loading, caching, or suffix trust. |
 | `src/chars.ts`              | Shared character sets, punctuation policy, lookalike map, and static parser character arrays.              | Parser control flow.                       |
@@ -102,6 +103,9 @@ Ranges always point back to the original code point indexes. This keeps masking 
 Real URL schemes match `http` and `https`. Obfuscated schemes match `hxxp`, split-letter forms such as `h t t p`, and defanged delimiters such as `[:]//` or `[://]`.
 
 Bare domains are parsed from labels separated by real, Unicode, or defanged dots. They require a configured TLD unless the TLD is punycode-like. A whitespace-wrapped U+2022 list bullet between two repeated standalone words is prose, including at sentence boundaries; complete hosts before unrelated text after whitespace-wrapped dot forms or right-spaced single-character dots and continuations with domain or URL-tail evidence remain detectable.
+
+The committed IANA data snapshot is regenerated from the root-zone export by
+`scripts/update-tlds.mjs`. Runtime matching never fetches registry data.
 
 Explicit authorities are parsed after a scheme and can use broader host syntax than bare domains. That path accepts localhost, ports, IPv6 bracket hosts, userinfo, underscores, IDN and emoji labels, and unknown TLDs.
 

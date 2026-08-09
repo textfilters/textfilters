@@ -39,6 +39,7 @@
     "lint": "prettier README.md package.json src docs tests scripts --check",
     "format": "prettier README.md package.json src docs tests scripts --write",
     "benchmark:url": "node scripts/benchmark-url.mjs",
+    "update:tlds": "node scripts/update-tlds.mjs",
     "prepack": "npm run build",
     "pack:dry-run": "npm pack --dry-run",
     "smoke:dist": "node --input-type=module --eval \"const url = await import('./dist/index.js'); url.createUrlFilter().censor('go to https://example.com');\"",
