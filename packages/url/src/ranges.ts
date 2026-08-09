@@ -2,8 +2,11 @@ import { mergeCodePointRanges } from "@textfilters/core";
 
 import { EMPTY_ALLOWED_DOMAINS, isAllowedDomain } from "./allowed-domains.js";
 import { isSentenceDotSymbol } from "./chars.js";
+import type { AmbiguousSpacedDotPolicy } from "./contracts.js";
 import {
   isIgnorableFormatting,
+  isRightSpacedDotSymbol,
+  isWhitespaceWrappedDot,
   isWhitespaceWrappedListBullet,
   parseDot,
 } from "./dots.js";
@@ -129,8 +132,17 @@ const isStandaloneRepeatedListProse = (
 ): boolean => {
   if (domain.labels.length !== 2) return false;
   const [previous, next] = domain.labels;
-  if (!previous || !next || previous.raw !== next.raw) return false;
+  if (!previous || !next) return false;
   if (!isPlainLabel(meta, previous) || !isPlainLabel(meta, next)) return false;
+  let repeatedTokenEnd = next.end;
+  if (previous.raw !== next.raw) {
+    if (!previous.raw.startsWith(next.raw)) return false;
+    const tail = Array.from(previous.raw.slice(next.raw.length));
+    for (const expected of tail) {
+      if (meta.raw[repeatedTokenEnd] !== expected) return false;
+      repeatedTokenEnd++;
+    }
+  }
   const dot = parseDot(meta, previous.pos);
   if (
     !dot ||
@@ -141,7 +153,7 @@ const isStandaloneRepeatedListProse = (
     return false;
   }
   if (domain.end !== next.end) return false;
-  let afterNext = next.end;
+  let afterNext = repeatedTokenEnd;
   while (isIgnorableFormatting(meta, afterNext)) afterNext++;
   if (
     meta.alphaNum[afterNext] ||
@@ -154,13 +166,106 @@ const isStandaloneRepeatedListProse = (
   return true;
 };
 
+const isAmbiguousRightSpacedDomain = (
+  meta: TextMeta,
+  domain: DomainMatch,
+): boolean => {
+  if (domain.labels.length !== 2) return false;
+  const [previous, tld] = domain.labels;
+  if (!previous || !tld || domain.end !== tld.end) return false;
+
+  const dot = parseDot(meta, previous.pos);
+  if (
+    !dot ||
+    dot.start !== previous.end ||
+    dot.end !== dot.start + 1 ||
+    !isSentenceDotSymbol(meta.raw[dot.start] ?? "")
+  ) {
+    return false;
+  }
+
+  let afterDot = dot.end;
+  while (
+    afterDot < tld.start &&
+    (isIgnorableFormatting(meta, afterDot) ||
+      isSentenceCloser(meta.raw[afterDot] ?? ""))
+  ) {
+    afterDot++;
+  }
+  return meta.whitespace[afterDot] ?? false;
+};
+
+const preferCompletedDomainBeforeSpacedSeparator = (
+  meta: TextMeta,
+  domain: DomainMatch,
+  tldSet: ReadonlySet<string>,
+  tldSkeletonSet: ReadonlySet<string>,
+): DomainMatch => {
+  const finalLabel = domain.labels[domain.labels.length - 1];
+  if (!finalLabel || domain.end !== finalLabel.end) return domain;
+
+  for (let index = 1; index < domain.labels.length - 1; index++) {
+    const label = domain.labels[index];
+    const nextLabel = domain.labels[index + 1];
+    if (
+      !label ||
+      (nextLabel !== undefined &&
+        nextLabel.raw === label.raw &&
+        nextLabel.skeleton === label.skeleton) ||
+      (!label.raw.startsWith("xn--") &&
+        !label.skeleton.startsWith("xn--") &&
+        !tldSet.has(label.raw) &&
+        !tldSkeletonSet.has(label.skeleton))
+    ) {
+      continue;
+    }
+
+    const dot = parseDot(meta, label.pos);
+    if (
+      !dot ||
+      (!isWhitespaceWrappedDot(meta, dot) && !isRightSpacedDotSymbol(meta, dot))
+    ) {
+      continue;
+    }
+
+    return {
+      start: domain.start,
+      end: label.end,
+      pos: label.pos,
+      labels: domain.labels.slice(0, index + 1),
+    };
+  }
+
+  return domain;
+};
+
 const maybePreferBareDomainAfterSentence = (
   meta: TextMeta,
   domain: DomainMatch,
   tldSet: ReadonlySet<string>,
   tldSkeletonSet: ReadonlySet<string>,
+  ambiguousSpacedDots: AmbiguousSpacedDotPolicy,
 ): DomainMatch | null => {
   if (isStandaloneRepeatedListProse(meta, domain)) return null;
+  if (
+    ambiguousSpacedDots === "preserve" &&
+    isAmbiguousRightSpacedDomain(meta, domain)
+  ) {
+    return null;
+  }
+
+  const completedDomain = preferCompletedDomainBeforeSpacedSeparator(
+    meta,
+    domain,
+    tldSet,
+    tldSkeletonSet,
+  );
+  if (completedDomain !== domain) {
+    return ambiguousSpacedDots === "preserve" &&
+      isAmbiguousRightSpacedDomain(meta, completedDomain)
+      ? null
+      : completedDomain;
+  }
 
   // A sentence-ending literal dot can otherwise turn the preceding prose and
   // the following standalone host into one multi-label domain.
@@ -227,6 +332,7 @@ export const collectRanges = (
   tldSet: ReadonlySet<string>,
   tldSkeletonSet: ReadonlySet<string>,
   allowedDomainSet: ReadonlySet<string> = EMPTY_ALLOWED_DOMAINS,
+  ambiguousSpacedDots: AmbiguousSpacedDotPolicy = "preserve",
 ): readonly CodePointRange[] => {
   const ranges: CodePointRange[] = [];
   collectRangeMatches(
@@ -234,6 +340,7 @@ export const collectRanges = (
     tldSet,
     tldSkeletonSet,
     allowedDomainSet,
+    ambiguousSpacedDots,
     (range) => {
       ranges.push(range);
     },
@@ -246,6 +353,7 @@ export const collectRangeMatches = (
   tldSet: ReadonlySet<string>,
   tldSkeletonSet: ReadonlySet<string>,
   allowedDomainSet: ReadonlySet<string>,
+  ambiguousSpacedDots: AmbiguousSpacedDotPolicy,
   sink: UrlRangeSink,
 ): boolean => {
   const consumedRanges: CodePointRange[] = [];
@@ -308,6 +416,7 @@ export const collectRangeMatches = (
       parsedDomain,
       tldSet,
       tldSkeletonSet,
+      ambiguousSpacedDots,
     );
     if (!preferredDomain) {
       i = Math.max(i, parsedDomain.end - 1);
@@ -336,9 +445,19 @@ export const collectRangeMatches = (
             allowedDomainSet,
             preferredStart,
           );
+    const preferredFinalLabel =
+      preferredDomain.labels[preferredDomain.labels.length - 1];
+    const preferredSeparator =
+      preferredDomain !== parsedDomain && preferredFinalLabel
+        ? parseDot(meta, preferredFinalLabel.pos)
+        : null;
+    const preferredEndsBeforeListBullet =
+      preferredSeparator !== null &&
+      isWhitespaceWrappedListBullet(meta, preferredSeparator);
     const allowedSuffixWouldBroadenTrust =
       allowedDomainSet.size > 0 &&
       preferredDomain !== parsedDomain &&
+      !preferredEndsBeforeListBullet &&
       !parsedDomainIsAllowed &&
       preferredDomainIsAllowed;
     const preferredFirstLabelStart = preferredDomain.labels[0]?.start;
@@ -346,8 +465,14 @@ export const collectRangeMatches = (
       parsedDomainIsAllowed &&
       preferredDomain !== parsedDomain &&
       parsedDomain.labels[1]?.start === preferredFirstLabelStart;
+    const preserveAllowedCompletedDomain =
+      parsedDomainIsAllowed &&
+      preferredDomain !== parsedDomain &&
+      parsedDomain.start === preferredDomain.start;
     const useParsedDomain =
-      allowedSuffixWouldBroadenTrust || preserveAllowedSingleLabelSubdomain;
+      allowedSuffixWouldBroadenTrust ||
+      preserveAllowedSingleLabelSubdomain ||
+      preserveAllowedCompletedDomain;
     const domain = useParsedDomain ? parsedDomain : preferredDomain;
     const start = useParsedDomain ? parsedStart : preferredStart;
     const domainIsAllowed = useParsedDomain

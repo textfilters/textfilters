@@ -1,4 +1,10 @@
-import { isSentenceDotSymbol, PATH_START_CHARS } from "./chars.js";
+import { lowerNfkc } from "@textfilters/core";
+
+import {
+  COMBINING_MARK_RE,
+  isSentenceDotSymbol,
+  PATH_START_CHARS,
+} from "./chars.js";
 import {
   isIgnorableFormatting,
   isRightSpacedDotSymbol,
@@ -10,11 +16,17 @@ import {
   type Label,
   type LabelText,
   type TextMeta,
+  toSkeletonFromNormalized,
 } from "./meta.js";
 import { maybeConsumePathTail } from "./path.js";
 
 const MAX_DOMAIN_TEXT_LENGTH = 253;
 const MAX_DOMAIN_LABELS = 127;
+
+const finalizeLabelText = (source: string): LabelText => {
+  const raw = lowerNfkc(source);
+  return { raw, skeleton: toSkeletonFromNormalized(raw) };
+};
 
 // Zero-width marks are host obfuscation, not prose boundaries; measure visible
 // runs through them before deciding whether a whitespace gap belongs to a host.
@@ -44,21 +56,23 @@ export const parseLabel = (
   while (pos < meta.codePoints.length && meta.labelJoinSeparator[pos]) pos++;
   let first = -1;
   let last = -1;
-  let raw = "";
-  let skeleton = "";
-  const appendLabelText = (text: LabelText): void => {
-    raw += text.raw;
-    skeleton += text.skeleton;
-  };
+  let normalizedLength = 0;
+  let sourceText = "";
 
   while (pos < meta.codePoints.length) {
-    if (meta.alphaNum[pos]) {
-      const rawChar = meta.raw[pos];
+    const sourceChar = meta.codePoints[pos] ?? "";
+    const rawChar = meta.raw[pos];
+    const isAttachedMark =
+      first >= 0 &&
+      !isIgnorableFormatting(meta, pos) &&
+      COMBINING_MARK_RE.test(sourceChar);
+    if (meta.alphaNum[pos] || isAttachedMark) {
       if (rawChar) {
         if (first < 0) first = pos;
         last = pos;
-        appendLabelText({ raw: rawChar, skeleton: meta.skeleton[pos] });
-        if (raw.length > 63) return null;
+        sourceText += sourceChar;
+        normalizedLength += rawChar.length;
+        if (normalizedLength > 63) return null;
       }
       pos++;
       continue;
@@ -83,8 +97,9 @@ export const parseLabel = (
       const gapRaw = meta.raw.slice(gapStart, pos).join("");
       const hasOnlyHostnameJoinSymbols = /^[-_]+$/u.test(visibleGapRaw);
       if (!gapHasWhitespace && /^-+$/u.test(visibleGapRaw)) {
-        appendLabelText({ raw: visibleGapRaw, skeleton: visibleGapRaw });
-        if (raw.length > 63) return null;
+        sourceText += visibleGapRaw;
+        normalizedLength += visibleGapRaw.length;
+        if (normalizedLength > 63) return null;
       }
       // Join only very short whitespace-split pieces. Longer visible runs are
       // usually prose before a normal URL, even if the run contains zero-width.
@@ -143,8 +158,15 @@ export const parseLabel = (
     break;
   }
 
-  if (first < 0 || raw.length === 0 || raw.length > 63) return null;
-  return { start: first, end: last + 1, pos, raw, skeleton };
+  if (first < 0 || normalizedLength === 0 || normalizedLength > 63) return null;
+  const normalized = finalizeLabelText(sourceText);
+  if (!normalized.raw || normalized.raw.length > 63) return null;
+  return {
+    start: first,
+    end: last + 1,
+    pos,
+    ...normalized,
+  };
 };
 
 const isValidTld = (
@@ -152,9 +174,13 @@ const isValidTld = (
   tldSkeleton: string,
   tldSet: ReadonlySet<string>,
   tldSkeletonSet: ReadonlySet<string>,
+  { allowPunycodeLike = true }: { readonly allowPunycodeLike?: boolean } = {},
 ): boolean => {
   if (!tldRaw) return false;
-  if (tldRaw.startsWith("xn--") || tldSkeleton.startsWith("xn--")) {
+  if (
+    allowPunycodeLike &&
+    (tldRaw.startsWith("xn--") || tldSkeleton.startsWith("xn--"))
+  ) {
     return true;
   }
   return tldSet.has(tldRaw) || tldSkeletonSet.has(tldSkeleton);
@@ -166,10 +192,10 @@ const trimTldTrailingProse = (
   tldSet: ReadonlySet<string>,
   tldSkeletonSet: ReadonlySet<string>,
 ): Label | null => {
-  let raw = "";
-  let skeleton = "";
+  let sourceText = "";
   let last = -1;
   for (let cursor = label.start; cursor < label.pos; cursor++) {
+    const sourceChar = meta.codePoints[cursor] ?? "";
     const symbol = meta.symbol[cursor];
     const canSplit =
       meta.whitespace[cursor] ||
@@ -179,18 +205,36 @@ const trimTldTrailingProse = (
         cursor + 1 < label.pos &&
         meta.skeleton[cursor + 1] === "s" &&
         cursor + 2 === label.pos);
-    if (canSplit && raw && isValidTld(raw, skeleton, tldSet, tldSkeletonSet)) {
-      return { start: label.start, end: last + 1, pos: cursor, raw, skeleton };
+    if (canSplit && sourceText) {
+      const normalized = finalizeLabelText(sourceText);
+      if (
+        isValidTld(
+          normalized.raw,
+          normalized.skeleton,
+          tldSet,
+          tldSkeletonSet,
+          { allowPunycodeLike: symbol !== "-" },
+        )
+      ) {
+        return {
+          start: label.start,
+          end: last + 1,
+          pos: cursor,
+          ...normalized,
+        };
+      }
     }
-    if (meta.alphaNum[cursor]) {
-      raw += meta.raw[cursor];
-      skeleton += meta.skeleton[cursor];
+    const isAttachedMark =
+      sourceText.length > 0 &&
+      !isIgnorableFormatting(meta, cursor) &&
+      COMBINING_MARK_RE.test(sourceChar);
+    if (meta.alphaNum[cursor] || isAttachedMark) {
+      sourceText += sourceChar;
       last = cursor;
       continue;
     }
     if (symbol === "-" && !meta.whitespace[cursor] && !meta.zeroWidth[cursor]) {
-      raw += meta.raw[cursor];
-      skeleton += meta.raw[cursor];
+      sourceText += sourceChar;
       last = cursor;
     }
   }

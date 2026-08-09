@@ -1,6 +1,7 @@
 // Shared character classes keep parser modules aligned on what counts as URL
 // syntax, prose punctuation, or obfuscation markers.
 export const LETTER_OR_DIGIT_RE = /[\p{L}\p{N}]/u;
+export const COMBINING_MARK_RE = /\p{M}/u;
 export const WHITESPACE_RE = /\s/u;
 
 // Use the NFKC-normalized raw view so compatibility full stops such as U+FE52
@@ -74,9 +75,24 @@ export const DEFANGED_DELIMITER_PAIRS = new Map([
 ]);
 
 export const LOOKALIKE_TO_ASCII: Readonly<Record<string, string>> = {
+  ı: "i",
+  α: "a",
+  β: "b",
+  ϲ: "c",
+  ε: "e",
+  ι: "i",
+  κ: "k",
+  μ: "m",
+  ν: "v",
+  ο: "o",
+  ρ: "p",
+  τ: "t",
+  υ: "u",
+  χ: "x",
   а: "a",
   в: "b",
   с: "c",
+  ԁ: "d",
   е: "e",
   н: "h",
   і: "i",
@@ -85,9 +101,12 @@ export const LOOKALIKE_TO_ASCII: Readonly<Record<string, string>> = {
   м: "m",
   о: "o",
   р: "p",
+  ѕ: "s",
   т: "t",
   у: "y",
   х: "x",
+  ԛ: "q",
+  ԝ: "w",
   ё: "e",
 };
 

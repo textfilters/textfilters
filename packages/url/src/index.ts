@@ -10,6 +10,7 @@ import { DEFAULT_TLDS, normalizeTlds } from "./tlds.js";
 
 export {
   URL_FILTER_NAME,
+  type AmbiguousSpacedDotPolicy,
   type UrlFilter,
   type UrlFilterConfig,
   type UrlRangeMatch,
@@ -31,6 +32,7 @@ export function createUrlFilter(config: UrlFilterConfig = {}): UrlFilter {
   const scanner = createUrlScanner({
     tlds: normalizeTlds(config.tlds),
     allowedDomains: config.allowedDomains,
+    ambiguousSpacedDots: config.ambiguousSpacedDots,
   });
   const maskChar = config.maskChar ?? "*";
 

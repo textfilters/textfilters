@@ -64,7 +64,7 @@ export const isAllowedDomain = (
   const hostname = domain.labels
     .map((label, index) => {
       const start = index === 0 ? firstLabelStart : label.start;
-      let normalized = "";
+      let sourceLabel = "";
       for (let cursor = start; cursor < label.end; cursor++) {
         const source = meta.codePoints[cursor] ?? "";
         const symbol = meta.symbol[cursor] ?? "";
@@ -74,10 +74,10 @@ export const isAllowedDomain = (
           symbol === "_" ||
           /[\p{M}\p{S}]/u.test(source)
         ) {
-          normalized += stripZeroWidth(lowerNfkc(source));
+          sourceLabel += source;
         }
       }
-      return normalized;
+      return stripZeroWidth(lowerNfkc(sourceLabel));
     })
     .join(".");
   return allowedDomains.has(hostname);

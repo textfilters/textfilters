@@ -6,10 +6,13 @@ import {
   createUrlScanner,
   scanUrlRangeMatches,
   scanUrlRanges,
+  type AmbiguousSpacedDotPolicy,
   type UrlRangeScanner,
   type UrlRangeScanResult,
   type UrlScanHints,
 } from "../src/index.js";
+import { toSkeleton } from "../src/meta.js";
+import { DEFAULT_TLDS } from "../src/tlds.js";
 import { mask } from "./helpers.js";
 
 type Range = readonly [number, number];
@@ -18,11 +21,22 @@ interface ScannerFixture {
   readonly text: string;
   readonly ranges: readonly Range[];
   readonly allowedDomains?: readonly string[];
+  readonly ambiguousSpacedDots?: AmbiguousSpacedDotPolicy;
 }
 
 const wholeRange = (text: string): readonly Range[] => [
   [0, Array.from(text).length],
 ];
+
+const rangesEqual = (
+  actual: readonly Range[],
+  expected: readonly Range[],
+): boolean =>
+  actual.length === expected.length &&
+  actual.every(
+    (range, index) =>
+      range[0] === expected[index]?.[0] && range[1] === expected[index]?.[1],
+  );
 
 const maskRanges = (text: string, ranges: readonly Range[]): string => {
   const codePoints = Array.from(text);
@@ -34,16 +48,57 @@ const maskRanges = (text: string, ranges: readonly Range[]): string => {
   return codePoints.join("");
 };
 
+const NORMALIZATION_FORMS = ["NFC", "NFD", "NFKC", "NFKD"] as const;
+
+const getNormalizationVariants = (
+  value: string,
+): ReadonlyMap<string, readonly string[]> => {
+  const variants = new Map<string, string[]>();
+  for (const form of NORMALIZATION_FORMS) {
+    const normalized = value.normalize(form);
+    const forms = variants.get(normalized);
+    if (forms) forms.push(form);
+    else variants.set(normalized, [form]);
+  }
+  return variants;
+};
+
+const toFullwidthAscii = (value: string): string =>
+  Array.from(value, (char) =>
+    char === "-"
+      ? "－"
+      : String.fromCodePoint((char.codePointAt(0) ?? 0) + 0xfee0),
+  ).join("");
+
+const createFailureRecorder = (): {
+  readonly record: (failure: unknown) => void;
+  readonly result: () => {
+    readonly failures: number;
+    readonly samples: unknown[];
+  };
+} => {
+  let failures = 0;
+  const samples: unknown[] = [];
+  return {
+    record(failure) {
+      failures++;
+      if (samples.length < 12) samples.push(failure);
+    },
+    result: () => ({ failures, samples }),
+  };
+};
+
 const expectScannerFixture = ({
   text,
   ranges,
   allowedDomains,
+  ambiguousSpacedDots,
 }: ScannerFixture): void => {
   const input = { text, codePoints: Array.from(text) };
-  const scanner = createUrlScanner({ allowedDomains });
+  const scanner = createUrlScanner({ allowedDomains, ambiguousSpacedDots });
   const seen: Range[] = [];
 
-  if (allowedDomains === undefined) {
+  if (allowedDomains === undefined && ambiguousSpacedDots === undefined) {
     expect(scanUrlRanges(text)).toEqual(ranges);
     expect(checkUrlRanges(input)).toBe(ranges.length > 0);
   }
@@ -55,9 +110,9 @@ const expectScannerFixture = ({
     }),
   ).toBe(true);
   expect(seen).toEqual(ranges);
-  expect(createUrlFilter({ allowedDomains }).censor(text)).toBe(
-    maskRanges(text, ranges),
-  );
+  expect(
+    createUrlFilter({ allowedDomains, ambiguousSpacedDots }).censor(text),
+  ).toBe(maskRanges(text, ranges));
 };
 
 describe("URL scanner", () => {
@@ -103,6 +158,173 @@ describe("URL scanner", () => {
     expect(createUrlFilter({ maskChar: "#" }).censor(text)).toBe(
       `go ${mask("https://example.com/path", "#")} now`,
     );
+  });
+
+  it("normalizes every completed default TLD before lookup and adjacency trimming", () => {
+    const failures = createFailureRecorder();
+
+    for (const tld of DEFAULT_TLDS) {
+      for (const [variant, forms] of getNormalizationVariants(tld)) {
+        const domain = `x.${variant}`;
+        const domainLength = Array.from(domain).length;
+        const adjacent = `${domain} y.org`;
+        const expectedAdjacent: readonly Range[] = [
+          [0, domainLength],
+          [domainLength + 1, domainLength + 6],
+        ];
+        const directRanges = scanUrlRanges(domain);
+        const adjacentRanges = scanUrlRanges(adjacent);
+
+        if (
+          !rangesEqual(directRanges, wholeRange(domain)) ||
+          !rangesEqual(adjacentRanges, expectedAdjacent)
+        ) {
+          failures.record({
+            tld,
+            forms,
+            variant,
+            directRanges,
+            adjacentRanges,
+          });
+        }
+      }
+    }
+
+    expect(failures.result()).toEqual({ failures: 0, samples: [] });
+  });
+
+  it("normalizes compatibility expansions from original label code points", () => {
+    const compatibilityMappings: Array<readonly [string, string]> = [];
+    for (let codePoint = 0; codePoint <= 0x10ffff; codePoint++) {
+      if (codePoint >= 0xd800 && codePoint <= 0xdfff) continue;
+      const source = String.fromCodePoint(codePoint);
+      const normalized = source.normalize("NFKC").toLowerCase();
+      if (
+        Array.from(normalized).length > 1 &&
+        /^[a-z0-9-]+$/u.test(normalized)
+      ) {
+        compatibilityMappings.push([normalized, source]);
+      }
+    }
+
+    const failures = createFailureRecorder();
+    for (const tld of DEFAULT_TLDS) {
+      if (!/^[a-z0-9-]+$/u.test(tld)) continue;
+      const variants = new Set<string>();
+      for (const [sequence, source] of compatibilityMappings) {
+        let start = 0;
+        while (start < tld.length) {
+          const index = tld.indexOf(sequence, start);
+          if (index < 0) break;
+          variants.add(
+            `${tld.slice(0, index)}${source}${tld.slice(index + sequence.length)}`,
+          );
+          start = index + 1;
+        }
+      }
+
+      for (const variant of variants) {
+        const domain = `x.${variant}`;
+        const domainLength = Array.from(domain).length;
+        const adjacent = `${domain} y.org`;
+        const expectedAdjacent: readonly Range[] = [
+          [0, domainLength],
+          [domainLength + 1, domainLength + 6],
+        ];
+        const directRanges = scanUrlRanges(domain);
+        const adjacentRanges = scanUrlRanges(adjacent);
+        if (
+          !rangesEqual(directRanges, wholeRange(domain)) ||
+          !rangesEqual(adjacentRanges, expectedAdjacent)
+        ) {
+          failures.record({ tld, variant, directRanges, adjacentRanges });
+        }
+      }
+    }
+
+    expect(failures.result()).toEqual({ failures: 0, samples: [] });
+  });
+
+  it("normalizes every implicit low-level custom TLD lookup", () => {
+    const failures = createFailureRecorder();
+
+    for (const tld of DEFAULT_TLDS) {
+      const configuredValues = /^[a-z0-9-]+$/u.test(tld)
+        ? [tld.toUpperCase(), toFullwidthAscii(tld.toUpperCase())]
+        : [tld.normalize("NFD"), tld.normalize("NFKD"), tld.toUpperCase()];
+      for (const configured of new Set(configuredValues)) {
+        const text = `x.${tld}`;
+        const ranges = scanUrlRanges(text, new Set([configured]));
+        if (!rangesEqual(ranges, wholeRange(text))) {
+          failures.record({ tld, configured, ranges });
+        }
+      }
+    }
+
+    expect(failures.result()).toEqual({ failures: 0, samples: [] });
+  });
+
+  it("keeps normalized low-level lookups directional and API-aligned", () => {
+    for (const [text, configured] of [
+      ["x.com", "COM"],
+      ["x.com", "ＣＯＭ"],
+      ["x.한국", "한국".normalize("NFD")],
+      ["x.москва", "МОСКВА"],
+    ] as const) {
+      const tldSet = new Set([configured]);
+      const input = { text, codePoints: Array.from(text) };
+      const seen: Range[] = [];
+
+      expect(scanUrlRanges(text, tldSet)).toEqual(wholeRange(text));
+      expect(checkUrlRanges(input, tldSet)).toBe(true);
+      expect(
+        scanUrlRangeMatches(
+          input,
+          (match) => {
+            seen.push(match.range);
+          },
+          tldSet,
+        ),
+      ).toBe(true);
+      expect(seen).toEqual(wholeRange(text));
+    }
+
+    const delegated = new Set(DEFAULT_TLDS);
+    for (const tld of DEFAULT_TLDS) {
+      if (/^[a-z0-9-]+$/u.test(tld)) continue;
+      const skeleton = toSkeleton(tld);
+      if (!/^[a-z0-9-]+$/u.test(skeleton) || delegated.has(skeleton)) {
+        continue;
+      }
+      expect(scanUrlRanges(`x.${skeleton}`)).toEqual([]);
+      expect(scanUrlRanges(`x.${skeleton}`, new Set([tld]))).toEqual([]);
+      expect(scanUrlRanges(`x.${tld}`, new Set([tld]))).toEqual(
+        wholeRange(`x.${tld}`),
+      );
+    }
+  });
+
+  it("keeps marked Unicode TLDs independent from adjacent domains and allowlists", () => {
+    const text = "example.कॉम x.org";
+    const first = "example.कॉम";
+    const second = "x.org";
+    const secondStart = Array.from(first).length + 1;
+    const ranges: readonly Range[] = [
+      [0, Array.from(first).length],
+      [secondStart, secondStart + Array.from(second).length],
+    ];
+
+    expectScannerFixture({ text, ranges });
+    expect(createUrlFilter({ allowedDomains: [first] }).censor(text)).toBe(
+      `${first} ${mask(second)}`,
+    );
+
+    const punycode = "x.xn--unknown y.org";
+    const punycodeEnd = Array.from("x.xn--unknown").length;
+    expect(scanUrlRanges(punycode)).toEqual([
+      [0, punycodeEnd],
+      [punycodeEnd + 1, Array.from(punycode).length],
+    ]);
   });
 
   it("checks URL candidates without collecting every range", () => {
@@ -225,8 +447,43 @@ describe("URL scanner", () => {
     );
   });
 
+  it("applies an explicit policy to ambiguous spaced-dot candidates", () => {
+    const cases = [
+      ["Fine. Be careful.", "Fine. Be"],
+      ["这是 示例。 中国 很好", "示例。 中国"],
+      ["Step 1. One thing remains.", "Step 1. One"],
+      ["State-of-the-art. Design matters.", "State-of-the-art. Design"],
+      ["visit evil. com", "evil. com"],
+      ["please open phishing. net!", "phishing. net"],
+      ["Visit evil. com now", "evil. com"],
+      ["Please visit Evil. com now", "Evil. com"],
+    ] as const;
+
+    for (const [text, candidate] of cases) {
+      const start = Array.from(text.slice(0, text.indexOf(candidate))).length;
+      const range: Range = [start, start + Array.from(candidate).length];
+
+      expectScannerFixture({ text, ranges: [] });
+      expectScannerFixture({
+        text,
+        ranges: [range],
+        ambiguousSpacedDots: "block",
+      });
+    }
+
+    const strongEvidence = "Visit evil. com/path now";
+    const candidate = "evil. com/path";
+    const start = Array.from(
+      strongEvidence.slice(0, strongEvidence.indexOf(candidate)),
+    ).length;
+    expectScannerFixture({
+      text: strongEvidence,
+      ranges: [[start, start + Array.from(candidate).length]],
+    });
+  });
+
   it("checks allowlists against the selected sentence suffix", () => {
-    const text = "foo.bar. evil.com";
+    const text = "foo.invalid. evil.com";
     const suffix = "evil.com";
     const suffixStart = Array.from(text.slice(0, text.indexOf(suffix))).length;
     const input = { text, codePoints: Array.from(text) };
@@ -234,12 +491,12 @@ describe("URL scanner", () => {
       {
         allowedDomains: [] as string[],
         ranges: [[suffixStart, Array.from(text).length]],
-        censored: `foo.bar. ${mask(suffix)}`,
+        censored: `foo.invalid. ${mask(suffix)}`,
       },
       {
-        allowedDomains: ["foo.bar.evil.com"],
+        allowedDomains: ["foo.invalid.evil.com"],
         ranges: [[suffixStart, Array.from(text).length]],
-        censored: `foo.bar. ${mask(suffix)}`,
+        censored: `foo.invalid. ${mask(suffix)}`,
       },
       {
         allowedDomains: [suffix],
@@ -247,7 +504,7 @@ describe("URL scanner", () => {
         censored: mask(text),
       },
       {
-        allowedDomains: ["foo.bar.evil.com", suffix],
+        allowedDomains: ["foo.invalid.evil.com", suffix],
         ranges: [] as Array<readonly [number, number]>,
         censored: text,
       },
@@ -269,7 +526,10 @@ describe("URL scanner", () => {
       expect(createUrlFilter({ allowedDomains }).censor(text)).toBe(censored);
     }
 
-    for (const sentenceText of ["foo.bar﹒ evil.com", "foo.bar.” evil.com"]) {
+    for (const sentenceText of [
+      "foo.invalid﹒ evil.com",
+      "foo.invalid.” evil.com",
+    ]) {
       const sentenceSuffixStart = Array.from(
         sentenceText.slice(0, sentenceText.indexOf(suffix)),
       ).length;
@@ -409,7 +669,6 @@ describe("URL scanner", () => {
       "me • _me",
       "example.com.\ufe0f/path",
       "example.com.\u{e0100}/path",
-      "example.com • net",
       "me • me/path",
       "me • me\ufe0f/path",
       "me • me\u{e0100}/path",
@@ -448,7 +707,11 @@ describe("URL scanner", () => {
       text: "hello. me • me. example.com",
       ranges: [[16, 27]],
     });
-    for (const text of ["example.com • next", "example.com •\ufe0f next"]) {
+    for (const text of [
+      "example.com • net",
+      "example.com • next",
+      "example.com •\ufe0f next",
+    ]) {
       expectScannerFixture({ text, ranges: [[0, 11]] });
     }
     for (const dot of ["·", "⋅", "・"]) {
@@ -537,6 +800,17 @@ describe("URL scanner", () => {
         allowedDomains: [exactDomain],
       });
     }
+
+    expectScannerFixture({
+      text: "evil.com dot net",
+      ranges: wholeRange("evil.com dot net"),
+      allowedDomains: ["evil.com"],
+    });
+    expectScannerFixture({
+      text: "evil.com dot net",
+      ranges: [],
+      allowedDomains: ["evil.com.net"],
+    });
   });
 
   it("keeps adjacent URL ranges and allowlists independent", () => {
@@ -717,6 +991,9 @@ describe("URL scanner", () => {
 
   it("supports custom TLD configuration", () => {
     expect(scanUrlRanges("go svc.internal", new Set(["internal"]))).toEqual([
+      [3, 15],
+    ]);
+    expect(scanUrlRanges("go svc.іnternal", new Set(["internal"]))).toEqual([
       [3, 15],
     ]);
     expect(scanUrlRanges("go svc.internal")).toEqual([]);

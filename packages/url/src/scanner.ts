@@ -13,6 +13,7 @@ import {
 } from "./chars.js";
 import {
   URL_FILTER_NAME,
+  type AmbiguousSpacedDotPolicy,
   type UrlRangeMatchSink,
   type UrlRangeScanner,
   type UrlScanInput,
@@ -21,22 +22,76 @@ import {
   EMPTY_ALLOWED_DOMAINS,
   normalizeAllowedDomains,
 } from "./allowed-domains.js";
-import { createMeta, toSkeleton } from "./meta.js";
+import { createMeta, toSkeleton, toSkeletonFromNormalized } from "./meta.js";
 import { collectRangeMatches, collectRanges } from "./ranges.js";
-import { DEFAULT_TLDS, normalizeTlds } from "./tlds.js";
+import { DEFAULT_TLDS, normalizeTld, normalizeTlds } from "./tlds.js";
+
+const ASCII_TLD_RE = /^[a-z0-9-]+$/u;
+
+const createTldSkeletonSet = (tlds: Iterable<string>): ReadonlySet<string> => {
+  const skeletons = new Set<string>();
+  for (const tld of tlds) {
+    const normalized = normalizeTld(tld);
+    if (ASCII_TLD_RE.test(normalized)) {
+      skeletons.add(toSkeletonFromNormalized(normalized));
+    }
+  }
+  return skeletons;
+};
+
+const createNormalizedTldSet = (
+  tlds: Iterable<string>,
+): ReadonlySet<string> => {
+  const normalized = new Set<string>();
+  for (const tld of tlds) {
+    const value = normalizeTld(tld);
+    if (value) normalized.add(value);
+  }
+  return normalized;
+};
+
+const DEFAULT_TLD_SET: ReadonlySet<string> = new Set(DEFAULT_TLDS);
+const DEFAULT_TLD_SKELETON_SET = createTldSkeletonSet(DEFAULT_TLDS);
+
+const resolveTldLookups = (
+  tldSet: ReadonlySet<string>,
+  tldSkeletonSet: ReadonlySet<string> | undefined,
+): {
+  readonly tldSet: ReadonlySet<string>;
+  readonly tldSkeletonSet: ReadonlySet<string>;
+} => {
+  if (tldSkeletonSet) return { tldSet, tldSkeletonSet };
+  if (tldSet === DEFAULT_TLD_SET) {
+    return {
+      tldSet: DEFAULT_TLD_SET,
+      tldSkeletonSet: DEFAULT_TLD_SKELETON_SET,
+    };
+  }
+  const normalizedTldSet = createNormalizedTldSet(tldSet);
+  return {
+    tldSet: normalizedTldSet,
+    tldSkeletonSet: createTldSkeletonSet(normalizedTldSet),
+  };
+};
 
 export interface UrlScannerConfig {
   readonly tlds?: readonly string[];
   readonly allowedDomains?: readonly string[];
+  readonly ambiguousSpacedDots?: AmbiguousSpacedDotPolicy;
 }
 
 export function createUrlScanner(
   config: UrlScannerConfig = {},
 ): UrlRangeScanner {
   const tlds = normalizeTlds(config.tlds);
-  const tldSet = new Set(tlds);
-  const tldSkeletonSet = new Set(tlds.map((tld) => toSkeleton(tld)));
+  const useDefaults = tlds === DEFAULT_TLDS;
+  const tldSet = useDefaults ? DEFAULT_TLD_SET : new Set(tlds);
+  const tldSkeletonSet = useDefaults
+    ? DEFAULT_TLD_SKELETON_SET
+    : createTldSkeletonSet(tlds);
   const allowedDomainSet = normalizeAllowedDomains(config.allowedDomains);
+  const ambiguousSpacedDots: AmbiguousSpacedDotPolicy =
+    config.ambiguousSpacedDots === "block" ? "block" : "preserve";
 
   function scan(input: UrlScanInput): { ranges: readonly TextCodePointRange[] };
   function scan(input: UrlScanInput, sink: UrlRangeMatchSink): boolean;
@@ -48,6 +103,7 @@ export function createUrlScanner(
           tldSet,
           tldSkeletonSet,
           allowedDomainSet,
+          ambiguousSpacedDots,
         ),
       };
     }
@@ -58,6 +114,7 @@ export function createUrlScanner(
       tldSet,
       tldSkeletonSet,
       allowedDomainSet,
+      ambiguousSpacedDots,
     );
   }
 
@@ -65,7 +122,13 @@ export function createUrlScanner(
     name: URL_FILTER_NAME,
     allocationAware: true,
     check(input) {
-      return checkUrlRanges(input, tldSet, tldSkeletonSet, allowedDomainSet);
+      return checkUrlRanges(
+        input,
+        tldSet,
+        tldSkeletonSet,
+        allowedDomainSet,
+        ambiguousSpacedDots,
+      );
     },
     scan,
   };
@@ -73,55 +136,69 @@ export function createUrlScanner(
 
 export function scanUrlRanges(
   text: unknown,
-  tldSet: ReadonlySet<string> = new Set(DEFAULT_TLDS),
-  tldSkeletonSet: ReadonlySet<string> = new Set(
-    Array.from(tldSet, (tld) => toSkeleton(tld)),
-  ),
+  tldSet: ReadonlySet<string> = DEFAULT_TLD_SET,
+  tldSkeletonSet?: ReadonlySet<string>,
   allowedDomainSet: ReadonlySet<string> = EMPTY_ALLOWED_DOMAINS,
+  ambiguousSpacedDots: AmbiguousSpacedDotPolicy = "preserve",
 ): readonly TextCodePointRange[] {
   const source = String(text ?? "");
   if (!source || !hasUrlCandidate(source)) return [];
 
   const meta = createMeta(source);
-  return collectRanges(meta, tldSet, tldSkeletonSet, allowedDomainSet);
+  const lookups = resolveTldLookups(tldSet, tldSkeletonSet);
+  return collectRanges(
+    meta,
+    lookups.tldSet,
+    lookups.tldSkeletonSet,
+    allowedDomainSet,
+    ambiguousSpacedDots,
+  );
 }
 
 export function checkUrlRanges(
   input: UrlScanInput,
-  tldSet: ReadonlySet<string> = new Set(DEFAULT_TLDS),
-  tldSkeletonSet: ReadonlySet<string> = new Set(
-    Array.from(tldSet, (tld) => toSkeleton(tld)),
-  ),
+  tldSet: ReadonlySet<string> = DEFAULT_TLD_SET,
+  tldSkeletonSet?: ReadonlySet<string>,
   allowedDomainSet: ReadonlySet<string> = EMPTY_ALLOWED_DOMAINS,
+  ambiguousSpacedDots: AmbiguousSpacedDotPolicy = "preserve",
 ): boolean {
   if (!hasUrlCandidateInput(input)) return false;
 
   const meta = createMeta(input.text);
+  const lookups = resolveTldLookups(tldSet, tldSkeletonSet);
   let found = false;
-  collectRangeMatches(meta, tldSet, tldSkeletonSet, allowedDomainSet, () => {
-    found = true;
-    return false;
-  });
+  collectRangeMatches(
+    meta,
+    lookups.tldSet,
+    lookups.tldSkeletonSet,
+    allowedDomainSet,
+    ambiguousSpacedDots,
+    () => {
+      found = true;
+      return false;
+    },
+  );
   return found;
 }
 
 export function scanUrlRangeMatches(
   input: UrlScanInput,
   sink: UrlRangeMatchSink,
-  tldSet: ReadonlySet<string> = new Set(DEFAULT_TLDS),
-  tldSkeletonSet: ReadonlySet<string> = new Set(
-    Array.from(tldSet, (tld) => toSkeleton(tld)),
-  ),
+  tldSet: ReadonlySet<string> = DEFAULT_TLD_SET,
+  tldSkeletonSet?: ReadonlySet<string>,
   allowedDomainSet: ReadonlySet<string> = EMPTY_ALLOWED_DOMAINS,
+  ambiguousSpacedDots: AmbiguousSpacedDotPolicy = "preserve",
 ): boolean {
   if (!hasUrlCandidateInput(input)) return true;
 
   const meta = createMeta(input.text);
+  const lookups = resolveTldLookups(tldSet, tldSkeletonSet);
   return collectRangeMatches(
     meta,
-    tldSet,
-    tldSkeletonSet,
+    lookups.tldSet,
+    lookups.tldSkeletonSet,
     allowedDomainSet,
+    ambiguousSpacedDots,
     (range) => sink({ range }),
   );
 }

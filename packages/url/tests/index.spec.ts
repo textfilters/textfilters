@@ -260,6 +260,85 @@ describe("compatibility behavior", () => {
     expect(filter.censor(input)).toBe(mask(input));
   });
 
+  it("blocks every listed TLD and mapped lookalike spellings", () => {
+    for (const input of [
+      "youtu.be",
+      "example.aero/path",
+      "пример.рф/путь",
+      "account.bız/account/profile",
+      "account.rυ/account/profile",
+      "account.cοm/path",
+      "account.ѕite/path",
+      "account.deν/path",
+      "example.कॉम",
+      "example.भारत",
+      "example.இந்தியா",
+      "example.বাংলা",
+      "x.vermo\u0308gensberater",
+    ]) {
+      expect(filter.censor(input)).toBe(mask(input));
+    }
+
+    const allowed = createUrlFilter({
+      allowedDomains: ["youtu.be", "account.biz"],
+    });
+    expect(allowed.censor("youtu.be/path")).toBe("youtu.be/path");
+    expect(allowed.censor("account.bız/path")).toBe(mask("account.bız/path"));
+  });
+
+  it("keeps lookalike TLD folding directional", () => {
+    expect(filter.censor("delete module.pyc now")).toBe(
+      "delete module.pyc now",
+    );
+    expect(filter.censor("archive.kom")).toBe("archive.kom");
+
+    const unicodeOnly = createUrlFilter({ tlds: ["рус"] });
+    expect(unicodeOnly.censor("example.рус")).toBe(mask("example.рус"));
+    expect(unicodeOnly.censor("example.pyc")).toBe("example.pyc");
+
+    const asciiOnly = createUrlFilter({ tlds: ["ru"] });
+    expect(asciiOnly.censor("example.rυ")).toBe(mask("example.rυ"));
+  });
+
+  it("keeps sentence punctuation and repeated list prose unchanged", () => {
+    for (const input of [
+      "This is fine. Be careful.",
+      "We made it. It works.",
+      "Log in. In settings, continue.",
+      "Ready to go. To begin, click.",
+      "Buy things. shop!",
+      "Use this. app!",
+      "We made it. it",
+      "Fine. Be careful.",
+      "这是 示例。 中国 很好",
+      "Step 1. One thing remains.",
+      "State-of-the-art. Design matters.",
+      "Visit evil. com now",
+      "Please visit Evil. com now",
+      "foo-bar • Foo-bar follows",
+    ]) {
+      expect(filter.censor(input)).toBe(input);
+    }
+  });
+
+  it("blocks ambiguous spaced-dot domains in strict mode", () => {
+    const strict = createUrlFilter({ ambiguousSpacedDots: "block" });
+
+    expect(strict.censor("evil. Com")).toBe(mask("evil. Com"));
+    expect(strict.censor("evil. COM")).toBe(mask("evil. COM"));
+    expect(strict.censor("evil. Com!")).toBe(`${mask("evil. Com")}!`);
+    expect(strict.censor("visit evil. com")).toBe(`visit ${mask("evil. com")}`);
+    expect(strict.censor("please open phishing. net!")).toBe(
+      `please open ${mask("phishing. net")}!`,
+    );
+    expect(strict.censor("Visit evil. com now")).toBe(
+      `Visit ${mask("evil. com")} now`,
+    );
+    expect(strict.censor("Please visit Evil. com now")).toBe(
+      `Please visit ${mask("Evil. com")} now`,
+    );
+  });
+
   it("keeps zero-width marks inside host labels", () => {
     expect(filter.censor("go exa\u200bmple.com now")).toBe(
       `go ${mask("exa\u200bmple.com")} now`,
@@ -423,6 +502,13 @@ describe("compatibility behavior", () => {
     expect(f.censor("visit xn--e1afmkfd.xn--p1ai now")).toBe(
       `visit ${mask("xn--e1afmkfd.xn--p1ai")} now`,
     );
+
+    const decomposed = "x.vermo\u0308gensberater";
+    expect(
+      createUrlFilter({ allowedDomains: ["x.vermögensberater"] }).censor(
+        decomposed,
+      ),
+    ).toBe(decomposed);
   });
 
   it("ignores invalid allowed-domain entries and masks mixed blocked URLs", () => {

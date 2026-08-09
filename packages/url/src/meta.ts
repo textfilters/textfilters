@@ -48,10 +48,13 @@ export type CodePointRange = TextCodePointRange;
 export const toRawChar = (ch: string): string =>
   Array.from(lowerNfkc(ch))[0] ?? "";
 
-export const toSkeleton = (value: unknown): string =>
-  Array.from(lowerNfkc(value))
+export const toSkeletonFromNormalized = (value: string): string =>
+  Array.from(value)
     .map((ch) => LOOKALIKE_TO_ASCII[ch] ?? ch)
     .join("");
+
+export const toSkeleton = (value: unknown): string =>
+  toSkeletonFromNormalized(lowerNfkc(value));
 
 export const toRawChars = (value: string): string[] =>
   Array.from(lowerNfkc(value));
