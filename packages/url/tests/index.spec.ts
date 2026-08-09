@@ -260,6 +260,14 @@ describe("compatibility behavior", () => {
     expect(filter.censor(input)).toBe(mask(input));
   });
 
+  it("handles dotless-I lookalikes in bare TLDs", () => {
+    const input = "freeaccount.bız";
+    expect(filter.censor(input)).toBe(mask(input));
+    expect(filter.censor("ordinary text uses kırmızı")).toBe(
+      "ordinary text uses kırmızı",
+    );
+  });
+
   it("keeps zero-width marks inside host labels", () => {
     expect(filter.censor("go exa\u200bmple.com now")).toBe(
       `go ${mask("exa\u200bmple.com")} now`,
