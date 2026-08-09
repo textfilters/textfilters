@@ -529,11 +529,61 @@ export const collectRangeMatches = (
       parsedDomain.labels[1]?.start === preferredFirstLabelStart;
     const useParsedDomain =
       allowedSuffixWouldBroadenTrust || preserveAllowedSingleLabelSubdomain;
-    const domain = useParsedDomain ? parsedDomain : preferredDomain;
-    const start = useParsedDomain ? parsedStart : preferredStart;
-    const domainIsAllowed = useParsedDomain
+    let domain = useParsedDomain ? parsedDomain : preferredDomain;
+    let start = useParsedDomain ? parsedStart : preferredStart;
+    let domainIsAllowed = useParsedDomain
       ? parsedDomainIsAllowed
       : preferredDomainIsAllowed;
+    const lastLabel = domain.labels.at(-1);
+    const continuationDot = lastLabel ? parseDot(meta, lastLabel.pos) : null;
+    const independentSuffix = continuationDot
+      ? parseDomain(meta, continuationDot.pos, tldSet, tldSkeletonSet)
+      : null;
+    if (continuationDot && !independentSuffix) {
+      const continuedDomain = parseDomain(
+        meta,
+        domain.start,
+        tldSet,
+        tldSkeletonSet,
+        { stopAtSentenceDot: false },
+      );
+      if (continuedDomain && continuedDomain.end > domain.end) {
+        const firstContinuationLabel =
+          continuedDomain.labels[domain.labels.length];
+        const repeatsTerminalTld =
+          firstContinuationLabel !== undefined &&
+          lastLabel !== undefined &&
+          (firstContinuationLabel.raw === lastLabel.raw ||
+            firstContinuationLabel.skeleton === lastLabel.skeleton);
+        const sentenceContinuation = maybePreferBareDomainAfterSentence(
+          meta,
+          continuedDomain,
+          tldSet,
+          tldSkeletonSet,
+        );
+        const preferredContinuation = sentenceContinuation
+          ? maybePreferCompletedDomainBeforeSpacedLabel(
+              meta,
+              sentenceContinuation,
+              tldSet,
+              tldSkeletonSet,
+            )
+          : null;
+        if (
+          preferredContinuation === continuedDomain &&
+          (domainIsAllowed || repeatsTerminalTld)
+        ) {
+          domain = continuedDomain;
+          start = maybeExpandBareSplitPrefix(meta, domain, consumedRanges);
+          domainIsAllowed = isAllowedDomain(
+            meta,
+            domain,
+            allowedDomainSet,
+            start,
+          );
+        }
+      }
+    }
     if (!hasBareBoundary(meta, start, domain.end, consumedRanges)) continue;
     if (!domainIsAllowed) {
       if (sink([start, domain.end]) === false) return false;
