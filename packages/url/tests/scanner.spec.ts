@@ -225,6 +225,95 @@ describe("URL scanner", () => {
     );
   });
 
+  it("keeps sentence-initial delegated words as prose", () => {
+    const tlds = [
+      "com",
+      "me",
+      "online",
+      "info",
+      "today",
+      "youtube",
+      "us",
+      "مصر",
+    ];
+    const scanner = createUrlScanner({ tlds });
+    const filter = createUrlFilter({ tlds });
+    const prose = [
+      "This is good. Me too.",
+      "This is good.” Online works.",
+      "This is good. “INFO,” we agree.",
+      "This is good. YouTube-based plans work.",
+      "This is good. Today's plan works.",
+      "This is good. Today. We leave.",
+      "This is good. TODAY",
+      "الكلام جيد. مصر جميلة.",
+      "Hello. Today. Online works.",
+    ];
+
+    for (const text of prose) {
+      const input = { text, codePoints: Array.from(text) };
+      const seen: Range[] = [];
+
+      expect(scanner.check(input)).toBe(false);
+      expect(scanner.scan(input)).toEqual({ ranges: [] });
+      expect(
+        scanner.scan(input, (match) => {
+          seen.push(match.range);
+        }),
+      ).toBe(true);
+      expect(seen).toEqual([]);
+      expect(filter.censor(text)).toBe(text);
+    }
+  });
+
+  it("preserves domain evidence around sentence-word boundaries", () => {
+    const tlds = ["com", "today", "youtube", "مصر"];
+    const scanner = createUrlScanner({ tlds });
+    const filter = createUrlFilter({ tlds });
+    const fixtures = [
+      { text: "example. com", ranges: wholeRange("example. com") },
+      { text: "example. COM/path", ranges: wholeRange("example. COM/path") },
+      {
+        text: "This is good. YouTube.com works.",
+        domain: "YouTube.com",
+      },
+      {
+        text: "Visit example.com.” Today is fine.",
+        domain: "example.com",
+      },
+      { text: "example. مصر/path", ranges: wholeRange("example. مصر/path") },
+    ];
+
+    for (const fixture of fixtures) {
+      const ranges =
+        fixture.ranges ??
+        (() => {
+          const domain = fixture.domain ?? "";
+          const start = Array.from(
+            fixture.text.slice(0, fixture.text.indexOf(domain)),
+          ).length;
+          return [[start, start + Array.from(domain).length]] as const;
+        })();
+      const input = {
+        text: fixture.text,
+        codePoints: Array.from(fixture.text),
+      };
+      const seen: Range[] = [];
+
+      expect(scanner.check(input)).toBe(true);
+      expect(scanner.scan(input)).toEqual({ ranges });
+      expect(
+        scanner.scan(input, (match) => {
+          seen.push(match.range);
+        }),
+      ).toBe(true);
+      expect(seen).toEqual(ranges);
+      expect(filter.censor(fixture.text)).toBe(
+        maskRanges(fixture.text, ranges),
+      );
+    }
+  });
+
   it("checks allowlists against the selected sentence suffix", () => {
     const text = "foo.bar. evil.com";
     const suffix = "evil.com";

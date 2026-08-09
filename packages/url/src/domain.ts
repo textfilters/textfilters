@@ -147,7 +147,7 @@ export const parseLabel = (
   return { start: first, end: last + 1, pos, raw, skeleton };
 };
 
-const isValidTld = (
+export const isValidTld = (
   tldRaw: string,
   tldSkeleton: string,
   tldSet: ReadonlySet<string>,

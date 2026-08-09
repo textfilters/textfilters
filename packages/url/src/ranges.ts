@@ -7,7 +7,7 @@ import {
   isWhitespaceWrappedListBullet,
   parseDot,
 } from "./dots.js";
-import { parseDomain } from "./domain.js";
+import { isValidTld, parseDomain } from "./domain.js";
 import { parseExplicitUrlTarget } from "./explicit-authority.js";
 import {
   type CodePointRange,
@@ -19,6 +19,9 @@ import { parseSchemePrefix } from "./scheme.js";
 export type UrlRangeSink = (range: CodePointRange) => boolean | void;
 
 const SENTENCE_CLOSER_RE = /[\p{Pe}\p{Pf}]/u;
+const LETTER_RE = /\p{L}/u;
+const CASED_LETTER_RE = /[\p{Ll}\p{Lu}\p{Lt}]/u;
+const UPPERCASE_LETTER_RE = /[\p{Lu}\p{Lt}]/u;
 
 const hasBareBoundary = (
   meta: TextMeta,
@@ -154,19 +157,97 @@ const isStandaloneRepeatedListProse = (
   return true;
 };
 
+const isSentenceWordLabel = (
+  meta: TextMeta,
+  label: DomainMatch["labels"][number],
+): boolean => {
+  const source = meta.codePoints.slice(label.start, label.end).join("");
+  if (!LETTER_RE.test(source)) return false;
+  return UPPERCASE_LETTER_RE.test(source) || !CASED_LETTER_RE.test(source);
+};
+
+const hasLiteralSentenceBoundary = (
+  meta: TextMeta,
+  previous: DomainMatch["labels"][number],
+  next: DomainMatch["labels"][number],
+): boolean => {
+  const dot = parseDot(meta, previous.pos);
+  if (
+    !dot ||
+    dot.end !== dot.start + 1 ||
+    !isSentenceDotSymbol(meta.raw[dot.start] ?? "")
+  ) {
+    return false;
+  }
+
+  for (let cursor = previous.end; cursor < next.start; cursor++) {
+    if (meta.whitespace[cursor]) return true;
+  }
+  return false;
+};
+
+const maybeTrimTrailingSentenceProse = (
+  meta: TextMeta,
+  domain: DomainMatch,
+  tldSet: ReadonlySet<string>,
+  tldSkeletonSet: ReadonlySet<string>,
+): DomainMatch | null => {
+  const last = domain.labels.at(-1);
+  if (!last || domain.labels.length < 2 || domain.end !== last.end) {
+    return domain;
+  }
+
+  let labelCount = domain.labels.length;
+  while (labelCount >= 2) {
+    const previous = domain.labels[labelCount - 2];
+    const next = domain.labels[labelCount - 1];
+    if (
+      !previous ||
+      !next ||
+      !hasLiteralSentenceBoundary(meta, previous, next) ||
+      !isSentenceWordLabel(meta, next)
+    ) {
+      break;
+    }
+    labelCount--;
+  }
+
+  if (labelCount === domain.labels.length) return domain;
+  if (labelCount < 2) return null;
+
+  const tld = domain.labels[labelCount - 1];
+  if (!tld || !isValidTld(tld.raw, tld.skeleton, tldSet, tldSkeletonSet)) {
+    return null;
+  }
+  return {
+    start: domain.start,
+    end: tld.end,
+    pos: tld.pos,
+    labels: domain.labels.slice(0, labelCount),
+  };
+};
+
 const maybePreferBareDomainAfterSentence = (
   meta: TextMeta,
   domain: DomainMatch,
   tldSet: ReadonlySet<string>,
   tldSkeletonSet: ReadonlySet<string>,
 ): DomainMatch | null => {
-  if (isStandaloneRepeatedListProse(meta, domain)) return null;
+  const trimmedDomain = maybeTrimTrailingSentenceProse(
+    meta,
+    domain,
+    tldSet,
+    tldSkeletonSet,
+  );
+  if (!trimmedDomain || isStandaloneRepeatedListProse(meta, trimmedDomain)) {
+    return null;
+  }
 
   // A sentence-ending literal dot can otherwise turn the preceding prose and
   // the following standalone host into one multi-label domain.
-  for (let index = domain.labels.length - 2; index >= 1; index--) {
-    const previous = domain.labels[index - 1];
-    const next = domain.labels[index];
+  for (let index = trimmedDomain.labels.length - 2; index >= 1; index--) {
+    const previous = trimmedDomain.labels[index - 1];
+    const next = trimmedDomain.labels[index];
     if (!previous || !next) continue;
 
     const dot = parseDot(meta, previous.pos);
@@ -194,12 +275,12 @@ const maybePreferBareDomainAfterSentence = (
     if (afterDot >= next.start || !meta.whitespace[afterDot]) continue;
 
     const suffix = parseDomain(meta, next.start, tldSet, tldSkeletonSet);
-    if (suffix && suffix.end === domain.end) {
+    if (suffix && suffix.end === trimmedDomain.end) {
       return isStandaloneRepeatedListProse(meta, suffix) ? null : suffix;
     }
   }
 
-  return domain;
+  return trimmedDomain;
 };
 
 const parseGluedBareDomain = (
