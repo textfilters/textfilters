@@ -24,7 +24,7 @@ import {
 } from "./allowed-domains.js";
 import { createMeta, toSkeleton } from "./meta.js";
 import { collectRangeMatches, collectRanges } from "./ranges.js";
-import { DEFAULT_TLDS, normalizeTlds } from "./tlds.js";
+import { DEFAULT_LOOKALIKE_TLDS, DEFAULT_TLDS, normalizeTlds } from "./tlds.js";
 
 export interface UrlScannerConfig {
   readonly tlds?: readonly string[];
@@ -33,7 +33,7 @@ export interface UrlScannerConfig {
 
 const DEFAULT_TLD_SET: ReadonlySet<string> = new Set(DEFAULT_TLDS);
 const DEFAULT_TLD_SKELETON_SET: ReadonlySet<string> = new Set(
-  DEFAULT_TLDS.map((tld) => toSkeleton(tld)),
+  DEFAULT_LOOKALIKE_TLDS.map((tld) => toSkeleton(tld)),
 );
 
 export function createUrlScanner(

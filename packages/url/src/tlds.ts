@@ -1,8 +1,9 @@
 import { normalizeHostText } from "./host-normalization.js";
 
-// Default TLDs are intentionally small and domain-only; explicit schemes can
-// accept unknown TLDs because the scheme is stronger URL evidence.
-export const DEFAULT_TLDS = [
+// Keep exact membership and lookalike matching as separate policy inputs. They
+// share the current compact baseline, while either policy can evolve without
+// implicitly broadening the other.
+export const DEFAULT_LOOKALIKE_TLDS = [
   "ru",
   "рф",
   "com",
@@ -34,6 +35,8 @@ export const DEFAULT_TLDS = [
   "by",
   "kz",
 ] as const;
+
+export const DEFAULT_TLDS: readonly string[] = DEFAULT_LOOKALIKE_TLDS;
 
 export const normalizeTlds = (
   rawList: readonly string[] | undefined,
