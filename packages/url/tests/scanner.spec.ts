@@ -231,6 +231,8 @@ describe("URL scanner", () => {
   it("applies an explicit policy to ambiguous spaced-dot candidates", () => {
     const cases = [
       ["Fine. Be careful.", "Fine. Be"],
+      ["Hello. Fine. Be careful.", "Fine. Be"],
+      ["Mr. Fine. Be careful.", "Fine. Be"],
       ["Fine\u200b. Be careful.", "Fine\u200b. Be"],
       ["Fine\ufe0f. Be careful.", "Fine\ufe0f. Be"],
       ["Fine\u{e0100}. Be careful.", "Fine\u{e0100}. Be"],

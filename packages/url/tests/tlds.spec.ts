@@ -159,6 +159,22 @@ describe("TLD matching", () => {
     const decomposed = composed.normalize("NFD");
     const astral = `${"\u{10437}".repeat(63)}.com`;
     const explicitAstral = `https://${"\u{10437}".repeat(63)}.unknown`;
+    const explicitMaxAstralHostname = `https://${[
+      "\u{10437}".repeat(63),
+      "\u{10437}".repeat(63),
+      "\u{10437}".repeat(63),
+      "\u{10437}".repeat(61),
+    ].join(".")}`;
+    const explicitOverlongAstralHostname = `https://${[
+      "\u{10437}".repeat(63),
+      "\u{10437}".repeat(63),
+      "\u{10437}".repeat(63),
+      "\u{10437}".repeat(62),
+    ].join(".")}`;
+    const explicitFourMaxAstralLabels = `https://${Array.from(
+      { length: 4 },
+      () => "\u{10437}".repeat(63),
+    ).join(".")}`;
     const overlong = `${"a".repeat(64)}.com`;
     const overlongDecomposed = `${"é".repeat(64)}.com`.normalize("NFD");
     const overlongAstral = `${"\u{10437}".repeat(64)}.com`;
@@ -168,6 +184,9 @@ describe("TLD matching", () => {
     expect(scanUrlRanges(decomposed)).toEqual(wholeRange(decomposed));
     expect(scanUrlRanges(astral)).toEqual(wholeRange(astral));
     expect(scanUrlRanges(explicitAstral)).toEqual(wholeRange(explicitAstral));
+    expect(scanUrlRanges(explicitMaxAstralHostname)).toEqual(
+      wholeRange(explicitMaxAstralHostname),
+    );
     expect(createUrlFilter({ allowedDomains: [astral] }).censor(astral)).toBe(
       astral,
     );
@@ -176,6 +195,8 @@ describe("TLD matching", () => {
     expect(scanUrlRanges(overlongDecomposed)).toEqual([]);
     expect(scanUrlRanges(overlongAstral)).toEqual([]);
     expect(scanUrlRanges(explicitOverlongAstral)).toEqual([]);
+    expect(scanUrlRanges(explicitOverlongAstralHostname)).toEqual([]);
+    expect(scanUrlRanges(explicitFourMaxAstralLabels)).toEqual([]);
   });
 
   it("normalizes compatibility expansions from original label code points", () => {

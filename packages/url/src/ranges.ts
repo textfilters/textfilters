@@ -240,6 +240,15 @@ const isAmbiguousRightSpacedDomain = (
   return meta.whitespace[afterDot] ?? false;
 };
 
+const shouldPreserveBareDomainAsProse = (
+  meta: TextMeta,
+  domain: DomainMatch,
+  ambiguousSpacedDots: AmbiguousSpacedDotPolicy,
+): boolean =>
+  isStandaloneRepeatedListProse(meta, domain) ||
+  (ambiguousSpacedDots === "preserve" &&
+    isAmbiguousRightSpacedDomain(meta, domain));
+
 const preferCompletedDomainBeforeSpacedSeparator = (
   meta: TextMeta,
   domain: DomainMatch,
@@ -291,11 +300,7 @@ const maybePreferBareDomainAfterSentence = (
   asciiTldTargets: ReadonlySet<string>,
   ambiguousSpacedDots: AmbiguousSpacedDotPolicy,
 ): DomainMatch | null => {
-  if (isStandaloneRepeatedListProse(meta, domain)) return null;
-  if (
-    ambiguousSpacedDots === "preserve" &&
-    isAmbiguousRightSpacedDomain(meta, domain)
-  ) {
+  if (shouldPreserveBareDomainAsProse(meta, domain, ambiguousSpacedDots)) {
     return null;
   }
 
@@ -306,8 +311,11 @@ const maybePreferBareDomainAfterSentence = (
     asciiTldTargets,
   );
   if (completedDomain !== domain) {
-    return ambiguousSpacedDots === "preserve" &&
-      isAmbiguousRightSpacedDomain(meta, completedDomain)
+    return shouldPreserveBareDomainAsProse(
+      meta,
+      completedDomain,
+      ambiguousSpacedDots,
+    )
       ? null
       : completedDomain;
   }
@@ -345,7 +353,9 @@ const maybePreferBareDomainAfterSentence = (
 
     const suffix = parseDomain(meta, next.start, listedTlds, asciiTldTargets);
     if (suffix && suffix.end === domain.end) {
-      return isStandaloneRepeatedListProse(meta, suffix) ? null : suffix;
+      return shouldPreserveBareDomainAsProse(meta, suffix, ambiguousSpacedDots)
+        ? null
+        : suffix;
     }
   }
 

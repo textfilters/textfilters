@@ -20,7 +20,7 @@ import {
 } from "./meta.js";
 import { maybeConsumePathTail } from "./path.js";
 
-const MAX_DOMAIN_TEXT_LENGTH = 253;
+export const MAX_HOSTNAME_CODE_POINTS = 253;
 const MAX_DOMAIN_LABELS = 127;
 const ASCII_ONLY_RE = /^[\x00-\x7f]*$/u;
 
@@ -370,7 +370,7 @@ export const parseDomain = (
     domainTextLength += countCodePoints(next.raw) + 1;
     if (
       labels.length > MAX_DOMAIN_LABELS ||
-      domainTextLength > MAX_DOMAIN_TEXT_LENGTH
+      domainTextLength > MAX_HOSTNAME_CODE_POINTS
     ) {
       return completedBeforeProseSeparator;
     }

@@ -1,4 +1,5 @@
 import { AUTHORITY_TRAILING_CHARS } from "./chars.js";
+import { MAX_HOSTNAME_CODE_POINTS } from "./domain.js";
 import { parseDot } from "./dots.js";
 import {
   countCodePoints,
@@ -185,12 +186,15 @@ export const parseExplicitHostDomain = (
 
   const labels: ExplicitHostLabel[] = [first];
   let pos = first.pos;
+  let hostnameLength = countCodePoints(first.raw);
   while (pos < authorityEnd) {
     const dot = parseDot(meta, pos);
     if (!dot || dot.pos > authorityEnd) break;
     const next = parseExplicitHostLabel(meta, dot.pos, authorityEnd);
     if (!next) break;
     labels.push(next);
+    hostnameLength += countCodePoints(next.raw) + 1;
+    if (hostnameLength > MAX_HOSTNAME_CODE_POINTS) return null;
     pos = next.pos;
   }
 
