@@ -105,7 +105,7 @@
       "id": "ru.vulgar.huyach.family",
       "category": "VULGAR",
       "severity": "medium",
-      "source": "(?:о|за|пере|от|об)?хуя[ч4](?:[а-яё]+)?",
+      "source": "(?:а|о|за|пере|от|об|в|при|под|рас|с)?хуя[ч4](?:[а-яё]+)?",
       "match": {
         "strict": {}
       }
@@ -140,7 +140,7 @@
       "id": "ru.obscene.huy.translit",
       "category": "OBSCENE_MAT",
       "severity": "high",
-      "source": "(?<!\\p{L})(?![hн]ui(?!\\p{L}))(?![hн]u(?:[yу][aа]?|i)\\s+(?:in[cс]|s[tт][oо][cс][kк]|f[oо]ng|ngu[yу][eе]n|[tт]r[aа]n))(?![kк][^\\p{L}\\p{N}]+[hн]ui(?!\\p{L}))(?![kк][^\\p{L}\\p{N}]+[hн]u[yу][aа]?\\s+(?:in[cс]|s[tт][oо][cс][kк]|f[oо]ng|ngu[yу][eе]n|[tт]r[aа]n))(?![hн]u[yу]['’`´]s\\s+s[aа]u[cс][eе])(?:[kк][hн]|[hн]|[xх])u(?:[yу]|i|j|[yу][aа]|i[aа]|[yу][eе]|[yу][oо]|[yу]u)(?!\\p{L})",
+      "source": "(?=((?<!\\p{L})(?<!ngu[yу][eе]n\\s+qu[aа]ng\\s+)(?<!qu[eе]\\s+)(?!(?:[hн]u[yу]\\s+l[eе](?!\\p{L})|[hн]ui[aа]\\s+[bьв]ird(?!\\p{L})|[hн]u[yу][aа]\\s+[aа]h[oо]r[aа](?!\\p{L})))(?![hн]ui(?!\\p{L}))(?![hн]u(?:[yу][aа]?|i)\\s+(?:in[cс]|s[tт][oо][cс][kк]|f[oо]ng|ngu[yу][eе]n|[tт]r[aа]n))(?![kк][^\\p{L}\\p{N}]+[hн]ui(?!\\p{L}))(?![kк][^\\p{L}\\p{N}]+[hн]u[yу][aа]?\\s+(?:in[cс]|s[tт][oо][cс][kк]|f[oо]ng|ngu[yу][eе]n|[tт]r[aа]n))(?![hн]u[yу]['’`´]s\\s+s[aа]u[cс][eе])(?:[kк][hн]|[hн]|[xх])u(?:[yу]|i|j|[yу][aа]|i[aа]|[yу][eе]|[yу][oо]|[yу]u)(?!\\p{L})))\\1",
       "match": {
         "loose": {
           "stretch": true
@@ -189,7 +189,7 @@
       "id": "ru.vulgar.ohue.family",
       "category": "VULGAR",
       "severity": "medium",
-      "source": "охуе(?:[а-яё]+)?",
+      "source": "(?:(?:(?:по|под|за|пере|недо)?охуе|(?:про|раз)хуе)(?:л(?:а|и|о)?|[а-яё]+)|охуе)",
       "match": {
         "strict": {},
         "loose": {
@@ -201,7 +201,7 @@
       "id": "ru.vulgar.ahue.family",
       "category": "VULGAR",
       "severity": "medium",
-      "source": "ахуев(?:[а-яё]+)?",
+      "source": "(?:ахуе(?:л(?:а|и|о)?|ю|ешь|ет|ем|ете|ют|й|йте|ть(?:ка|е)?|нн(?:ый|ая|ое|ые|ого|ому|ую|ой|ом|ым|ыми|ых|о|ее)|в(?:[а-яё]+)?)|ахуительн(?:ый|ая|ое|ые|ого|ому|ую|ой|ом|ым|ыми|ых|о|ее|ость)|(?<!\\p{L})а[^\\p{L}\\p{N}]*х[^\\p{L}\\p{N}]*у[^\\p{L}\\p{N}]*е[^\\p{L}\\p{N}]*л[^\\p{L}\\p{N}]*[аио](?!\\p{L}))",
       "match": {
         "strict": {},
         "loose": {
@@ -300,7 +300,7 @@
       "id": "ru.vulgar.nahuy.in.token.loose",
       "category": "VULGAR",
       "severity": "medium",
-      "source": "(?<!\\p{L})(?:[нз]а|по)[^\\p{L}\\p{N}\\s]*х[^\\p{L}\\p{N}\\s]*у[^\\p{L}\\p{N}\\s]*[йяиёею](?:[\\p{L}-]+)?(?!\\p{L})",
+      "source": "(?<!\\p{L})(?!п[^\\p{L}\\p{N}\\s]*о[^\\p{L}\\p{N}\\s]*о[^\\p{L}\\p{N}\\s]*х[^\\p{L}\\p{N}\\s]*у[^\\p{L}\\p{N}\\s]*е)(?:[нз]а|по)[^\\p{L}\\p{N}\\s]*х[^\\p{L}\\p{N}\\s]*у[^\\p{L}\\p{N}\\s]*[йяиёею](?:[\\p{L}-]+)?(?!\\p{L})",
       "match": {
         "loose": {
           "stretch": true

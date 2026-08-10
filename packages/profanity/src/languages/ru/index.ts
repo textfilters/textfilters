@@ -1,6 +1,7 @@
 import blyaProfanity from "./profanity/blya.json" with { type: "json" };
 import chmoProfanity from "./profanity/chmo.js";
 import ebProfanity from "./profanity/eb.json" with { type: "json" };
+import expandedFamilyProfanity from "./profanity/expanded-families.js";
 import gandonProfanity from "./profanity/gandon.js";
 import herProfanity from "./profanity/her.js";
 import huyProfanity from "./profanity/huy.json" with { type: "json" };
@@ -23,6 +24,7 @@ export const RUSSIAN_PROFANITY_FAMILY_DICTIONARIES = [
   blyaProfanity as ProfanityLanguageDictionary,
   chmoProfanity,
   ebProfanity as ProfanityLanguageDictionary,
+  expandedFamilyProfanity,
   gandonProfanity,
   herProfanity,
   huyProfanity as ProfanityLanguageDictionary,

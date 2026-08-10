@@ -1,28 +1,28 @@
 import {
   drochCoverageMetadataCases,
   drochExpectedCoveredCases,
-  drochIntentionallyUnsupportedCases,
+  drochNeutralCollisionCases,
 } from "./droch";
 import { huyloCoverageMetadataCases, huyloExpectedCoveredCases } from "./huylo";
 import {
   mandaCoverageMetadataCases,
   mandaExpectedCoveredCases,
-  mandaIntentionallyUnsupportedCases,
+  mandaNeutralCollisionCases,
 } from "./manda";
 import {
   sosCoverageMetadataCases,
   sosExpectedCoveredCases,
-  sosIntentionallyUnsupportedCases,
+  sosNeutralCollisionCases,
 } from "./sos";
 import {
   yoptCoverageMetadataCases,
   yoptExpectedCoveredCases,
-  yoptIntentionallyUnsupportedCases,
+  yoptNeutralCollisionCases,
 } from "./yopt";
 import {
   zhopaCoverageMetadataCases,
   zhopaExpectedCoveredCases,
-  zhopaIntentionallyUnsupportedCases,
+  zhopaNeutralCollisionCases,
 } from "./zhopa";
 
 import type { ReviewedGapAuditCase, ReviewedGapMetadataCase } from "./types";
@@ -36,12 +36,12 @@ export const expectedCoveredCases: readonly ReviewedGapAuditCase[] = [
   ...mandaExpectedCoveredCases,
 ];
 
-export const intentionallyUnsupportedCases: readonly ReviewedGapAuditCase[] = [
-  ...sosIntentionallyUnsupportedCases,
-  ...drochIntentionallyUnsupportedCases,
-  ...yoptIntentionallyUnsupportedCases,
-  ...zhopaIntentionallyUnsupportedCases,
-  ...mandaIntentionallyUnsupportedCases,
+export const neutralCollisionCases: readonly ReviewedGapAuditCase[] = [
+  ...sosNeutralCollisionCases,
+  ...drochNeutralCollisionCases,
+  ...yoptNeutralCollisionCases,
+  ...zhopaNeutralCollisionCases,
+  ...mandaNeutralCollisionCases,
 ];
 
 export const coverageMetadataCases: readonly ReviewedGapMetadataCase[] = [

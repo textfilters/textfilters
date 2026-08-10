@@ -5,7 +5,7 @@ import { filter } from "../src";
 import {
   coverageMetadataCases,
   expectedCoveredCases,
-  intentionallyUnsupportedCases,
+  neutralCollisionCases,
 } from "./fixtures/russian-reviewed-gaps";
 import { mask } from "./helpers";
 import { expectUnchanged } from "./russian-audit-helpers";
@@ -27,8 +27,8 @@ describe("Russian coverage gap audit", () => {
     }
   });
 
-  it("keeps high-risk neutral collisions intentionally unsupported", () => {
-    for (const testCase of intentionallyUnsupportedCases) {
+  it("keeps reviewed neutral collisions unchanged", () => {
+    for (const testCase of neutralCollisionCases) {
       expectUnchanged(testCase.input);
       expect(filter.analyze(testCase.input), testCase.note).toEqual([]);
     }

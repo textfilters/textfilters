@@ -1,18 +1,20 @@
 import {
-  regexGroup,
+  globalMatchSource,
   russianFamilyDictionary,
   russianRule,
-  token,
 } from "../authoring.js";
 
-const SOS_FORMS = [String.raw`соси`, String.raw`отсоси`] as const;
+const SOS_SOURCE = globalMatchSource(
+  String.raw`(?<!\p{L})(?<!без\s+)(?!соси\s+(?:леденец|палец)(?!\p{L}))(?:соси|отсоси)(?!\p{L})`,
+);
 
 export default russianFamilyDictionary([
   russianRule({
     id: "ru.vulgar.sos.narrow",
     category: "VULGAR",
     severity: "medium",
-    source: token(regexGroup(SOS_FORMS)),
-    match: "strict",
+    source: SOS_SOURCE,
+    match: "loose",
+    loose: {},
   }),
 ]);

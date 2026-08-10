@@ -33,19 +33,18 @@ export const yoptExpectedCoveredCases: readonly ReviewedGapAuditCase[] = [
   },
 ];
 
-export const yoptIntentionallyUnsupportedCases: readonly ReviewedGapAuditCase[] =
-  [
-    {
-      family: "yopt false-positive locks",
-      input: "Е. П. Т.",
-      note: "initial-like separated Cyrillic letters must not loose-match yopt",
-    },
-    {
-      family: "yopt false-positive locks",
-      input: "е п т",
-      note: "separated Cyrillic letters must not loose-match yopt",
-    },
-  ];
+export const yoptNeutralCollisionCases: readonly ReviewedGapAuditCase[] = [
+  {
+    family: "yopt false-positive locks",
+    input: "Е. П. Т.",
+    note: "initial-like separated Cyrillic letters must not loose-match yopt",
+  },
+  {
+    family: "yopt false-positive locks",
+    input: "е п т",
+    note: "separated Cyrillic letters must not loose-match yopt",
+  },
+];
 
 export const yoptCoverageMetadataCases: readonly ReviewedGapMetadataCase[] = [
   {

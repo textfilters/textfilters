@@ -28,7 +28,7 @@ interface RiskyTransliterationFamilyGroup {
 }
 
 describe("Russian false-positive audit", () => {
-  it("keeps audited Russian false positives and unsupported terms unchanged", () => {
+  it("keeps audited Russian neutral and context-only terms unchanged", () => {
     const cases = [
       "бл#ть",
       "хулиган",
@@ -177,12 +177,7 @@ describe("Russian false-positive audit", () => {
       "K Hui people",
       "K. Hui people",
       "Huynh",
-      "huylo",
-      "huilo",
-      "khuilo",
-      "droch",
       "drocher",
-      "drochit",
       "huesos",
       "husos",
       "sopa de huesos",
@@ -248,13 +243,10 @@ describe("Russian false-positive audit", () => {
       "депт",
       "рептилоид",
       "септаккорд",
-      "хуйлоид",
-      "хуйловидный",
       "хуилайнер",
       "дрожь",
       "дрожать",
       "дрожжи",
-      "дрочение",
       "Android",
       "жопарк",
       "жопарка",
@@ -426,7 +418,7 @@ describe("Russian false-positive audit", () => {
     for (const input of cases) {
       expectUnchanged(input);
     }
-  }, 10_000);
+  });
 
   it("keeps grouped risky transliteration contexts unchanged", () => {
     const groups: readonly RiskyTransliterationFamilyGroup[] = [

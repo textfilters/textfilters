@@ -35,7 +35,7 @@
       "id": "ru.insult.mudak.family",
       "category": "STRONG_INSULT",
       "severity": "medium",
-      "source": "муд[ао0]к(?:[а-яё]+)?",
+      "source": "м[уu]+а*д[ао0@]+к(?:[а-яё]+)?",
       "match": {
         "strict": {},
         "loose": {}

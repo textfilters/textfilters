@@ -15,6 +15,10 @@ const HUYLO_FORMS = [
   String.raw`ху(?:й|и)лам`,
   String.raw`ху(?:й|и)лами`,
   String.raw`ху(?:й|и)лах`,
+  String.raw`ху(?:й|и)лоид(?:[а-яё]+)?`,
+  String.raw`ху(?:й|и)ловидн(?:[а-яё]+)?`,
+  String.raw`[hн](?:u|у)(?:[yу]|i)l[oо](?:id)?`,
+  String.raw`[kк][hн](?:u|у)il[oо](?:id)?`,
 ] as const;
 
 export default russianFamilyDictionary([
@@ -23,6 +27,6 @@ export default russianFamilyDictionary([
     category: "STRONG_INSULT",
     severity: "high",
     source: token(regexGroup(HUYLO_FORMS)),
-    match: "strict",
+    match: "strict-loose",
   }),
 ]);

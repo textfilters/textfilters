@@ -96,46 +96,45 @@ export const drochExpectedCoveredCases: readonly ReviewedGapAuditCase[] = [
     input: "надроченными",
     note: "reviewed prefixed sexual vulgarity adjective inflection is covered",
   },
+  {
+    family: "droch",
+    input: "droch",
+    note: "reviewed guarded transliteration is covered",
+  },
+  {
+    family: "droch",
+    input: "д р о ч и т ь",
+    note: "reviewed split form is covered",
+  },
 ];
 
-export const drochIntentionallyUnsupportedCases: readonly ReviewedGapAuditCase[] =
-  [
-    {
-      family: "droch false-positive locks",
-      input: "дрожь",
-      note: "neutral Russian word near the droch family surface",
-    },
-    {
-      family: "droch false-positive locks",
-      input: "дрожать",
-      note: "neutral Russian verb near the droch family surface",
-    },
-    {
-      family: "droch false-positive locks",
-      input: "дрожжи",
-      note: "neutral Russian noun near the droch family surface",
-    },
-    {
-      family: "droch false-positive locks",
-      input: "Android",
-      note: "Latin technical token collision for future transliteration review",
-    },
-    {
-      family: "droch false-positive locks",
-      input: "Droid",
-      note: "Latin technical token collision for future transliteration review",
-    },
-    {
-      family: "droch unsupported forms",
-      input: "droch",
-      note: "transliteration stays unsupported for the narrow Cyrillic review",
-    },
-    {
-      family: "droch unsupported forms",
-      input: "д р о ч и т ь",
-      note: "split forms stay unsupported for the narrow Cyrillic review",
-    },
-  ];
+export const drochNeutralCollisionCases: readonly ReviewedGapAuditCase[] = [
+  {
+    family: "droch false-positive locks",
+    input: "дрожь",
+    note: "neutral Russian word near the droch family surface",
+  },
+  {
+    family: "droch false-positive locks",
+    input: "дрожать",
+    note: "neutral Russian verb near the droch family surface",
+  },
+  {
+    family: "droch false-positive locks",
+    input: "дрожжи",
+    note: "neutral Russian noun near the droch family surface",
+  },
+  {
+    family: "droch false-positive locks",
+    input: "Android",
+    note: "Latin technical token collision for future transliteration review",
+  },
+  {
+    family: "droch false-positive locks",
+    input: "Droid",
+    note: "Latin technical token collision for future transliteration review",
+  },
+];
 
 export const drochCoverageMetadataCases: readonly ReviewedGapMetadataCase[] = [
   {

@@ -1,5 +1,5 @@
 import {
-  cyrillicSuffix,
+  globalMatchSource,
   neutralContextGuard,
   neutralContextGuardedSource,
   patternTailViews,
@@ -87,19 +87,34 @@ const GANDON_SPLIT_GUARDED_SOURCE = neutralContextGuardedSource(
   GANDON_SPLIT_NEUTRAL_SOURCE,
   GANDON_NEUTRAL_TAIL,
 );
+const GANDON_TRANSLIT_GUARDED_SOURCE = String.raw`(?<![pр]i[eе]rr[eе]\s+)${neutralContextGuard(
+  GANDON_TRANSLIT_SOURCE,
+  GANDON_NEUTRAL_TAIL,
+)}`;
+const GANDON_CYRILLIC_SEPARATOR = String.raw`[^\p{L}\p{N}]*`;
+const GANDON_CYRILLIC_IN_TOKEN_SEPARATOR = String.raw`[^\p{L}\p{N}\s]*`;
+const GANDON_CYRILLIC_BODY =
+  String.raw`г${GANDON_CYRILLIC_SEPARATOR}[ао]${GANDON_CYRILLIC_SEPARATOR}н` +
+  String.raw`${GANDON_CYRILLIC_SEPARATOR}д${GANDON_CYRILLIC_SEPARATOR}о` +
+  String.raw`${GANDON_CYRILLIC_SEPARATOR}(?:н(?:${GANDON_CYRILLIC_IN_TOKEN_SEPARATOR}[а-яё])*|ш${GANDON_CYRILLIC_SEPARATOR}(?:а|и|е|у|о${GANDON_CYRILLIC_SEPARATOR}й))`;
+const GANDON_CYRILLIC_SOURCE = globalMatchSource(
+  String.raw`(?<!\p{L})(?<!пьер\s+)${GANDON_CYRILLIC_BODY}(?!\p{L})`,
+);
 
 export default russianFamilyDictionary([
   russianRule({
     id: "ru.insult.gandon.family",
     category: "STRONG_INSULT",
     severity: "medium",
-    source: String.raw`г[ао]ндо(?:н|ш(?:а|и|е|у|ой))${cyrillicSuffix}`,
+    source: GANDON_CYRILLIC_SOURCE,
+    match: "loose",
+    loose: {},
   }),
   russianRule({
     id: "ru.insult.gandon.translit",
     category: "STRONG_INSULT",
     severity: "medium",
-    source: neutralContextGuard(GANDON_TRANSLIT_SOURCE, GANDON_NEUTRAL_TAIL),
+    source: GANDON_TRANSLIT_GUARDED_SOURCE,
     match: "loose",
     loose: {},
   }),

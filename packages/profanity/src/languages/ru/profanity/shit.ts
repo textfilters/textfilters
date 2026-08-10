@@ -1,6 +1,7 @@
 import {
   cyrillicAdjectiveTailParts,
   cyrillicSuffix,
+  globalMatchSource,
   joinedPatterns,
   optionalRegexGroup,
   prefixedPatternSequences,
@@ -29,9 +30,10 @@ const GOVNO_FAMILY_TAILS = [
 ] as const;
 
 const SRAT_SPLIT_SEPARATOR = String.raw`[-._]+`;
+const SRAT_CYRILLIC_SPLIT_SEPARATOR = String.raw`[^\p{L}\p{N}]+`;
 const SRAT_CYRILLIC_SPLIT_BASE = separatedPattern(
   [String.raw`с`, String.raw`р`],
-  SRAT_SPLIT_SEPARATOR,
+  SRAT_CYRILLIC_SPLIT_SEPARATOR,
 );
 const SRAT_LATIN_SPLIT_BASE = separatedPattern(
   [String.raw`s`, String.raw`r`],
@@ -68,8 +70,11 @@ const SRAT_LATIN_SPLIT_TAIL_PARTS = [
 ] as const;
 const SRAT_LATIN_TRANSLIT_TAILS = joinedPatterns(SRAT_LATIN_SPLIT_TAIL_PARTS);
 const SRAT_SPLIT_SOURCE = regexGroup([
-  String.raw`${SRAT_CYRILLIC_SPLIT_BASE}${SRAT_SPLIT_SEPARATOR}${regexGroup(
-    separatedPatterns(SRAT_CYRILLIC_SPLIT_TAIL_PARTS, SRAT_SPLIT_SEPARATOR),
+  String.raw`${SRAT_CYRILLIC_SPLIT_BASE}${SRAT_CYRILLIC_SPLIT_SEPARATOR}${regexGroup(
+    separatedPatterns(
+      SRAT_CYRILLIC_SPLIT_TAIL_PARTS,
+      SRAT_CYRILLIC_SPLIT_SEPARATOR,
+    ),
   )}`,
   String.raw`${SRAT_LATIN_SPLIT_BASE}${SRAT_SPLIT_SEPARATOR}${regexGroup(
     separatedPatterns(SRAT_LATIN_SPLIT_TAIL_PARTS, SRAT_SPLIT_SEPARATOR),
@@ -77,16 +82,16 @@ const SRAT_SPLIT_SOURCE = regexGroup([
 ]);
 const SRAN_CYRILLIC_SPLIT_BASE = separatedPattern(
   [String.raw`с`, String.raw`р`, String.raw`а`, String.raw`н`],
-  SRAT_SPLIT_SEPARATOR,
+  SRAT_CYRILLIC_SPLIT_SEPARATOR,
 );
 const SRAN_CYRILLIC_SPLIT_TAILS = separatedPatterns(
   [
     ...cyrillicAdjectiveTailParts,
     ...prefixedPatternSequences([String.raw`н`], cyrillicAdjectiveTailParts),
   ],
-  SRAT_SPLIT_SEPARATOR,
+  SRAT_CYRILLIC_SPLIT_SEPARATOR,
 );
-const SRAN_CYRILLIC_SPLIT_SOURCE = String.raw`${SRAN_CYRILLIC_SPLIT_BASE}${SRAT_SPLIT_SEPARATOR}${regexGroup(
+const SRAN_CYRILLIC_SPLIT_SOURCE = String.raw`${SRAN_CYRILLIC_SPLIT_BASE}${SRAT_CYRILLIC_SPLIT_SEPARATOR}${regexGroup(
   SRAN_CYRILLIC_SPLIT_TAILS,
 )}`;
 
@@ -366,7 +371,7 @@ const GOVNO_SPLIT_SOURCE = regexGroup([
   String.raw`${GOVNO_SPLIT_BASE}${GOVNO_SPLIT_SEPARATOR}${regexGroup(GOVNO_SPLIT_TAILS)}`,
 ]);
 
-const ZASRANEC_SPLIT_SEPARATOR = String.raw`[-._]+`;
+const ZASRANEC_SPLIT_SEPARATOR = String.raw`[^\p{L}\p{N}]+`;
 const ZASRANEC_CYRILLIC_SPLIT_BASE = separatedPattern(
   [
     String.raw`з`,
@@ -464,7 +469,7 @@ const ZASRANEC_TRANSLIT_SOURCE = String.raw`z[aа]sr[aа]n${regexGroup([
   String.raw`[kк]${regexGroup(ZASRANKA_TRANSLIT_TAILS)}`,
 ])}`;
 
-const ZASRANEC_TRANSLIT_SPLIT_SEPARATOR = ZASRANEC_SPLIT_SEPARATOR;
+const ZASRANEC_TRANSLIT_SPLIT_SEPARATOR = String.raw`[-._]+`;
 const ZASRANEC_TRANSLIT_SPLIT_BASE = separatedPattern(
   [
     String.raw`z`,
@@ -568,7 +573,8 @@ const OBOSRAT_TRANSLIT_SOURCE = String.raw`[oо][bьв][oо]sr${regexGroup([
   String.raw`i${optionalRegexGroup(OBOSRAT_I_TRANSLIT_TAILS)}`,
 ])}`;
 
-const OBOSRAT_SPLIT_SEPARATOR = String.raw`[-._]+`;
+const OBOSRAT_SPLIT_SEPARATOR = String.raw`[^\p{L}\p{N}]+`;
+const OBOSRAT_TRANSLIT_SPLIT_SEPARATOR = String.raw`[-._]+`;
 const OBOSRAT_CYRILLIC_SPLIT_BASE = separatedPattern(
   [String.raw`о`, String.raw`б`, String.raw`о`, String.raw`с`, String.raw`р`],
   OBOSRAT_SPLIT_SEPARATOR,
@@ -581,7 +587,7 @@ const OBOSRAT_TRANSLIT_SPLIT_BASE = separatedPattern(
     String.raw`s`,
     String.raw`r`,
   ],
-  OBOSRAT_SPLIT_SEPARATOR,
+  OBOSRAT_TRANSLIT_SPLIT_SEPARATOR,
 );
 const obosratSplitTail = splitPattern(OBOSRAT_SPLIT_SEPARATOR);
 const obosratSplitSuffix = (tail: string): string =>
@@ -894,10 +900,10 @@ const OBOSRAT_TRANSLIT_SPLIT_TAIL_PARTS = [
 ] as const;
 const OBOSRAT_SPLIT_SOURCE = regexGroup([
   String.raw`${OBOSRAT_CYRILLIC_SPLIT_BASE}${OBOSRAT_SPLIT_SEPARATOR}${OBOSRAT_CYRILLIC_SPLIT_TAIL_SOURCE}`,
-  String.raw`${OBOSRAT_TRANSLIT_SPLIT_BASE}${OBOSRAT_SPLIT_SEPARATOR}${regexGroup(
+  String.raw`${OBOSRAT_TRANSLIT_SPLIT_BASE}${OBOSRAT_TRANSLIT_SPLIT_SEPARATOR}${regexGroup(
     separatedPatterns(
       OBOSRAT_TRANSLIT_SPLIT_TAIL_PARTS,
-      OBOSRAT_SPLIT_SEPARATOR,
+      OBOSRAT_TRANSLIT_SPLIT_SEPARATOR,
     ),
   )}`,
 ]);
@@ -1023,8 +1029,11 @@ export default russianFamilyDictionary([
     id: "ru.vulgar.srat.translit.bare",
     category: "VULGAR",
     severity: "low",
-    source: String.raw`(?<!\p{L})sr${regexGroup(SRAT_LATIN_TRANSLIT_TAILS)}(?!\p{L})`,
-    match: "strict",
+    source: globalMatchSource(
+      String.raw`(?<!\p{L})(?!sri\s+l[aа]n[kк][aа])sr${regexGroup(SRAT_LATIN_TRANSLIT_TAILS)}(?!\p{L})`,
+    ),
+    match: "loose",
+    loose: {},
   }),
   russianRule({
     id: "ru.vulgar.govno.translit.bare",

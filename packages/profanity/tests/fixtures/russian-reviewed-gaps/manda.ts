@@ -23,19 +23,18 @@ export const mandaExpectedCoveredCases: readonly ReviewedGapAuditCase[] = [
   },
 ];
 
-export const mandaIntentionallyUnsupportedCases: readonly ReviewedGapAuditCase[] =
-  [
-    {
-      family: "manda false-positive locks",
-      input: "к о м а н д а",
-      note: "separated neutral command word must not loose-match manda",
-    },
-    {
-      family: "manda false-positive locks",
-      input: "м а н д а т",
-      note: "separated neutral mandate word must not loose-match manda",
-    },
-  ];
+export const mandaNeutralCollisionCases: readonly ReviewedGapAuditCase[] = [
+  {
+    family: "manda false-positive locks",
+    input: "к о м а н д а",
+    note: "separated neutral command word must not loose-match manda",
+  },
+  {
+    family: "manda false-positive locks",
+    input: "м а н д а т",
+    note: "separated neutral mandate word must not loose-match manda",
+  },
+];
 
 export const mandaCoverageMetadataCases: readonly ReviewedGapMetadataCase[] = [
   {

@@ -1,5 +1,6 @@
 import {
   cyrillicSuffix,
+  globalMatchSource,
   joinedPatterns,
   neutralContextGuardedSource,
   optionalRegexGroup,
@@ -52,6 +53,10 @@ const CHMO_TRANSLIT_SOURCE = regexGroup([
   )}`,
   String.raw`[cс][hн][mм][yу]r${optionalRegexGroup(CHMYR_TRANSLIT_TAILS)}`,
 ]);
+const CHMO_TRANSLIT_CONTEXT_GUARDED_SOURCE =
+  String.raw`(?<![oо]l[eе][kк]s[aа]ndr\s+)` +
+  String.raw`(?![cс][hн][mм][oо]\s+[eе]nz[yу][mм][eе])` +
+  CHMO_TRANSLIT_SOURCE;
 
 const CHMO_SPLIT_SEP = String.raw`[-._]+`;
 const chmoSplit = (sources: readonly string[]): string =>
@@ -210,15 +215,21 @@ export default russianFamilyDictionary([
     id: "ru.insult.chmyr.family",
     category: "STRONG_INSULT",
     severity: "medium",
-    source: String.raw`чмыр(?:ь|я|ю|[её]м|е|и|ей|ями?|ях)?`,
-    match: "strict",
+    source: globalMatchSource(
+      String.raw`(?<!\p{L})(?<!сергей\s+)чмыр(?:ь|я|ю|[её]м|е|и|ей|ями?|ях)?(?!\p{L})`,
+    ),
+    match: "loose",
+    loose: {},
   }),
   russianRule({
     id: "ru.insult.chmo.translit",
     category: "STRONG_INSULT",
     severity: "medium",
-    source: String.raw`(?<!\p{L})${CHMO_TRANSLIT_SOURCE}(?!\p{L})`,
-    match: "strict",
+    source: globalMatchSource(
+      String.raw`(?<!\p{L})${CHMO_TRANSLIT_CONTEXT_GUARDED_SOURCE}(?!\p{L})`,
+    ),
+    match: "loose",
+    loose: {},
   }),
   russianRule({
     id: "ru.insult.chmo.translit.split.loose",

@@ -1,6 +1,7 @@
 import {
   cyrillicAdjectiveTailParts,
   cyrillicSuffix,
+  globalMatchSource,
   joinedPatterns,
   optionalRegexGroup,
   prefixedPatternSequences,
@@ -560,8 +561,11 @@ export default russianFamilyDictionary([
     id: "ru.euphemism.her.translit",
     category: "EUPHEMISM",
     severity: "low",
-    source: String.raw`(?<!\p{L})(?:n[aа]|[pр][oо]|[oо])?[hн][eе]r${regexGroup(HER_TRANSLIT_TAILS)}(?!\p{L})`,
-    match: "strict",
+    source: globalMatchSource(
+      String.raw`(?<!\p{L})(?![hн][eе]rn[eе]\s+[tт][hн][eе])(?:n[aа]|[pр][oо]|[oо])?[hн][eе]r${regexGroup(HER_TRANSLIT_TAILS)}(?!\p{L})`,
+    ),
+    match: "loose",
+    loose: {},
   }),
   russianRule({
     id: "ru.euphemism.her.translit.split.loose",

@@ -260,19 +260,6 @@ describe("Russian coverage audit", () => {
         expect.arrayContaining([expect.objectContaining(expected)]),
       );
     }
-
-    const intentionallyUnmatchedDerivatives = [
-      "спиздить",
-      "хуемёт",
-      "хуеплёт",
-      "хуеглот",
-      "хуежопый",
-    ];
-
-    for (const input of intentionallyUnmatchedDerivatives) {
-      expectUnchanged(input);
-      expect(filter.analyze(input), input).toEqual([]);
-    }
   });
 
   it("preserves taxonomy for category-filtered six-as-b matches", () => {

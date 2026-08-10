@@ -1,5 +1,6 @@
 import {
   cyrillicSuffix,
+  globalMatchSource,
   neutralContextGuardedSource,
   optionalRegexGroup,
   patternTailViews,
@@ -11,7 +12,6 @@ import {
   splitPattern,
   splitPatternWithOptionalTails,
   splitPatternWithTails,
-  token,
 } from "./authoring.js";
 
 const SUKA_NEUTRAL_TAILS = [
@@ -247,28 +247,83 @@ const SUKA_TRANSLIT_GUARDED_SOURCE = neutralContextGuardedSource(
   SUKA_SPLIT_NEUTRAL_SOURCE,
   SUKA_NEUTRAL_TAIL,
 );
+const SUKA_TRANSLIT_CONTEXT_NEUTRAL_SOURCE = regexGroup([
+  String.raw`s[uу][kк][aа]\s+[kк][oо][pр]i(?!\p{L})`,
+  String.raw`s[uу][kк]in\s+[aа]us[tт]r[aа]li[aа](?!\p{L})`,
+  String.raw`s[uу][kк]u\s+[pр][eе][oо][pр]l[eе](?!\p{L})`,
+]);
+const SUKIN_NAME_SOURCE = String.raw`s[uу][kк]in(?!\p{L})`;
+const SUCHAR_NAME_SOURCE = String.raw`s[uу][cс][hн][aа]r(?!\p{L})`;
 // Keep the context guard in the global pass without letting loose rewriting
 // insert whitespace inside initial-style text such as "S. Uka".
-const SUKA_TRANSLIT_GLOBAL_SOURCE = String.raw`(?=(${SUKA_TRANSLIT_GUARDED_SOURCE}))\1`;
+const SUKA_TRANSLIT_CONTEXT_GUARDED_SOURCE = globalMatchSource(
+  String.raw`(?!(?<=[aа]l[eе][xх]\s+)${SUKIN_NAME_SOURCE})` +
+    String.raw`(?!(?<=j[aа]n\s+)${SUCHAR_NAME_SOURCE})` +
+    String.raw`(?!${SUKA_TRANSLIT_CONTEXT_NEUTRAL_SOURCE})` +
+    SUKA_TRANSLIT_GUARDED_SOURCE,
+);
+const SUKA_CYRILLIC_SEPARATOR = String.raw`[^\p{L}\p{N}]*`;
+const SUKA_CYRILLIC_IN_TOKEN_SEPARATOR = String.raw`[^\p{L}\p{N}\s]*`;
+const SUKA_CYRILLIC_BASE = String.raw`с${SUKA_CYRILLIC_SEPARATOR}у${SUKA_CYRILLIC_SEPARATOR}к`;
+const SUKA_CYRILLIC_TAIL = regexGroup([
+  String.raw`а${SUKA_CYRILLIC_SEPARATOR}ч${SUKA_CYRILLIC_SEPARATOR}к${SUKA_CYRILLIC_SEPARATOR}а`,
+  String.raw`и${SUKA_CYRILLIC_SEPARATOR}н(?:${SUKA_CYRILLIC_IN_TOKEN_SEPARATOR}[а-яё])*`,
+  String.raw`а${SUKA_CYRILLIC_SEPARATOR}р(?:${SUKA_CYRILLIC_IN_TOKEN_SEPARATOR}[а-яё])*`,
+  String.raw`а(?:${SUKA_CYRILLIC_SEPARATOR}м(?:${SUKA_CYRILLIC_SEPARATOR}и)?|${SUKA_CYRILLIC_SEPARATOR}х)?`,
+  String.raw`о${SUKA_CYRILLIC_SEPARATOR}й`,
+  String.raw`[иеу]`,
+]);
+const SUKA_CYRILLIC_SOURCE = globalMatchSource(
+  String.raw`(?<!\p{L})(?<!щенная\s+)(?!${SUKA_CYRILLIC_BASE}${SUKA_CYRILLIC_SEPARATOR}а\s+породы)` +
+    String.raw`${SUKA_CYRILLIC_BASE}${SUKA_CYRILLIC_SEPARATOR}${SUKA_CYRILLIC_TAIL}(?!\p{L})`,
+);
+const SUCHKA_CYRILLIC_BASE = String.raw`с${SUKA_CYRILLIC_SEPARATOR}у${SUKA_CYRILLIC_SEPARATOR}ч`;
+const SUCHKI_CYRILLIC_SOURCE = String.raw`${SUCHKA_CYRILLIC_BASE}${SUKA_CYRILLIC_SEPARATOR}к${SUKA_CYRILLIC_SEPARATOR}и`;
+const SUCHKA_CYRILLIC_TAIL = regexGroup([
+  String.raw`к${SUKA_CYRILLIC_SEPARATOR}(?:а${SUKA_CYRILLIC_SEPARATOR}м${SUKA_CYRILLIC_SEPARATOR}и|а${SUKA_CYRILLIC_SEPARATOR}м|а${SUKA_CYRILLIC_SEPARATOR}х|о${SUKA_CYRILLIC_SEPARATOR}й|[аиеу])`,
+  String.raw`е${SUKA_CYRILLIC_SEPARATOR}к`,
+  String.raw`и${SUKA_CYRILLIC_SEPARATOR}й`,
+  String.raw`ь${SUKA_CYRILLIC_SEPARATOR}${regexGroup([
+    String.raw`е${SUKA_CYRILLIC_SEPARATOR}г${SUKA_CYRILLIC_SEPARATOR}о`,
+    String.raw`е${SUKA_CYRILLIC_SEPARATOR}м${SUKA_CYRILLIC_SEPARATOR}у`,
+    String.raw`и${SUKA_CYRILLIC_SEPARATOR}м${SUKA_CYRILLIC_SEPARATOR}и`,
+    String.raw`е${SUKA_CYRILLIC_SEPARATOR}й`,
+    String.raw`е${SUKA_CYRILLIC_SEPARATOR}м`,
+    String.raw`и${SUKA_CYRILLIC_SEPARATOR}м`,
+    String.raw`и${SUKA_CYRILLIC_SEPARATOR}х`,
+    String.raw`[яиюеё]`,
+  ])}`,
+  String.raw`ар(?:ой|а|ы|е|у)?${cyrillicSuffix}`,
+]);
+const SUCHKA_CONTEXT_GUARDED_SOURCE = globalMatchSource(
+  String.raw`(?<!\p{L})(?<!без\s+)(?!${SUCHKI_CYRILLIC_SOURCE}\s+на\s+доске(?!\p{L}))${SUCHKA_CYRILLIC_BASE}${SUKA_CYRILLIC_SEPARATOR}${SUCHKA_CYRILLIC_TAIL}(?!\p{L})`,
+);
+const SUKA_TOKEN_SOURCE = globalMatchSource(
+  String.raw`(?<!\p{L})с(?:у|y)к(?:ара|ачка|учка)(?!\p{L})`,
+);
 
 export default russianFamilyDictionary([
   russianRule({
     id: "ru.insult.suka.family",
     category: "STRONG_INSULT",
     severity: "medium",
-    source: String.raw`сук(?:ар(?:ами?|ой|а|ы|е|у)?|ин${cyrillicSuffix}|ами?|ах|ой|а|и|е|у)`,
+    source: SUKA_CYRILLIC_SOURCE,
+    match: "loose",
+    loose: {},
   }),
   russianRule({
     id: "ru.insult.suchka.family",
     category: "STRONG_INSULT",
     severity: "medium",
-    source: SUCHKA_FAMILY_SOURCE,
+    source: SUCHKA_CONTEXT_GUARDED_SOURCE,
+    match: "loose",
+    loose: {},
   }),
   russianRule({
     id: "ru.insult.suka.translit",
     category: "STRONG_INSULT",
     severity: "medium",
-    source: SUKA_TRANSLIT_GLOBAL_SOURCE,
+    source: SUKA_TRANSLIT_CONTEXT_GUARDED_SOURCE,
     match: "loose",
     loose: {},
   }),
@@ -276,7 +331,7 @@ export default russianFamilyDictionary([
     id: "ru.insult.suka.token.loose",
     category: "STRONG_INSULT",
     severity: "medium",
-    source: token(String.raw`с(?:у|y)к(?:ара|ачка|учка|ин|ой|а|и|у)`),
+    source: SUKA_TOKEN_SOURCE,
     match: "loose",
   }),
 ]);

@@ -51,21 +51,19 @@ export const zhopaExpectedCoveredCases: readonly ReviewedGapAuditCase[] = [
     input: "жопный",
     note: "reviewed adjective form is covered",
   },
+  {
+    family: "zhopa",
+    input: "zhopa",
+    note: "reviewed guarded transliteration is covered",
+  },
+  {
+    family: "zhopa",
+    input: "ж о п а",
+    note: "reviewed split form is covered",
+  },
 ];
 
-export const zhopaIntentionallyUnsupportedCases: readonly ReviewedGapAuditCase[] =
-  [
-    {
-      family: "zhopa",
-      input: "zhopa",
-      note: "transliteration stays unsupported for the narrow Cyrillic review",
-    },
-    {
-      family: "zhopa",
-      input: "ж о п а",
-      note: "split forms stay unsupported for the narrow Cyrillic review",
-    },
-  ];
+export const zhopaNeutralCollisionCases: readonly ReviewedGapAuditCase[] = [];
 
 export const zhopaCoverageMetadataCases: readonly ReviewedGapMetadataCase[] = [
   {
