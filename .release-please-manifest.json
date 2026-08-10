@@ -1,6 +1,6 @@
 {
   "packages/core": "0.4.1",
-  "packages/url": "0.3.2",
+  "packages/url": "0.4.0",
   "packages/email": "0.3.2",
   "packages/phone": "0.2.4",
   "packages/profanity": "1.0.0",
