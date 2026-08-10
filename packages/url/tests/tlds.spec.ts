@@ -289,6 +289,40 @@ describe("TLD matching", () => {
     }
   });
 
+  it("derives low-level lookalike targets only from listed TLDs", () => {
+    const assertApis = (
+      text: string,
+      listedTlds: ReadonlySet<string>,
+      suppliedTargets: ReadonlySet<string>,
+      expected: readonly Range[],
+    ): void => {
+      const input = { text, codePoints: Array.from(text) };
+      const seen: Range[] = [];
+
+      expect(scanUrlRanges(text, listedTlds, suppliedTargets)).toEqual(
+        expected,
+      );
+      expect(checkUrlRanges(input, listedTlds, suppliedTargets)).toBe(
+        expected.length > 0,
+      );
+      expect(
+        scanUrlRangeMatches(
+          input,
+          (match) => {
+            seen.push(match.range);
+          },
+          listedTlds,
+          suppliedTargets,
+        ),
+      ).toBe(true);
+      expect(seen).toEqual(expected);
+    };
+
+    const lookalike = "x.cοm";
+    assertApis(lookalike, new Set(["com"]), new Set(), wholeRange(lookalike));
+    assertApis("x.com", new Set(["рус"]), new Set(["com"]), []);
+  });
+
   it("keeps marked Unicode TLDs independent from adjacent domains and allowlists", () => {
     const text = "example.कॉम x.org";
     const first = "example.कॉम";

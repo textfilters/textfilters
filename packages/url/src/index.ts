@@ -6,7 +6,6 @@ import {
   type UrlFilterConfig,
 } from "./contracts.js";
 import { createUrlScanner, scanUrlRanges } from "./scanner.js";
-import { DEFAULT_TLDS } from "./tlds.js";
 
 export {
   URL_FILTER_NAME,
@@ -52,4 +51,4 @@ export function urlFilter(config?: UrlFilterConfig): UrlFilter {
   return createUrlFilter(config);
 }
 
-export const filter = createUrlFilter({ tlds: DEFAULT_TLDS });
+export const filter = createUrlFilter();

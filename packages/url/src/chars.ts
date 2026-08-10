@@ -121,12 +121,17 @@ const createLookalikeMap = (): ReadonlyMap<string, string> => {
 
 export const LOOKALIKE_TO_ASCII = createLookalikeMap();
 
+const PROSE_LIST_SEPARATOR_DOT_SYMBOLS = ["·", "•", "⋅", "・"] as const;
+const PROSE_LIST_SEPARATOR_DOT_SYMBOL_SET = new Set<string>(
+  PROSE_LIST_SEPARATOR_DOT_SYMBOLS,
+);
+
+export const isProseListSeparatorDotSymbol = (value: string): boolean =>
+  PROSE_LIST_SEPARATOR_DOT_SYMBOL_SET.has(value);
+
 export const DOT_CHAR_SET = new Set([
   ...SENTENCE_DOT_SYMBOLS,
   "｡",
   "．",
-  "·",
-  "•",
-  "⋅",
-  "・",
+  ...PROSE_LIST_SEPARATOR_DOT_SYMBOLS,
 ]);

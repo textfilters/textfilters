@@ -267,6 +267,39 @@ describe("URL scanner", () => {
     });
   });
 
+  it("normalizes invalid spaced-dot policies consistently", () => {
+    const text = "visit evil. com now";
+    const input = { text, codePoints: Array.from(text) };
+    const invalidPolicy = "invalid" as AmbiguousSpacedDotPolicy;
+    const seen: Range[] = [];
+    const scanner = createUrlScanner({ ambiguousSpacedDots: invalidPolicy });
+
+    expect(scanner.scan(input)).toEqual({ ranges: [] });
+    expect(scanner.check(input)).toBe(false);
+    expect(
+      createUrlFilter({ ambiguousSpacedDots: invalidPolicy }).censor(text),
+    ).toBe(text);
+    expect(
+      scanUrlRanges(text, undefined, undefined, undefined, invalidPolicy),
+    ).toEqual([]);
+    expect(
+      checkUrlRanges(input, undefined, undefined, undefined, invalidPolicy),
+    ).toBe(false);
+    expect(
+      scanUrlRangeMatches(
+        input,
+        (match) => {
+          seen.push(match.range);
+        },
+        undefined,
+        undefined,
+        undefined,
+        invalidPolicy,
+      ),
+    ).toBe(true);
+    expect(seen).toEqual([]);
+  });
+
   it("checks allowlists against the selected sentence suffix", () => {
     const text = "foo.invalid. evil.com";
     const suffix = "evil.com";
@@ -406,7 +439,7 @@ describe("URL scanner", () => {
     }
   });
 
-  it("classifies whitespace-wrapped list bullets by parsed URL context", () => {
+  it("classifies whitespace-wrapped list separators by parsed URL context", () => {
     const prose = [
       "She was shooting daggers at me • Me reading chapter 1",
       "me • Me",
@@ -468,8 +501,20 @@ describe("URL scanner", () => {
     ];
 
     for (const text of prose) expectScannerFixture({ text, ranges: [] });
+    for (const dot of ["•", "·", "⋅", "・"]) {
+      expectScannerFixture({ text: `art ${dot} art`, ranges: [] });
+    }
     for (const text of domains) {
       expectScannerFixture({ text, ranges: wholeRange(text) });
+    }
+    for (const dot of ["•", "·", "⋅", "・"]) {
+      for (const text of [
+        `art ${dot} shop`,
+        `art${dot}art`,
+        `art ${dot} art/path`,
+      ]) {
+        expectScannerFixture({ text, ranges: wholeRange(text) });
+      }
     }
     for (const selector of ["\ufe0f", "\u{e0100}"]) {
       for (const text of [

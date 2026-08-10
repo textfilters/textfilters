@@ -143,3 +143,52 @@ export const normalizeTlds = (
   }
   return out.length > 0 ? out : DEFAULT_TLDS;
 };
+
+export interface TldLookups {
+  readonly listedTlds: ReadonlySet<string>;
+  readonly asciiTldTargets: ReadonlySet<string>;
+}
+
+const ASCII_TLD_RE = /^[a-z0-9-]+$/u;
+
+const createAsciiTldTargets = (tlds: Iterable<string>): ReadonlySet<string> => {
+  const targets = new Set<string>();
+  for (const tld of tlds) {
+    if (ASCII_TLD_RE.test(tld)) targets.add(tld);
+  }
+  return targets;
+};
+
+const createLookupsFromNormalizedTlds = (
+  listedTlds: ReadonlySet<string>,
+): TldLookups => ({
+  listedTlds,
+  asciiTldTargets: createAsciiTldTargets(listedTlds),
+});
+
+const DEFAULT_LISTED_TLDS: ReadonlySet<string> = new Set(DEFAULT_TLDS);
+
+export const DEFAULT_TLD_LOOKUPS: TldLookups = Object.freeze(
+  createLookupsFromNormalizedTlds(DEFAULT_LISTED_TLDS),
+);
+
+export const createTldLookups = (tlds: Iterable<string>): TldLookups => {
+  if (tlds === DEFAULT_TLDS || tlds === DEFAULT_LISTED_TLDS) {
+    return DEFAULT_TLD_LOOKUPS;
+  }
+
+  const listedTlds = new Set<string>();
+  for (const value of tlds) {
+    const tld = normalizeTld(value);
+    if (tld) listedTlds.add(tld);
+  }
+  return createLookupsFromNormalizedTlds(listedTlds);
+};
+
+export const resolveTldLookups = (
+  rawList: readonly string[] | undefined,
+): TldLookups => {
+  const tlds = normalizeTlds(rawList);
+  if (tlds === DEFAULT_TLDS) return DEFAULT_TLD_LOOKUPS;
+  return createLookupsFromNormalizedTlds(new Set(tlds));
+};

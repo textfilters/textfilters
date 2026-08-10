@@ -7,7 +7,7 @@ import {
   isIgnorableFormatting,
   isRightSpacedDotSymbol,
   isWhitespaceWrappedDot,
-  isWhitespaceWrappedListBullet,
+  isWhitespaceWrappedListSeparator,
   parseDot,
 } from "./dots.js";
 import { parseDomain } from "./domain.js";
@@ -19,12 +19,11 @@ import {
   type TextMeta,
 } from "./meta.js";
 import { parseSchemePrefix } from "./scheme.js";
+import type { TldLookups } from "./tlds.js";
 
 export type UrlRangeSink = (range: CodePointRange) => boolean | void;
 
-export interface UrlMatchPolicy {
-  readonly listedTlds: ReadonlySet<string>;
-  readonly asciiTldTargets: ReadonlySet<string>;
+export interface UrlMatchPolicy extends TldLookups {
   readonly allowedDomains: ReadonlySet<string>;
   readonly ambiguousSpacedDots: AmbiguousSpacedDotPolicy;
 }
@@ -181,7 +180,7 @@ const isStandaloneRepeatedListProse = (
   const dot = parseDot(meta, previous.pos);
   if (
     !dot ||
-    !isWhitespaceWrappedListBullet(meta, dot) ||
+    !isWhitespaceWrappedListSeparator(meta, dot) ||
     !isListSpacing(meta, previous.end, dot.start) ||
     !isListSpacing(meta, dot.end, next.start)
   ) {
@@ -417,13 +416,13 @@ const selectBareDomainCandidate = (
     preferredDomain !== parsedDomain && preferredFinalLabel
       ? parseDot(meta, preferredFinalLabel.pos)
       : null;
-  const preferredEndsBeforeListBullet =
+  const preferredEndsBeforeListSeparator =
     preferredSeparator !== null &&
-    isWhitespaceWrappedListBullet(meta, preferredSeparator);
+    isWhitespaceWrappedListSeparator(meta, preferredSeparator);
   const allowedSuffixWouldBroadenTrust =
     allowedDomains.size > 0 &&
     preferredDomain !== parsedDomain &&
-    !preferredEndsBeforeListBullet &&
+    !preferredEndsBeforeListSeparator &&
     !parsedDomainIsAllowed &&
     preferredDomainIsAllowed;
   const preferredFirstLabelStart = preferredDomain.labels[0]?.start;

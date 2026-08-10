@@ -1,4 +1,9 @@
-import { DOT_LITERALS, DOT_WORDS_RAW, DOT_WORDS_SKELETON } from "./chars.js";
+import {
+  DOT_LITERALS,
+  DOT_WORDS_RAW,
+  DOT_WORDS_SKELETON,
+  isProseListSeparatorDotSymbol,
+} from "./chars.js";
 import {
   consumeWord,
   matchesRawChars,
@@ -52,12 +57,12 @@ export const isWhitespaceWrappedDot = (meta: TextMeta, dot: Match): boolean =>
 export const isRightSpacedDotSymbol = (meta: TextMeta, dot: Match): boolean =>
   dot.end === dot.start + 1 && hasWhitespaceBeyondZeroWidth(meta, dot.end, 1);
 
-export const isWhitespaceWrappedListBullet = (
+export const isWhitespaceWrappedListSeparator = (
   meta: TextMeta,
   dot: Match,
 ): boolean =>
   dot.end === dot.start + 1 &&
-  meta.raw[dot.start] === "•" &&
+  isProseListSeparatorDotSymbol(meta.raw[dot.start] ?? "") &&
   isWhitespaceWrappedDot(meta, dot);
 
 export const parseDot = (meta: TextMeta, start: number): Match | null => {

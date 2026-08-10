@@ -122,6 +122,12 @@ scanner.scan(
 );
 ```
 
+The lower-level `scanUrlRanges()`, `checkUrlRanges()`, and
+`scanUrlRangeMatches()` exports retain their existing positional signatures.
+Their optional precomputed ASCII-target argument is compatibility-only: each
+helper normalizes the listed TLDs and derives lookalike targets from that same
+set, so a supplied target set cannot broaden or narrow detection.
+
 ## Behavior
 
 The package preserves the existing URL filtering behavior and adds stricter explicit-scheme URL handling for common authority forms such as localhost, ports, IPv6, userinfo, and explicit-scheme unknown TLDs.
@@ -142,12 +148,12 @@ input may fold toward a listed ASCII TLD, while an ASCII suffix cannot become
 valid solely because it resembles a listed Unicode TLD. Normalized Unicode TLD
 spellings remain directly valid through the same source list.
 
-Completed labels are normalized from their original source code points as one
-NFKC value before raw or skeleton lookup. This keeps canonical decompositions,
-compatibility forms, adjacent-domain trimming, configured TLDs, and implicit
-low-level custom TLD lookups on the same normalization path. Label and hostname
-limits are measured in Unicode code points so supplementary-plane letters use
-the same limits as BMP letters.
+Completed bare-domain labels are normalized from their original source code
+points as one NFKC value before raw or skeleton lookup. This keeps canonical
+decompositions, compatibility forms, adjacent-domain trimming, configured
+TLDs, and implicit low-level custom TLD lookups on the same normalization path.
+Label and hostname limits are measured in Unicode code points so
+supplementary-plane letters use the same limits as BMP letters.
 
 The filter masks:
 
@@ -158,12 +164,13 @@ The filter masks:
 - explicit-scheme hosts with ports, IPv6 literals, userinfo, IDN/emoji hosts, and unknown TLDs;
 - glued prose around explicit authorities while keeping trailing punctuation outside the masked range.
 
-A whitespace-wrapped U+2022 list bullet between two repeated standalone words is
-treated as prose punctuation, including at sentence boundaries. A complete host
-before unrelated text remains detectable after a whitespace-wrapped dot form or
-a single-character dot followed by whitespace, as in `example.com • next`.
-Different labels, unspaced forms, repeated labels that extend a host, and
-one-sided forms with URL-tail evidence remain detectable. Ambiguous bare
+A whitespace-wrapped typographic list separator (`•`, `·`, `⋅`, or `・`)
+between two repeated standalone words is treated as prose punctuation,
+including at sentence boundaries. A complete host before unrelated text
+remains detectable after a whitespace-wrapped dot form or a single-character
+dot followed by whitespace, as in `example.com • next`. Different labels,
+unspaced forms, repeated labels that extend a host, and one-sided forms with
+URL-tail evidence remain detectable. Ambiguous bare
 literal-dot-plus-whitespace candidates follow the configured policy and cannot
 broaden exact-host allowlists.
 

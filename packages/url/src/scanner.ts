@@ -29,9 +29,13 @@ import {
   collectRanges,
   type UrlMatchPolicy,
 } from "./ranges.js";
-import { DEFAULT_TLDS, normalizeTld, normalizeTlds } from "./tlds.js";
+import {
+  createTldLookups,
+  DEFAULT_TLD_LOOKUPS,
+  resolveTldLookups,
+  type TldLookups,
+} from "./tlds.js";
 
-const ASCII_TLD_RE = /^[a-z0-9-]+$/u;
 const ASCII_ONLY_RE = /^[\x00-\x7f]*$/u;
 
 const toCandidateSkeleton = (normalized: string): string =>
@@ -39,74 +43,44 @@ const toCandidateSkeleton = (normalized: string): string =>
     ? normalized
     : toSkeletonFromNormalized(normalized);
 
-const createAsciiTldTargets = (tlds: Iterable<string>): ReadonlySet<string> => {
-  const targets = new Set<string>();
-  for (const tld of tlds) {
-    if (ASCII_TLD_RE.test(tld)) targets.add(tld);
-  }
-  return targets;
-};
-
-const createNormalizedTldSet = (
-  tlds: Iterable<string>,
-): ReadonlySet<string> => {
-  const normalized = new Set<string>();
-  for (const tld of tlds) {
-    const value = normalizeTld(tld);
-    if (value) normalized.add(value);
-  }
-  return normalized;
-};
-
-const DEFAULT_LISTED_TLDS: ReadonlySet<string> = new Set(DEFAULT_TLDS);
-const DEFAULT_ASCII_TLD_TARGETS = createAsciiTldTargets(DEFAULT_TLDS);
-
-const resolveTldLookups = (
-  listedTlds: ReadonlySet<string>,
-  asciiTldTargets: ReadonlySet<string> | undefined,
-): {
-  readonly listedTlds: ReadonlySet<string>;
-  readonly asciiTldTargets: ReadonlySet<string>;
-} => {
-  if (asciiTldTargets) return { listedTlds, asciiTldTargets };
-  if (listedTlds === DEFAULT_LISTED_TLDS) {
-    return {
-      listedTlds: DEFAULT_LISTED_TLDS,
-      asciiTldTargets: DEFAULT_ASCII_TLD_TARGETS,
-    };
-  }
-  const normalizedTlds = createNormalizedTldSet(listedTlds);
-  return {
-    listedTlds: normalizedTlds,
-    asciiTldTargets: createAsciiTldTargets(normalizedTlds),
-  };
-};
+const normalizeAmbiguousSpacedDots = (
+  value: unknown,
+): AmbiguousSpacedDotPolicy => (value === "block" ? "block" : "preserve");
 
 const createMatchPolicy = (
+  tldLookups: TldLookups,
+  allowedDomains: ReadonlySet<string>,
+  ambiguousSpacedDots: unknown,
+): UrlMatchPolicy => ({
+  ...tldLookups,
+  allowedDomains,
+  ambiguousSpacedDots: normalizeAmbiguousSpacedDots(ambiguousSpacedDots),
+});
+
+const createPositionalMatchPolicy = (
   listedTlds: ReadonlySet<string>,
   asciiTldTargets: ReadonlySet<string> | undefined,
   allowedDomains: ReadonlySet<string>,
-  ambiguousSpacedDots: AmbiguousSpacedDotPolicy,
-): UrlMatchPolicy => ({
-  ...resolveTldLookups(listedTlds, asciiTldTargets),
-  allowedDomains,
-  ambiguousSpacedDots,
-});
+  ambiguousSpacedDots: unknown,
+): UrlMatchPolicy => {
+  // Retain the positional argument for source compatibility, but never let it
+  // replace targets derived from the authoritative listed-TLD set.
+  void asciiTldTargets;
+  return createMatchPolicy(
+    createTldLookups(listedTlds),
+    allowedDomains,
+    ambiguousSpacedDots,
+  );
+};
 
 export function createUrlScanner(
   config: UrlScannerConfig = {},
 ): UrlRangeScanner {
-  const tlds = normalizeTlds(config.tlds);
-  const useDefaults = tlds === DEFAULT_TLDS;
-  const policy: UrlMatchPolicy = {
-    listedTlds: useDefaults ? DEFAULT_LISTED_TLDS : new Set(tlds),
-    asciiTldTargets: useDefaults
-      ? DEFAULT_ASCII_TLD_TARGETS
-      : createAsciiTldTargets(tlds),
-    allowedDomains: normalizeAllowedDomains(config.allowedDomains),
-    ambiguousSpacedDots:
-      config.ambiguousSpacedDots === "block" ? "block" : "preserve",
-  };
+  const policy = createMatchPolicy(
+    resolveTldLookups(config.tlds),
+    normalizeAllowedDomains(config.allowedDomains),
+    config.ambiguousSpacedDots,
+  );
 
   function scan(input: UrlScanInput): { ranges: readonly TextCodePointRange[] };
   function scan(input: UrlScanInput, sink: UrlRangeMatchSink): boolean;
@@ -132,14 +106,14 @@ export function createUrlScanner(
 
 export function scanUrlRanges(
   text: unknown,
-  listedTlds: ReadonlySet<string> = DEFAULT_LISTED_TLDS,
+  listedTlds: ReadonlySet<string> = DEFAULT_TLD_LOOKUPS.listedTlds,
   asciiTldTargets?: ReadonlySet<string>,
   allowedDomains: ReadonlySet<string> = EMPTY_ALLOWED_DOMAINS,
   ambiguousSpacedDots: AmbiguousSpacedDotPolicy = "preserve",
 ): readonly TextCodePointRange[] {
   return scanUrlRangesWithPolicy(
     text,
-    createMatchPolicy(
+    createPositionalMatchPolicy(
       listedTlds,
       asciiTldTargets,
       allowedDomains,
@@ -161,14 +135,14 @@ const scanUrlRangesWithPolicy = (
 
 export function checkUrlRanges(
   input: UrlScanInput,
-  listedTlds: ReadonlySet<string> = DEFAULT_LISTED_TLDS,
+  listedTlds: ReadonlySet<string> = DEFAULT_TLD_LOOKUPS.listedTlds,
   asciiTldTargets?: ReadonlySet<string>,
   allowedDomains: ReadonlySet<string> = EMPTY_ALLOWED_DOMAINS,
   ambiguousSpacedDots: AmbiguousSpacedDotPolicy = "preserve",
 ): boolean {
   return checkUrlRangesWithPolicy(
     input,
-    createMatchPolicy(
+    createPositionalMatchPolicy(
       listedTlds,
       asciiTldTargets,
       allowedDomains,
@@ -195,7 +169,7 @@ const checkUrlRangesWithPolicy = (
 export function scanUrlRangeMatches(
   input: UrlScanInput,
   sink: UrlRangeMatchSink,
-  listedTlds: ReadonlySet<string> = DEFAULT_LISTED_TLDS,
+  listedTlds: ReadonlySet<string> = DEFAULT_TLD_LOOKUPS.listedTlds,
   asciiTldTargets?: ReadonlySet<string>,
   allowedDomains: ReadonlySet<string> = EMPTY_ALLOWED_DOMAINS,
   ambiguousSpacedDots: AmbiguousSpacedDotPolicy = "preserve",
@@ -203,7 +177,7 @@ export function scanUrlRangeMatches(
   return scanUrlRangeMatchesWithPolicy(
     input,
     sink,
-    createMatchPolicy(
+    createPositionalMatchPolicy(
       listedTlds,
       asciiTldTargets,
       allowedDomains,

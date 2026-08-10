@@ -11,7 +11,8 @@ The matcher keeps two URL paths intentionally separate:
 
 ## Public API
 
-`createUrlFilter(config?)` creates a URL censor with optional `maskChar`, `tlds`, and `allowedDomains` settings.
+`createUrlFilter(config?)` creates a URL censor with optional `maskChar`,
+`tlds`, `allowedDomains`, and `ambiguousSpacedDots` settings.
 
 The default `filter` export is a shared instance with the default TLD list. `urlFilter(config?)` is an alias for `createUrlFilter(config?)`.
 
@@ -66,6 +67,7 @@ graph TD
   ranges --> domain["domain.ts"]
   ranges --> explicit["explicit-authority.ts"]
   ranges --> meta
+  ranges --> tlds
   allowed --> chars
   allowed --> meta
   explicit --> host["explicit-host.ts"]
@@ -100,7 +102,7 @@ graph TD
 | `src/index.ts`              | Public entrypoint, public exports, and censor wrapper orchestration.                                       | Parser details or matching policy.         |
 | `src/contracts.ts`          | Public types and constants.                                                                                | Internal parser types.                     |
 | `src/scanner.ts`            | URL scanner factory, range scanner output, boolean checks, sink streaming, and cheap clean-text prefilter. | Low-level parser rules.                    |
-| `src/tlds.ts`               | Versioned default IANA TLD data and TLD normalization.                                                     | Host parsing or URL range collection.      |
+| `src/tlds.ts`               | Versioned default IANA TLD data, TLD normalization, and derived lookup compilation.                        | Host parsing or URL range collection.      |
 | `src/allowed-domains.ts`    | Exact allowed-domain normalization and parsed-host comparison.                                             | Network loading, caching, or suffix trust. |
 | `src/chars.ts`              | Shared character sets, punctuation policy, lookalike map, and static parser character arrays.              | Parser control flow.                       |
 | `src/meta.ts`               | Source metadata, raw and skeleton views, and low-level consume helpers.                                    | URL-specific matching policy.              |
@@ -130,22 +132,24 @@ dots. They require a configured TLD unless the TLD is punycode-like. The
 default list covers the complete IANA root-zone snapshot, and the existing
 lookalike skeleton matches mapped visual substitutions against ASCII entries in
 that list. Unicode TLD entries remain valid by normalized raw spelling but do
-not synthesize ASCII TLD targets. A whitespace-wrapped U+2022 list bullet
-between two repeated standalone words is prose, including at sentence
-boundaries; complete hosts before unrelated text after whitespace-wrapped dot
-forms and continuations with domain or URL-tail evidence remain detectable.
+not synthesize ASCII TLD targets. A whitespace-wrapped typographic list
+separator (`•`, `·`, `⋅`, or `・`) between two repeated standalone words is
+prose, including at sentence boundaries; complete hosts before unrelated text
+after whitespace-wrapped dot forms and continuations with domain or URL-tail
+evidence remain detectable.
 
-Every completed label is finalized from its original source code points through
-one whole-string NFKC normalization before raw and skeleton lookup. The label
-parser and adjacent-domain trimming share that finalization rule, so canonical
-decompositions, combining marks, and multi-character compatibility expansions
-cannot diverge between paths. Label and hostname limits use Unicode code-point
-counts across bare, explicit, and allowed-domain paths. Custom TLD entries are
-normalized before exact listed-TLD lookup; directional ASCII targets are then
-derived only from normalized ASCII entries. The scanner prepares one immutable
-match policy containing those lookups, the exact-host allowlist, and the spaced
-dot policy. Low-level compatibility wrappers build the same policy from their
-positional arguments.
+Every completed bare-domain label is finalized from its original source code
+points through one whole-string NFKC normalization before raw and skeleton
+lookup. The label parser and adjacent-domain trimming share that finalization
+rule, so canonical decompositions, combining marks, and multi-character
+compatibility expansions cannot diverge between paths. Label and hostname
+limits use Unicode code-point counts across bare, explicit, and allowed-domain
+paths. `tlds.ts` normalizes custom TLD entries and derives directional ASCII
+targets only from normalized ASCII entries. The scanner combines those lookups
+with the exact-host allowlist and normalized spaced-dot policy once per factory
+instance. Low-level compatibility wrappers build the same policy from their
+listed TLDs; the retained precomputed-target argument cannot replace the
+derived targets.
 
 A bare two-label candidate with a literal single-character dot followed by
 whitespace and no URL-tail evidence is intentionally policy-controlled because
@@ -234,5 +238,6 @@ Masking is idempotent because ranges are collected from the original text before
 - Do not make user config accept arbitrary regex.
 - Do not change bare-domain matching without compatibility tests.
 - Do not update ranges after masking.
-- Keep tests public-API oriented.
+- Keep behavioral tests public-API oriented; embedded snapshot invariant tests
+  may import the versioned internal data they validate.
 - Do not use lookalike skeleton folding for allowed-domain trust decisions.
