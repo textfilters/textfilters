@@ -2,11 +2,16 @@ import type { TextCodePointRange } from "@textfilters/core";
 
 // Keep public API types in a dependency-light module so the entrypoint can
 // re-export them without exposing parser internals.
+export type AmbiguousSpacedDotPolicy = "preserve" | "block";
+
 export interface UrlFilterConfig {
   readonly tlds?: readonly string[];
   readonly maskChar?: string;
   readonly allowedDomains?: readonly string[];
+  readonly ambiguousSpacedDots?: AmbiguousSpacedDotPolicy;
 }
+
+export type UrlScannerConfig = Omit<UrlFilterConfig, "maskChar">;
 
 export const URL_FILTER_NAME = "url";
 
@@ -24,6 +29,7 @@ export interface UrlScanHints {
 
 export interface UrlScanInput {
   readonly text: string;
+  /** The reusable `Array.from(text)` code-point view prepared by the caller. */
   readonly codePoints: readonly string[];
   readonly hints?: UrlScanHints;
 }

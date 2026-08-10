@@ -6,32 +6,44 @@ import {
 import { parseDot } from "./dots.js";
 import type { TextMeta } from "./meta.js";
 
-const isOnlyBracketedHostClose = (
+const collectOnlyBracketedHostCloses = (
   meta: TextMeta,
   authorityStart: number,
-  closeIndex: number,
-): boolean => {
+  authorityEnd: number,
+): ReadonlySet<number> => {
+  const closes = new Set<number>();
   let hostStart = authorityStart;
-  for (let cursor = authorityStart; cursor < closeIndex; cursor++) {
-    if (meta.symbol[cursor] === "@") hostStart = cursor + 1;
+  let sawHostClose = false;
+  for (let cursor = authorityStart; cursor < authorityEnd; cursor++) {
+    if (meta.symbol[cursor] === "@") {
+      hostStart = cursor + 1;
+      sawHostClose = false;
+      continue;
+    }
+    if (meta.symbol[cursor] !== "]") continue;
+    if (meta.symbol[hostStart] === "[" && !sawHostClose) closes.add(cursor);
+    sawHostClose = true;
   }
-  if (meta.symbol[hostStart] !== "[") return false;
-  for (let cursor = hostStart + 1; cursor < closeIndex; cursor++) {
-    if (meta.symbol[cursor] === "]") return false;
+  return closes;
+};
+
+const findLastAuthorityAt = (
+  meta: TextMeta,
+  start: number,
+  end: number,
+): number => {
+  for (let cursor = end - 1; cursor >= start; cursor--) {
+    if (meta.symbol[cursor] === "@") return cursor;
   }
-  return true;
+  return -1;
 };
 
 const isBracketedHostOpen = (
   meta: TextMeta,
-  authorityStart: number,
+  hostStart: number,
   openIndex: number,
   authorityEnd: number,
 ): boolean => {
-  let hostStart = authorityStart;
-  for (let cursor = authorityStart; cursor < openIndex; cursor++) {
-    if (meta.symbol[cursor] === "@") hostStart = cursor + 1;
-  }
   if (openIndex !== hostStart) return false;
   let hasColon = false;
   for (let cursor = openIndex + 1; cursor < authorityEnd; cursor++) {
@@ -39,50 +51,6 @@ const isBracketedHostOpen = (
     if (meta.symbol[cursor] === "]") return hasColon;
   }
   return false;
-};
-
-const hasAuthorityAtAfter = (
-  meta: TextMeta,
-  start: number,
-  end: number,
-): boolean => {
-  for (let cursor = start; cursor < end; cursor++) {
-    if (meta.symbol[cursor] === "@") return true;
-  }
-  return false;
-};
-
-const isInsideBracketedHost = (
-  meta: TextMeta,
-  start: number,
-  cursor: number,
-): boolean => {
-  let depth = 0;
-  for (let pos = start; pos < cursor; pos++) {
-    if (meta.symbol[pos] === "[") depth++;
-    if (meta.symbol[pos] === "]" && depth > 0) depth--;
-  }
-  return depth > 0;
-};
-
-const nextNonZeroWidth = (
-  meta: TextMeta,
-  start: number,
-  end: number,
-): number => {
-  let pos = start;
-  while (pos < end && meta.zeroWidth[pos]) pos++;
-  return pos;
-};
-
-const previousNonZeroWidth = (
-  meta: TextMeta,
-  start: number,
-  end: number,
-): number => {
-  let pos = end - 1;
-  while (pos >= start && meta.zeroWidth[pos]) pos--;
-  return pos;
 };
 
 const hasDotMarkerAfterRun = (
@@ -101,32 +69,33 @@ export const splitGluedPortProse = (
   start: number,
   end: number,
 ): number => {
+  const lastAuthorityAt = findLastAuthorityAt(meta, start, end);
+  let bracketDepth = 0;
   for (let cursor = start; cursor < end; cursor++) {
-    if (
-      meta.symbol[cursor] !== ":" ||
-      isInsideBracketedHost(meta, start, cursor)
-    ) {
-      continue;
-    }
-    let portEnd = cursor + 1;
-    let hasPortDigit = false;
-    while (portEnd < end) {
-      if (meta.zeroWidth[portEnd]) {
+    const symbol = meta.symbol[cursor];
+    if (symbol === ":" && bracketDepth === 0) {
+      let portEnd = cursor + 1;
+      let hasPortDigit = false;
+      while (portEnd < end) {
+        if (meta.zeroWidth[portEnd]) {
+          portEnd++;
+          continue;
+        }
+        if (!/^[0-9]$/u.test(meta.raw[portEnd])) break;
+        hasPortDigit = true;
         portEnd++;
-        continue;
       }
-      if (!/^[0-9]$/u.test(meta.raw[portEnd])) break;
-      hasPortDigit = true;
-      portEnd++;
+      if (
+        hasPortDigit &&
+        portEnd < end &&
+        !PATH_START_CHARS.has(meta.symbol[portEnd]) &&
+        lastAuthorityAt < portEnd
+      ) {
+        return portEnd;
+      }
     }
-    if (
-      hasPortDigit &&
-      portEnd < end &&
-      !PATH_START_CHARS.has(meta.symbol[portEnd]) &&
-      !hasAuthorityAtAfter(meta, portEnd, end)
-    ) {
-      return portEnd;
-    }
+    if (symbol === "[") bracketDepth++;
+    if (symbol === "]" && bracketDepth > 0) bracketDepth--;
   }
   return end;
 };
@@ -257,98 +226,124 @@ export const trimGluedProseFromAuthority = (
   start: number,
   end: number,
 ): number => {
+  const lastAuthorityAt = findLastAuthorityAt(meta, start, end);
+  let hasColonBeforeCursor = false;
+  let bracketDepth = 0;
+  let hostStart = start;
+  let sawHostClose = false;
+  let previousVisible = start - 1;
+  let nextVisible = start;
+  let cachedRunStart = -1;
+  let cachedRunHasDot = false;
+  const hasCachedDotMarkerAfterRun = (runStart: number): boolean => {
+    if (cachedRunStart !== runStart) {
+      cachedRunStart = runStart;
+      cachedRunHasDot = hasDotMarkerAfterRun(meta, runStart, end);
+    }
+    return cachedRunHasDot;
+  };
   for (let cursor = start; cursor + 1 < end; cursor++) {
-    const next = nextNonZeroWidth(meta, cursor + 1, end);
+    const symbol = meta.symbol[cursor];
+    hasColonBeforeCursor ||= meta.raw[cursor] === ":";
+    if (nextVisible <= cursor) {
+      nextVisible = cursor + 1;
+      while (nextVisible < end && meta.zeroWidth[nextVisible]) nextVisible++;
+    }
+    const next = nextVisible;
+    const hasAuthorityAtAfterNext = lastAuthorityAt >= next;
     if (
       meta.zeroWidth[cursor] &&
       next < end &&
       meta.alphaNum[next] &&
-      meta.symbol[previousNonZeroWidth(meta, start, cursor)] !== "." &&
+      meta.symbol[previousVisible] !== "." &&
       !/^[0-9]$/u.test(meta.raw[next]) &&
-      !hasDotMarkerAfterRun(meta, next, end) &&
-      !hasAuthorityAtAfter(meta, next, end)
+      !hasCachedDotMarkerAfterRun(next) &&
+      !hasAuthorityAtAfterNext
     ) {
       return cursor;
     }
     if (
-      meta.symbol[cursor] === "]" &&
+      symbol === "]" &&
       next < end &&
       meta.alphaNum[next] &&
-      !hasAuthorityAtAfter(meta, next, end)
+      !hasAuthorityAtAfterNext
     ) {
-      return isOnlyBracketedHostClose(meta, start, cursor)
+      return meta.symbol[hostStart] === "[" && !sawHostClose
         ? cursor + 1
         : cursor;
     }
     if (
-      (meta.symbol[cursor] === '"' ||
-        meta.symbol[cursor] === "'" ||
-        meta.symbol[cursor] === "`" ||
-        meta.symbol[cursor] === "”" ||
-        meta.symbol[cursor] === "’" ||
-        meta.symbol[cursor] === "»" ||
-        meta.symbol[cursor] === "“" ||
-        meta.symbol[cursor] === "‘" ||
-        meta.symbol[cursor] === "«") &&
+      (symbol === '"' ||
+        symbol === "'" ||
+        symbol === "`" ||
+        symbol === "”" ||
+        symbol === "’" ||
+        symbol === "»" ||
+        symbol === "“" ||
+        symbol === "‘" ||
+        symbol === "«") &&
       next < end &&
       meta.alphaNum[next] &&
-      !hasAuthorityAtAfter(meta, next, end)
+      !hasAuthorityAtAfterNext
     ) {
       return cursor;
     }
-    if (meta.symbol[cursor] === ".") {
-      const previous = previousNonZeroWidth(meta, start, cursor);
+    if (symbol === ".") {
       if (
         next < end &&
         meta.alphaNum[next] &&
-        !hasAuthorityAtAfter(meta, next, end) &&
-        (meta.symbol[previous] === "]" ||
-          (meta.raw[previous] !== undefined &&
-            /^[0-9]$/u.test(meta.raw[previous]) &&
-            meta.raw.slice(start, previous + 1).includes(":")))
+        !hasAuthorityAtAfterNext &&
+        (meta.symbol[previousVisible] === "]" ||
+          (meta.raw[previousVisible] !== undefined &&
+            /^[0-9]$/u.test(meta.raw[previousVisible]) &&
+            hasColonBeforeCursor))
       ) {
         return cursor;
       }
+      previousVisible = cursor;
       continue;
     }
     if (
-      meta.symbol[cursor] === ":" &&
+      symbol === ":" &&
       next < end &&
       !/^[0-9]$/u.test(meta.raw[next]) &&
       meta.symbol[next] !== "/" &&
       meta.symbol[next] !== "?" &&
       meta.symbol[next] !== "#" &&
-      !isInsideBracketedHost(meta, start, cursor) &&
-      !hasAuthorityAtAfter(meta, next, end)
+      bracketDepth === 0 &&
+      !hasAuthorityAtAfterNext
     ) {
       return cursor;
     }
     if (
-      AUTHORITY_GLUED_PROSE_CHARS.has(meta.symbol[cursor]) &&
+      AUTHORITY_GLUED_PROSE_CHARS.has(symbol) &&
       next < end &&
       meta.alphaNum[next] &&
-      !(meta.symbol[cursor] === ":" && /^[0-9]$/u.test(meta.raw[next])) &&
-      !(
-        meta.symbol[cursor] === ":" &&
-        isInsideBracketedHost(meta, start, cursor)
-      ) &&
-      !hasAuthorityAtAfter(meta, next, end)
+      !(symbol === ":" && /^[0-9]$/u.test(meta.raw[next])) &&
+      !(symbol === ":" && bracketDepth > 0) &&
+      !hasAuthorityAtAfterNext
     ) {
       return cursor;
     }
     if (
-      (meta.symbol[cursor] === "(" ||
-        meta.symbol[cursor] === "[" ||
-        meta.symbol[cursor] === "{" ||
-        meta.symbol[cursor] === "<") &&
+      (symbol === "(" || symbol === "[" || symbol === "{" || symbol === "<") &&
       next < end &&
       meta.alphaNum[next] &&
-      !isInsideBracketedHost(meta, start, cursor) &&
-      !isBracketedHostOpen(meta, start, cursor, end) &&
-      !hasAuthorityAtAfter(meta, next, end)
+      bracketDepth === 0 &&
+      !hasAuthorityAtAfterNext &&
+      !isBracketedHostOpen(meta, hostStart, cursor, end)
     ) {
       return cursor;
     }
+    if (symbol === "@") {
+      hostStart = cursor + 1;
+      sawHostClose = false;
+    } else if (symbol === "]") {
+      sawHostClose = true;
+    }
+    if (symbol === "[") bracketDepth++;
+    if (symbol === "]" && bracketDepth > 0) bracketDepth--;
+    if (!meta.zeroWidth[cursor]) previousVisible = cursor;
   }
   return end;
 };
@@ -360,6 +355,7 @@ export const trimAuthorityTrailingNoise = (
   hasFollowingPathTail: boolean,
 ): number => {
   let authorityEnd = end;
+  let onlyBracketedHostCloses: ReadonlySet<number> | undefined;
   while (authorityEnd > start) {
     let cursor = authorityEnd;
     while (cursor > start && meta.zeroWidth[cursor - 1]) cursor--;
@@ -368,7 +364,12 @@ export const trimAuthorityTrailingNoise = (
       cursor > start &&
       AUTHORITY_TRAILING_CHARS.has(trailing) &&
       !(
-        trailing === "]" && isOnlyBracketedHostClose(meta, start, cursor - 1)
+        trailing === "]" &&
+        (onlyBracketedHostCloses ??= collectOnlyBracketedHostCloses(
+          meta,
+          start,
+          end,
+        )).has(cursor - 1)
       ) &&
       !(
         hasFollowingPathTail &&

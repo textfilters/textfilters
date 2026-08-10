@@ -6,10 +6,10 @@ import {
   type UrlFilterConfig,
 } from "./contracts.js";
 import { createUrlScanner, scanUrlRanges } from "./scanner.js";
-import { DEFAULT_TLDS, normalizeTlds } from "./tlds.js";
 
 export {
   URL_FILTER_NAME,
+  type AmbiguousSpacedDotPolicy,
   type UrlFilter,
   type UrlFilterConfig,
   type UrlRangeMatch,
@@ -18,19 +18,20 @@ export {
   type UrlRangeScanResult,
   type UrlScanHints,
   type UrlScanInput,
+  type UrlScannerConfig,
 } from "./contracts.js";
 export {
   checkUrlRanges,
   createUrlScanner,
   scanUrlRangeMatches,
   scanUrlRanges,
-  type UrlScannerConfig,
 } from "./scanner.js";
 
 export function createUrlFilter(config: UrlFilterConfig = {}): UrlFilter {
   const scanner = createUrlScanner({
-    tlds: normalizeTlds(config.tlds),
+    tlds: config.tlds,
     allowedDomains: config.allowedDomains,
+    ambiguousSpacedDots: config.ambiguousSpacedDots,
   });
   const maskChar = config.maskChar ?? "*";
 
@@ -50,4 +51,4 @@ export function urlFilter(config?: UrlFilterConfig): UrlFilter {
   return createUrlFilter(config);
 }
 
-export const filter = createUrlFilter({ tlds: DEFAULT_TLDS });
+export const filter = createUrlFilter();

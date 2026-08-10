@@ -1,15 +1,24 @@
+import { lowerNfkc, stripZeroWidth } from "@textfilters/core";
 import { describe, expect, it } from "vitest";
 
+import {
+  DOT_CHAR_SET,
+  LETTER_OR_DIGIT_RE,
+  LOOKALIKE_TO_ASCII,
+  WHITESPACE_RE,
+} from "../src/chars.js";
 import {
   checkUrlRanges,
   createUrlFilter,
   createUrlScanner,
   scanUrlRangeMatches,
   scanUrlRanges,
+  type AmbiguousSpacedDotPolicy,
   type UrlRangeScanner,
   type UrlRangeScanResult,
   type UrlScanHints,
 } from "../src/index.js";
+import { createMeta } from "../src/meta.js";
 import { mask } from "./helpers.js";
 
 type Range = readonly [number, number];
@@ -18,6 +27,7 @@ interface ScannerFixture {
   readonly text: string;
   readonly ranges: readonly Range[];
   readonly allowedDomains?: readonly string[];
+  readonly ambiguousSpacedDots?: AmbiguousSpacedDotPolicy;
 }
 
 const wholeRange = (text: string): readonly Range[] => [
@@ -38,12 +48,13 @@ const expectScannerFixture = ({
   text,
   ranges,
   allowedDomains,
+  ambiguousSpacedDots,
 }: ScannerFixture): void => {
   const input = { text, codePoints: Array.from(text) };
-  const scanner = createUrlScanner({ allowedDomains });
+  const scanner = createUrlScanner({ allowedDomains, ambiguousSpacedDots });
   const seen: Range[] = [];
 
-  if (allowedDomains === undefined) {
+  if (allowedDomains === undefined && ambiguousSpacedDots === undefined) {
     expect(scanUrlRanges(text)).toEqual(ranges);
     expect(checkUrlRanges(input)).toBe(ranges.length > 0);
   }
@@ -55,12 +66,56 @@ const expectScannerFixture = ({
     }),
   ).toBe(true);
   expect(seen).toEqual(ranges);
-  expect(createUrlFilter({ allowedDomains }).censor(text)).toBe(
-    maskRanges(text, ranges),
-  );
+  expect(
+    createUrlFilter({ allowedDomains, ambiguousSpacedDots }).censor(text),
+  ).toBe(maskRanges(text, ranges));
 };
 
 describe("URL scanner", () => {
+  it("keeps the ASCII metadata fast path equivalent to generic normalization", () => {
+    const codePoints = Array.from({ length: 128 }, (_, code) =>
+      String.fromCharCode(code),
+    );
+    const meta = createMeta(codePoints.join(""), codePoints);
+
+    for (let index = 0; index < codePoints.length; index++) {
+      const source = codePoints[index] ?? "";
+      const raw = Array.from(lowerNfkc(source))[0] ?? "";
+      const skeleton = LOOKALIKE_TO_ASCII.get(raw) ?? raw;
+      const symbol = DOT_CHAR_SET.has(raw) ? "." : raw === "\\" ? "/" : raw;
+      const zeroWidth = source !== "" && stripZeroWidth(source) === "";
+      const whitespace = WHITESPACE_RE.test(source);
+      const alphaNum = LETTER_OR_DIGIT_RE.test(raw);
+
+      expect({
+        raw: meta.raw[index],
+        skeleton: meta.skeleton[index],
+        symbol: meta.symbol[index],
+        zeroWidth: meta.zeroWidth[index],
+        whitespace: meta.whitespace[index],
+        alphaNum: meta.alphaNum[index],
+        separator: meta.separator[index],
+        labelJoinSeparator: meta.labelJoinSeparator[index],
+      }).toEqual({
+        raw,
+        skeleton,
+        symbol,
+        zeroWidth,
+        whitespace,
+        alphaNum,
+        separator: zeroWidth || !alphaNum,
+        labelJoinSeparator:
+          zeroWidth ||
+          (!alphaNum &&
+            symbol !== "." &&
+            symbol !== "/" &&
+            symbol !== ":" &&
+            symbol !== "?" &&
+            symbol !== "#"),
+      });
+    }
+  });
+
   it("keeps scanner contracts compatible with shared range shapes", () => {
     const scanner: UrlRangeScanner = createUrlScanner();
     const hints: UrlScanHints = {
@@ -89,6 +144,23 @@ describe("URL scanner", () => {
     ).toEqual({
       ranges: [[6, 25]],
     });
+  });
+
+  it("keeps prepared astral code point ranges aligned across scanner paths", () => {
+    const scanner = createUrlScanner();
+    const text = "😀 visit example.com now";
+    const input = { text, codePoints: Array.from(text) };
+    const expected: readonly Range[] = [[8, 19]];
+    const seen: Range[] = [];
+
+    expect(scanner.check(input)).toBe(true);
+    expect(scanner.scan(input)).toEqual({ ranges: expected });
+    expect(
+      scanner.scan(input, (match) => {
+        seen.push(match.range);
+      }),
+    ).toBe(true);
+    expect(seen).toEqual(expected);
   });
 
   it("keeps the public censor wrapper aligned with scanner ranges", () => {
@@ -225,8 +297,150 @@ describe("URL scanner", () => {
     );
   });
 
+  it("applies an explicit policy to ambiguous spaced-dot candidates", () => {
+    const cases = [
+      ["Fine. Be careful.", "Fine. Be"],
+      ["Hello. Fine. Be careful.", "Fine. Be"],
+      ["Mr. Fine. Be careful.", "Fine. Be"],
+      ["Use e.g. In practice.", "Use e.g. In"],
+      ["Use i.e. It works.", "Use i.e. It"],
+      ["At p.m. Be ready.", "At p.m. Be"],
+      ["Use U.S. In practice.", "Use U.S. In"],
+      ["Version 1.2. In production.", "Version 1.2. In"],
+      ["Use e.g\u200b. In practice.", "Use e.g\u200b. In"],
+      ["Use e.g.” In practice.", "Use e.g.” In"],
+      ["sub.evil. com now", "sub.evil. com"],
+      ["Fine\u200b. Be careful.", "Fine\u200b. Be"],
+      ["Fine\ufe0f. Be careful.", "Fine\ufe0f. Be"],
+      ["Fine\u{e0100}. Be careful.", "Fine\u{e0100}. Be"],
+      ["Fine.\u200b Be careful.", "Fine.\u200b Be"],
+      ["Fine.\ufe0f Be careful.", "Fine.\ufe0f Be"],
+      ["Fine.\u{e0100} Be careful.", "Fine.\u{e0100} Be"],
+      ["这是 示例。 中国 很好", "示例。 中国"],
+      ["Step 1. One thing remains.", "Step 1. One"],
+      ["State-of-the-art. Design matters.", "State-of-the-art. Design"],
+      ["visit evil. com", "evil. com"],
+      ["please open phishing. net!", "phishing. net"],
+      ["Visit evil. com now", "evil. com"],
+      ["Please visit Evil. com now", "Evil. com"],
+      ["Hello܁ com next", "Hello܁ com"],
+      ["Hello܂ com next", "Hello܂ com"],
+      ["Hello꘎ com next", "Hello꘎ com"],
+      ["Hello𐩐 com next", "Hello𐩐 com"],
+    ] as const;
+
+    for (const [text, candidate] of cases) {
+      const start = Array.from(text.slice(0, text.indexOf(candidate))).length;
+      const range: Range = [start, start + Array.from(candidate).length];
+
+      expectScannerFixture({ text, ranges: [] });
+      expectScannerFixture({
+        text,
+        ranges: [range],
+        ambiguousSpacedDots: "block",
+      });
+    }
+
+    for (const [text, candidate] of [
+      ["Visit evil. com/path now", "evil. com/path"],
+      ["Use e.g. com/path now", "Use e.g. com/path"],
+      ["Use e.g. com:443 now", "Use e.g. com:443"],
+      ["Use e.g. com?x=1 now", "Use e.g. com?x=1"],
+      ["Use e.g. com#frag now", "Use e.g. com#frag"],
+      ["Visit evil. com?x=1 now", "evil. com?x=1"],
+      ["Visit evil. com#frag now", "evil. com#frag"],
+    ] as const) {
+      const start = Array.from(text.slice(0, text.indexOf(candidate))).length;
+      expectScannerFixture({
+        text,
+        ranges: [[start, start + Array.from(candidate).length]],
+      });
+    }
+
+    const adjacentDomainText = "foo. com evil.org";
+    const adjacentDomain = "evil.org";
+    const adjacentDomainStart = Array.from(
+      adjacentDomainText.slice(0, adjacentDomainText.indexOf(adjacentDomain)),
+    ).length;
+    expectScannerFixture({
+      text: adjacentDomainText,
+      ranges: [
+        [
+          adjacentDomainStart,
+          adjacentDomainStart + Array.from(adjacentDomain).length,
+        ],
+      ],
+    });
+    expectScannerFixture({
+      text: adjacentDomainText,
+      ranges: [],
+      allowedDomains: [adjacentDomain],
+    });
+
+    const spacedBeforeDot = "Fine . Be careful.";
+    expectScannerFixture({ text: spacedBeforeDot, ranges: [[0, 9]] });
+  });
+
+  it("does not let caller-provided hints suppress parser evidence", () => {
+    for (const text of [
+      "example.com",
+      "example[.]com",
+      "example。com",
+      "evil. com?x=1",
+      "evil. com#frag",
+    ]) {
+      const input = {
+        text,
+        codePoints: Array.from(text),
+        hints: {
+          hasDot: false,
+          hasSlash: false,
+          hasColon: false,
+          hasNonAscii: false,
+        },
+      };
+      const scanner = createUrlScanner();
+
+      expect(scanner.check(input)).toBe(true);
+      expect(scanner.scan(input).ranges).not.toEqual([]);
+    }
+  });
+
+  it("normalizes invalid spaced-dot policies consistently", () => {
+    const text = "visit evil. com now";
+    const input = { text, codePoints: Array.from(text) };
+    const invalidPolicy = "invalid" as AmbiguousSpacedDotPolicy;
+    const seen: Range[] = [];
+    const scanner = createUrlScanner({ ambiguousSpacedDots: invalidPolicy });
+
+    expect(scanner.scan(input)).toEqual({ ranges: [] });
+    expect(scanner.check(input)).toBe(false);
+    expect(
+      createUrlFilter({ ambiguousSpacedDots: invalidPolicy }).censor(text),
+    ).toBe(text);
+    expect(
+      scanUrlRanges(text, undefined, undefined, undefined, invalidPolicy),
+    ).toEqual([]);
+    expect(
+      checkUrlRanges(input, undefined, undefined, undefined, invalidPolicy),
+    ).toBe(false);
+    expect(
+      scanUrlRangeMatches(
+        input,
+        (match) => {
+          seen.push(match.range);
+        },
+        undefined,
+        undefined,
+        undefined,
+        invalidPolicy,
+      ),
+    ).toBe(true);
+    expect(seen).toEqual([]);
+  });
+
   it("checks allowlists against the selected sentence suffix", () => {
-    const text = "foo.bar. evil.com";
+    const text = "foo.invalid. evil.com";
     const suffix = "evil.com";
     const suffixStart = Array.from(text.slice(0, text.indexOf(suffix))).length;
     const input = { text, codePoints: Array.from(text) };
@@ -234,12 +448,12 @@ describe("URL scanner", () => {
       {
         allowedDomains: [] as string[],
         ranges: [[suffixStart, Array.from(text).length]],
-        censored: `foo.bar. ${mask(suffix)}`,
+        censored: `foo.invalid. ${mask(suffix)}`,
       },
       {
-        allowedDomains: ["foo.bar.evil.com"],
+        allowedDomains: ["foo.invalid.evil.com"],
         ranges: [[suffixStart, Array.from(text).length]],
-        censored: `foo.bar. ${mask(suffix)}`,
+        censored: `foo.invalid. ${mask(suffix)}`,
       },
       {
         allowedDomains: [suffix],
@@ -247,7 +461,7 @@ describe("URL scanner", () => {
         censored: mask(text),
       },
       {
-        allowedDomains: ["foo.bar.evil.com", suffix],
+        allowedDomains: ["foo.invalid.evil.com", suffix],
         ranges: [] as Array<readonly [number, number]>,
         censored: text,
       },
@@ -269,7 +483,14 @@ describe("URL scanner", () => {
       expect(createUrlFilter({ allowedDomains }).censor(text)).toBe(censored);
     }
 
-    for (const sentenceText of ["foo.bar﹒ evil.com", "foo.bar.” evil.com"]) {
+    for (const sentenceText of [
+      "foo.invalid﹒ evil.com",
+      "foo.invalid.” evil.com",
+      "foo.invalid\u200b. evil.com",
+      "foo.invalid\ufe0f. evil.com",
+      "foo.invalid\u{e0100}. evil.com",
+      "foo.invalid\u200b.” evil.com",
+    ]) {
       const sentenceSuffixStart = Array.from(
         sentenceText.slice(0, sentenceText.indexOf(suffix)),
       ).length;
@@ -352,6 +573,50 @@ describe("URL scanner", () => {
     }
   });
 
+  it("keeps completed domains before quoted sentence endings independent", () => {
+    const completed = "example.com";
+    for (const ending of [
+      ".” Next step.",
+      ".\u200b” Next step.",
+      ".”\u200b Next step.",
+      ".) Next step.",
+      ".» Next step.",
+    ]) {
+      const text = completed + ending;
+      const completedRange: Range = [0, Array.from(completed).length];
+
+      expectScannerFixture({ text, ranges: [completedRange] });
+      expectScannerFixture({
+        text,
+        ranges: [],
+        allowedDomains: [completed],
+      });
+    }
+
+    const adjacent = "example.com.” evil.org";
+    const next = "evil.org";
+    const nextStart = Array.from(
+      adjacent.slice(0, adjacent.indexOf(next)),
+    ).length;
+    expectScannerFixture({
+      text: adjacent,
+      ranges: [
+        [0, Array.from(completed).length],
+        [nextStart, nextStart + Array.from(next).length],
+      ],
+    });
+    expectScannerFixture({
+      text: adjacent,
+      ranges: [[nextStart, nextStart + Array.from(next).length]],
+      allowedDomains: [completed],
+    });
+    expectScannerFixture({
+      text: adjacent,
+      ranges: [[0, Array.from(completed).length]],
+      allowedDomains: [next],
+    });
+  });
+
   it("keeps obfuscated non-sentence dots inside domain ranges", () => {
     for (const dot of ["·", "•", "⋅", "・"]) {
       const text = `evil${dot} sub.example.com`;
@@ -361,7 +626,7 @@ describe("URL scanner", () => {
     }
   });
 
-  it("classifies whitespace-wrapped list bullets by parsed URL context", () => {
+  it("classifies whitespace-wrapped list separators by parsed URL context", () => {
     const prose = [
       "She was shooting daggers at me • Me reading chapter 1",
       "me • Me",
@@ -374,6 +639,9 @@ describe("URL scanner", () => {
       "me \ufe0f•\ufe0e Me",
       "me \u{e0100}•\u{e0100} Me",
       "foo-bar • Foo-bar follows",
+      "भारत • भारत",
+      "कॉम • कॉम",
+      "বাংলা • বাংলা",
       "info • Info: details",
       "me • Me?",
       "me • Me?.",
@@ -409,7 +677,6 @@ describe("URL scanner", () => {
       "me • _me",
       "example.com.\ufe0f/path",
       "example.com.\u{e0100}/path",
-      "example.com • net",
       "me • me/path",
       "me • me\ufe0f/path",
       "me • me\u{e0100}/path",
@@ -421,8 +688,20 @@ describe("URL scanner", () => {
     ];
 
     for (const text of prose) expectScannerFixture({ text, ranges: [] });
+    for (const dot of ["•", "·", "⋅", "・"]) {
+      expectScannerFixture({ text: `art ${dot} art`, ranges: [] });
+    }
     for (const text of domains) {
       expectScannerFixture({ text, ranges: wholeRange(text) });
+    }
+    for (const dot of ["•", "·", "⋅", "・"]) {
+      for (const text of [
+        `art ${dot} shop`,
+        `art${dot}art`,
+        `art ${dot} art/path`,
+      ]) {
+        expectScannerFixture({ text, ranges: wholeRange(text) });
+      }
     }
     for (const selector of ["\ufe0f", "\u{e0100}"]) {
       for (const text of [
@@ -448,7 +727,11 @@ describe("URL scanner", () => {
       text: "hello. me • me. example.com",
       ranges: [[16, 27]],
     });
-    for (const text of ["example.com • next", "example.com •\ufe0f next"]) {
+    for (const text of [
+      "example.com • net",
+      "example.com • next",
+      "example.com •\ufe0f next",
+    ]) {
       expectScannerFixture({ text, ranges: [[0, 11]] });
     }
     for (const dot of ["·", "⋅", "・"]) {
@@ -468,6 +751,7 @@ describe("URL scanner", () => {
       ranges: [],
       allowedDomains: ["example.com"],
     });
+    expectScannerFixture({ text: "art · art evil.org", ranges: [[10, 18]] });
   });
 
   it("detects biz domains through every scanner path", () => {
@@ -537,6 +821,17 @@ describe("URL scanner", () => {
         allowedDomains: [exactDomain],
       });
     }
+
+    expectScannerFixture({
+      text: "evil.com dot net",
+      ranges: wholeRange("evil.com dot net"),
+      allowedDomains: ["evil.com"],
+    });
+    expectScannerFixture({
+      text: "evil.com dot net",
+      ranges: [],
+      allowedDomains: ["evil.com.net"],
+    });
   });
 
   it("keeps adjacent URL ranges and allowlists independent", () => {
@@ -717,6 +1012,9 @@ describe("URL scanner", () => {
 
   it("supports custom TLD configuration", () => {
     expect(scanUrlRanges("go svc.internal", new Set(["internal"]))).toEqual([
+      [3, 15],
+    ]);
+    expect(scanUrlRanges("go svc.іnternal", new Set(["internal"]))).toEqual([
       [3, 15],
     ]);
     expect(scanUrlRanges("go svc.internal")).toEqual([]);

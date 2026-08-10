@@ -1,7 +1,13 @@
 import { lowerNfkc, stripZeroWidth } from "@textfilters/core";
 
 import { DOT_CHAR_SET } from "./chars.js";
-import type { DomainMatch, TextMeta } from "./meta.js";
+import {
+  countCodePoints,
+  MAX_HOST_LABEL_CODE_POINTS,
+  MAX_HOSTNAME_CODE_POINTS,
+  type DomainMatch,
+  type TextMeta,
+} from "./meta.js";
 
 export const EMPTY_ALLOWED_DOMAINS: ReadonlySet<string> = new Set();
 
@@ -21,13 +27,13 @@ const normalizeDomainLiteral = (value: unknown): string | null => {
   if (
     !domain ||
     labels.length < 2 ||
-    Array.from(domain).length > 253 ||
+    countCodePoints(domain) > MAX_HOSTNAME_CODE_POINTS ||
     /[\s/:@?#\\[\]]/u.test(domain) ||
     isIpv4Address ||
     labels.some(
       (label) =>
         label.length === 0 ||
-        Array.from(label).length > 63 ||
+        countCodePoints(label) > MAX_HOST_LABEL_CODE_POINTS ||
         label.startsWith("-") ||
         label.endsWith("-") ||
         !/^[\p{L}\p{N}\p{M}\p{S}_-]+$/u.test(label),
@@ -64,7 +70,8 @@ export const isAllowedDomain = (
   const hostname = domain.labels
     .map((label, index) => {
       const start = index === 0 ? firstLabelStart : label.start;
-      let normalized = "";
+      const nextLabel = domain.labels[index + 1];
+      let sourceLabel = "";
       for (let cursor = start; cursor < label.end; cursor++) {
         const source = meta.codePoints[cursor] ?? "";
         const symbol = meta.symbol[cursor] ?? "";
@@ -74,10 +81,35 @@ export const isAllowedDomain = (
           symbol === "_" ||
           /[\p{M}\p{S}]/u.test(source)
         ) {
-          normalized += stripZeroWidth(lowerNfkc(source));
+          sourceLabel += source;
         }
       }
-      return normalized;
+      if (nextLabel) {
+        // Preserve hostname join syntax skipped by the dot parser. Otherwise
+        // `trusted-.com` and `trusted_.com` collapse to an allowlisted
+        // `trusted.com` even though the parsed source hosts are distinct.
+        for (let cursor = label.end; cursor < nextLabel.start; cursor++) {
+          if (meta.raw[cursor] === "-" || meta.raw[cursor] === "_") {
+            sourceLabel += meta.raw[cursor];
+          }
+        }
+      } else {
+        // A final joiner can sit just outside the selected label range in an
+        // explicit authority. Keep it in the trust comparison while ignoring
+        // zero-width formatting that exact allowlists intentionally normalize.
+        let cursor = label.end;
+        while (
+          meta.zeroWidth[cursor] ||
+          meta.raw[cursor] === "-" ||
+          meta.raw[cursor] === "_"
+        ) {
+          if (meta.raw[cursor] === "-" || meta.raw[cursor] === "_") {
+            sourceLabel += meta.raw[cursor];
+          }
+          cursor++;
+        }
+      }
+      return stripZeroWidth(lowerNfkc(sourceLabel));
     })
     .join(".");
   return allowedDomains.has(hostname);

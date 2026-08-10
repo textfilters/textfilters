@@ -4,7 +4,7 @@ TypeScript URL detection and obfuscated link filtering for content moderation,
 chat moderation, UGC moderation, censoring, and redaction workflows.
 
 Use `@textfilters/url` to find and safely censor URLs, defanged domains, hxxp
-links, obfuscated links, and known-TLD domains inside user-generated text while
+links, obfuscated links, and listed-TLD domains inside user-generated text while
 keeping the package composable with other Textfilters filters.
 
 ## Installation
@@ -43,6 +43,23 @@ import { createUrlFilter } from "@textfilters/url";
 const urlFilter = createUrlFilter({ tlds: ["com", "org"], maskChar: "#" });
 const safeText = urlFilter.censor("visit example[.]com");
 ```
+
+A literal dot followed by whitespace is ambiguous without external context:
+it can be sentence punctuation or a one-sided defanged domain. The
+`ambiguousSpacedDots` option makes that policy explicit:
+
+```ts
+const proseSafe = createUrlFilter({ ambiguousSpacedDots: "preserve" });
+const strict = createUrlFilter({ ambiguousSpacedDots: "block" });
+```
+
+`preserve` is the default and leaves a bare candidate unchanged when its final
+two labels form an ambiguous suffix such as `example. com` and it has no path,
+query, fragment, port, scheme, or other URL evidence. `block` treats the same
+candidate as a defanged domain.
+Both modes continue to detect stronger forms such as `example. com/path`,
+`example[.]com`, and `example dot com`. `createUrlScanner()` accepts the same
+option.
 
 Use `allowedDomains` when an application has already loaded a trusted domain
 snapshot from configuration or an external service:
@@ -106,32 +123,76 @@ scanner.scan(
 );
 ```
 
+The lower-level `scanUrlRanges()`, `checkUrlRanges()`, and
+`scanUrlRangeMatches()` exports retain their existing positional signatures.
+Their optional precomputed ASCII-target argument is compatibility-only: each
+helper normalizes the listed TLDs and derives lookalike targets from that same
+set, so a supplied target set cannot broaden or narrow detection. A custom
+`ReadonlySet` is treated as an immutable configuration snapshot and its derived
+lookups are cached by set identity; create a new set after changing the list.
+
 ## Behavior
 
-The package preserves the existing URL filtering behavior and adds stricter explicit-scheme URL handling for common authority forms such as localhost, ports, IPv6, userinfo, and explicit-scheme unknown TLDs.
+The complete IANA snapshot intentionally broadens default bare-domain detection
+beyond the former small built-in subset. Names such as `archive.zip`,
+`document.md`, and `notes.mov` are now treated as domains. Applications that
+need the previous restricted policy must pass their exact legacy suffix subset
+through `tlds`.
 
-Bare domains still require the configured TLD list. For example, `example.unknown/path` is left unchanged by the default filter, while `https://example.unknown/path` is masked because it has an explicit scheme.
+Existing direct, defanged, and explicit-scheme URL forms remain supported, with
+stricter authority handling for localhost, ports, IPv6, userinfo, and
+explicit-scheme unknown TLDs.
+
+Bare domains still require the configured TLD list. The default list contains
+the complete IANA root-zone snapshot, including Unicode spellings of IDN TLDs.
+For example, `example.unknown/path` is left unchanged by the default filter,
+while `https://example.unknown/path` is masked because it has an explicit
+scheme.
+
+A non-empty custom `tlds` list replaces the defaults after normalization and
+deduplication. If every configured entry normalizes to an empty value, the
+filter retains the default snapshot instead of silently disabling bare-domain
+detection.
+
+Lookalike skeleton targets are derived only from ASCII TLD entries. Unicode
+input may fold toward a listed ASCII TLD, while an ASCII suffix cannot become
+valid solely because it resembles a listed Unicode TLD. Normalized Unicode TLD
+spellings remain directly valid through the same source list.
+
+Completed bare-domain labels are normalized from their original source code
+points as one NFKC value before raw or skeleton lookup. This keeps canonical
+decompositions, compatibility forms, adjacent-domain trimming, configured
+TLDs, and implicit low-level custom TLD lookups on the same normalization path.
+Label and hostname limits are measured in Unicode code points so
+supplementary-plane letters use the same limits as BMP letters.
 
 The filter masks:
 
-- known-TLD bare domains such as `example.com`, `freeaccount.biz`, `t.me/example`, and `discord.gg/example`;
+- listed-TLD bare domains such as `example.com`, `youtu.be`, `t.me/example`, and `discord.gg/example`;
 - defanged dot forms such as `example[.]com`, `example dot com`, and `example точка com`;
+- ambiguous literal-dot-plus-whitespace domains when `ambiguousSpacedDots` is set to `block`;
 - `http`, `https`, and `hxxp` scheme forms, including split-letter obfuscation;
 - explicit-scheme hosts with ports, IPv6 literals, userinfo, IDN/emoji hosts, and unknown TLDs;
 - glued prose around explicit authorities while keeping trailing punctuation outside the masked range.
 
-A whitespace-wrapped U+2022 list bullet between two repeated standalone words is
-treated as prose punctuation, including at sentence boundaries. A complete host
-before unrelated text remains detectable after a whitespace-wrapped dot form or
-a single-character dot followed by whitespace, as in `example.com • next`.
-Different labels, unspaced or one-sided forms, and repeated labels that extend a
-host or URL tail remain detectable and cannot broaden exact-host allowlists.
+A whitespace-wrapped typographic list separator (`•`, `·`, `⋅`, or `・`)
+between two repeated standalone words is treated as prose punctuation,
+including at sentence boundaries. A complete host before unrelated text
+remains detectable after a whitespace-wrapped dot form or a single-character
+dot followed by whitespace, as in `example.com • next`. Different labels,
+unspaced forms, repeated labels that extend a host, and one-sided forms with
+URL-tail evidence remain detectable. Ambiguous bare
+literal-dot-plus-whitespace candidates follow the configured policy and cannot
+broaden exact-host allowlists.
 
 Configured `allowedDomains` are removed from filter and scanner results after
 parsing. They do not add new TLD detection rules, and subdomains must be listed
-explicitly.
+explicitly. Lookalike folding used for TLD detection does not broaden exact
+allowed-domain trust.
 
-`censor()` preserves the original JavaScript string length and is idempotent.
+`censor()` preserves the original JavaScript string length. With the default
+`*` mask it is idempotent; a custom letter or digit mask can itself form new
+URL-like text and therefore does not carry that guarantee.
 
 ## Architecture
 
@@ -144,7 +205,10 @@ Clearly clean input skips URL parser work through a cheap prefilter. See
 
 Build the package, then run URL benchmark coverage for scanner setup,
 `check()`, clean text, direct URLs, bare domains, obfuscated URLs, and
-allowlist hits and misses, and late-match cases:
+allowlist hits and misses, strict spaced-dot prose, candidate-shaped misses,
+ASCII and Unicode late-match cases, prepared scan/sink paths, repeated custom
+TLD snapshots, and adversarial malformed-authority and path-tail inputs.
+Reported timings are medians of five timed samples:
 
 ```sh
 npm run build

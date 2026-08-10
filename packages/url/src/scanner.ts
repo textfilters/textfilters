@@ -9,63 +9,103 @@ import {
   DOT_LITERALS,
   DOT_WORDS_RAW,
   DOT_WORDS_SKELETON,
+  isAsciiLetterOrDigitCode,
+  isAsciiWhitespaceCode,
+  isSentenceDotSymbol,
   LETTER_OR_DIGIT_RE,
+  PATH_START_CHARS,
+  WHITESPACE_RE,
 } from "./chars.js";
 import {
   URL_FILTER_NAME,
+  type AmbiguousSpacedDotPolicy,
   type UrlRangeMatchSink,
   type UrlRangeScanner,
   type UrlScanInput,
+  type UrlScannerConfig,
 } from "./contracts.js";
 import {
   EMPTY_ALLOWED_DOMAINS,
   normalizeAllowedDomains,
 } from "./allowed-domains.js";
-import { createMeta, toSkeleton } from "./meta.js";
-import { collectRangeMatches, collectRanges } from "./ranges.js";
-import { DEFAULT_TLDS, normalizeTlds } from "./tlds.js";
+import { createMeta, toSkeletonFromNormalized } from "./meta.js";
+import {
+  collectRangeMatches,
+  collectRanges,
+  type UrlMatchPolicy,
+} from "./ranges.js";
+import {
+  createTldLookups,
+  DEFAULT_TLD_LOOKUPS,
+  resolveTldLookups,
+  type TldLookups,
+} from "./tlds.js";
 
-export interface UrlScannerConfig {
-  readonly tlds?: readonly string[];
-  readonly allowedDomains?: readonly string[];
-}
+const ASCII_ONLY_RE = /^[\x00-\x7f]*$/u;
+const VARIATION_SELECTOR_RE = /^[\u{fe00}-\u{fe0f}\u{e0100}-\u{e01ef}]$/u;
+const URL_CANDIDATE_MARKERS = [...PATH_START_CHARS, "\\", "[", "]"] as const;
+
+const toCandidateSkeleton = (normalized: string): string =>
+  ASCII_ONLY_RE.test(normalized)
+    ? normalized
+    : toSkeletonFromNormalized(normalized);
+
+const normalizeAmbiguousSpacedDots = (
+  value: unknown,
+): AmbiguousSpacedDotPolicy => (value === "block" ? "block" : "preserve");
+
+const createMatchPolicy = (
+  tldLookups: TldLookups,
+  allowedDomains: ReadonlySet<string>,
+  ambiguousSpacedDots: unknown,
+): UrlMatchPolicy => ({
+  ...tldLookups,
+  allowedDomains,
+  ambiguousSpacedDots: normalizeAmbiguousSpacedDots(ambiguousSpacedDots),
+});
+
+const createPositionalMatchPolicy = (
+  listedTlds: ReadonlySet<string>,
+  asciiTldTargets: ReadonlySet<string> | undefined,
+  allowedDomains: ReadonlySet<string>,
+  ambiguousSpacedDots: unknown,
+): UrlMatchPolicy => {
+  // Retain the positional argument for source compatibility, but never let it
+  // replace targets derived from the authoritative listed-TLD set.
+  void asciiTldTargets;
+  return createMatchPolicy(
+    createTldLookups(listedTlds),
+    allowedDomains,
+    ambiguousSpacedDots,
+  );
+};
 
 export function createUrlScanner(
   config: UrlScannerConfig = {},
 ): UrlRangeScanner {
-  const tlds = normalizeTlds(config.tlds);
-  const tldSet = new Set(tlds);
-  const tldSkeletonSet = new Set(tlds.map((tld) => toSkeleton(tld)));
-  const allowedDomainSet = normalizeAllowedDomains(config.allowedDomains);
+  const policy = createMatchPolicy(
+    resolveTldLookups(config.tlds),
+    normalizeAllowedDomains(config.allowedDomains),
+    config.ambiguousSpacedDots,
+  );
 
   function scan(input: UrlScanInput): { ranges: readonly TextCodePointRange[] };
   function scan(input: UrlScanInput, sink: UrlRangeMatchSink): boolean;
   function scan(input: UrlScanInput, sink?: UrlRangeMatchSink) {
     if (sink === undefined) {
       return {
-        ranges: scanUrlRanges(
-          input.text,
-          tldSet,
-          tldSkeletonSet,
-          allowedDomainSet,
-        ),
+        ranges: scanUrlInputRangesWithPolicy(input, policy),
       };
     }
 
-    return scanUrlRangeMatches(
-      input,
-      sink,
-      tldSet,
-      tldSkeletonSet,
-      allowedDomainSet,
-    );
+    return scanUrlRangeMatchesWithPolicy(input, sink, policy);
   }
 
   return {
     name: URL_FILTER_NAME,
     allocationAware: true,
     check(input) {
-      return checkUrlRanges(input, tldSet, tldSkeletonSet, allowedDomainSet);
+      return checkUrlRangesWithPolicy(input, policy);
     },
     scan,
   };
@@ -73,109 +113,186 @@ export function createUrlScanner(
 
 export function scanUrlRanges(
   text: unknown,
-  tldSet: ReadonlySet<string> = new Set(DEFAULT_TLDS),
-  tldSkeletonSet: ReadonlySet<string> = new Set(
-    Array.from(tldSet, (tld) => toSkeleton(tld)),
-  ),
-  allowedDomainSet: ReadonlySet<string> = EMPTY_ALLOWED_DOMAINS,
+  listedTlds: ReadonlySet<string> = DEFAULT_TLD_LOOKUPS.listedTlds,
+  asciiTldTargets?: ReadonlySet<string>,
+  allowedDomains: ReadonlySet<string> = EMPTY_ALLOWED_DOMAINS,
+  ambiguousSpacedDots: AmbiguousSpacedDotPolicy = "preserve",
 ): readonly TextCodePointRange[] {
+  return scanUrlRangesWithPolicy(
+    text,
+    createPositionalMatchPolicy(
+      listedTlds,
+      asciiTldTargets,
+      allowedDomains,
+      ambiguousSpacedDots,
+    ),
+  );
+}
+
+const scanUrlRangesWithPolicy = (
+  text: unknown,
+  policy: UrlMatchPolicy,
+): readonly TextCodePointRange[] => {
   const source = String(text ?? "");
-  if (!source || !hasUrlCandidate(source)) return [];
+  if (!source || !hasUrlCandidate(source, policy.ambiguousSpacedDots)) {
+    return [];
+  }
 
   const meta = createMeta(source);
-  return collectRanges(meta, tldSet, tldSkeletonSet, allowedDomainSet);
-}
+  return collectRanges(meta, policy);
+};
+
+const scanUrlInputRangesWithPolicy = (
+  input: UrlScanInput,
+  policy: UrlMatchPolicy,
+): readonly TextCodePointRange[] => {
+  const meta = createUrlInputMeta(input, policy.ambiguousSpacedDots);
+  if (!meta) return [];
+  return collectRanges(meta, policy);
+};
 
 export function checkUrlRanges(
   input: UrlScanInput,
-  tldSet: ReadonlySet<string> = new Set(DEFAULT_TLDS),
-  tldSkeletonSet: ReadonlySet<string> = new Set(
-    Array.from(tldSet, (tld) => toSkeleton(tld)),
-  ),
-  allowedDomainSet: ReadonlySet<string> = EMPTY_ALLOWED_DOMAINS,
+  listedTlds: ReadonlySet<string> = DEFAULT_TLD_LOOKUPS.listedTlds,
+  asciiTldTargets?: ReadonlySet<string>,
+  allowedDomains: ReadonlySet<string> = EMPTY_ALLOWED_DOMAINS,
+  ambiguousSpacedDots: AmbiguousSpacedDotPolicy = "preserve",
 ): boolean {
-  if (!hasUrlCandidateInput(input)) return false;
+  return checkUrlRangesWithPolicy(
+    input,
+    createPositionalMatchPolicy(
+      listedTlds,
+      asciiTldTargets,
+      allowedDomains,
+      ambiguousSpacedDots,
+    ),
+  );
+}
 
-  const meta = createMeta(input.text);
+const checkUrlRangesWithPolicy = (
+  input: UrlScanInput,
+  policy: UrlMatchPolicy,
+): boolean => {
+  const meta = createUrlInputMeta(input, policy.ambiguousSpacedDots);
+  if (!meta) return false;
   let found = false;
-  collectRangeMatches(meta, tldSet, tldSkeletonSet, allowedDomainSet, () => {
+  collectRangeMatches(meta, policy, () => {
     found = true;
     return false;
   });
   return found;
-}
+};
 
 export function scanUrlRangeMatches(
   input: UrlScanInput,
   sink: UrlRangeMatchSink,
-  tldSet: ReadonlySet<string> = new Set(DEFAULT_TLDS),
-  tldSkeletonSet: ReadonlySet<string> = new Set(
-    Array.from(tldSet, (tld) => toSkeleton(tld)),
-  ),
-  allowedDomainSet: ReadonlySet<string> = EMPTY_ALLOWED_DOMAINS,
+  listedTlds: ReadonlySet<string> = DEFAULT_TLD_LOOKUPS.listedTlds,
+  asciiTldTargets?: ReadonlySet<string>,
+  allowedDomains: ReadonlySet<string> = EMPTY_ALLOWED_DOMAINS,
+  ambiguousSpacedDots: AmbiguousSpacedDotPolicy = "preserve",
 ): boolean {
-  if (!hasUrlCandidateInput(input)) return true;
-
-  const meta = createMeta(input.text);
-  return collectRangeMatches(
-    meta,
-    tldSet,
-    tldSkeletonSet,
-    allowedDomainSet,
-    (range) => sink({ range }),
+  return scanUrlRangeMatchesWithPolicy(
+    input,
+    sink,
+    createPositionalMatchPolicy(
+      listedTlds,
+      asciiTldTargets,
+      allowedDomains,
+      ambiguousSpacedDots,
+    ),
   );
 }
 
-function hasUrlCandidateInput(input: UrlScanInput): boolean {
+const scanUrlRangeMatchesWithPolicy = (
+  input: UrlScanInput,
+  sink: UrlRangeMatchSink,
+  policy: UrlMatchPolicy,
+): boolean => {
+  const meta = createUrlInputMeta(input, policy.ambiguousSpacedDots);
+  if (!meta) return true;
+  return collectRangeMatches(meta, policy, (range) => sink({ range }));
+};
+
+const createUrlInputMeta = (
+  input: UrlScanInput,
+  ambiguousSpacedDots: AmbiguousSpacedDotPolicy,
+) =>
+  hasUrlCandidateInput(input, ambiguousSpacedDots)
+    ? createMeta(input.text, input.codePoints)
+    : null;
+
+function hasUrlCandidateInput(
+  input: UrlScanInput,
+  ambiguousSpacedDots: AmbiguousSpacedDotPolicy,
+): boolean {
   if (!input.text) return false;
-
-  const hints = input.hints;
-  if (
-    hints !== undefined &&
-    hints.hasDot === false &&
-    hints.hasSlash === false &&
-    hints.hasColon === false &&
-    hints.hasNonAscii === false &&
-    !hasUrlWordCandidate(input.text)
-  ) {
-    return false;
-  }
-
-  return hasUrlCandidate(input.text);
+  return hasUrlCandidate(input.text, ambiguousSpacedDots);
 }
 
-function hasUrlCandidate(source: string): boolean {
-  const normalized = stripZeroWidth(lowerNfkc(source));
-  const skeleton = toSkeleton(normalized);
-  return (
-    hasLikelyDomainDot(normalized) ||
-    normalized.includes(":") ||
-    normalized.includes("/") ||
-    normalized.includes("\\") ||
-    normalized.includes("[") ||
-    normalized.includes("]") ||
+function hasUrlCandidate(
+  source: string,
+  ambiguousSpacedDots: AmbiguousSpacedDotPolicy,
+): boolean {
+  const isAscii = ASCII_ONLY_RE.test(source);
+  const normalized = isAscii
+    ? source.toLowerCase()
+    : stripZeroWidth(lowerNfkc(source));
+  if (
+    URL_CANDIDATE_MARKERS.some((marker) => normalized.includes(marker)) ||
     DOT_LITERALS.some((literal) => normalized.includes(literal)) ||
     /\bdot\b/.test(normalized) ||
     /\bd0t\b/.test(normalized) ||
-    DOT_WORDS_SKELETON.some((word) => hasSplitWordCandidate(skeleton, word)) ||
     DOT_WORDS_RAW.some((word) => hasSplitWordCandidate(normalized, word)) ||
     normalized.includes("http") ||
     normalized.includes("hxxp")
+  ) {
+    return true;
+  }
+  if (hasLikelyDomainDot(normalized, ambiguousSpacedDots, isAscii)) {
+    return true;
+  }
+  const skeleton = isAscii ? normalized : toCandidateSkeleton(normalized);
+  return DOT_WORDS_SKELETON.some((word) =>
+    hasSplitWordCandidate(skeleton, word),
   );
 }
 
-function hasUrlWordCandidate(source: string): boolean {
-  const normalized = stripZeroWidth(lowerNfkc(source));
-  const skeleton = toSkeleton(normalized);
-  return (
-    normalized.includes("http") ||
-    normalized.includes("hxxp") ||
-    DOT_WORDS_SKELETON.some((word) => hasSplitWordCandidate(skeleton, word)) ||
-    DOT_WORDS_RAW.some((word) => hasSplitWordCandidate(normalized, word))
-  );
-}
+function hasLikelyDomainDot(
+  value: string,
+  ambiguousSpacedDots: AmbiguousSpacedDotPolicy,
+  isAscii: boolean,
+): boolean {
+  if (isAscii) {
+    for (let i = 1; i < value.length - 1; i++) {
+      if (value.charCodeAt(i) !== 0x2e) continue;
 
-function hasLikelyDomainDot(value: string): boolean {
+      let left = i - 1;
+      while (left >= 0 && !isAsciiLetterOrDigitCode(value.charCodeAt(left))) {
+        left--;
+      }
+      if (left < 0) continue;
+
+      let right = i + 1;
+      while (
+        right < value.length &&
+        !isAsciiLetterOrDigitCode(value.charCodeAt(right))
+      ) {
+        right++;
+      }
+      if (right >= value.length) continue;
+
+      if (
+        ambiguousSpacedDots === "preserve" &&
+        left + 1 === i &&
+        isAsciiWhitespaceCode(value.charCodeAt(i + 1))
+      ) {
+        continue;
+      }
+      return true;
+    }
+    return false;
+  }
+
   const chars = Array.from(value);
   for (let i = 1; i < chars.length - 1; i++) {
     if (!DOT_CHAR_SET.has(chars[i])) continue;
@@ -191,14 +308,37 @@ function hasLikelyDomainDot(value: string): boolean {
     if (right >= chars.length) continue;
 
     if (
-      LETTER_OR_DIGIT_RE.test(chars[left]) &&
-      LETTER_OR_DIGIT_RE.test(chars[right])
+      ambiguousSpacedDots === "preserve" &&
+      isSentenceDotSymbol(chars[i]) &&
+      hasOnlyVariationSelectors(chars, left + 1, i) &&
+      startsWithWhitespaceAfterVariationSelectors(chars, i + 1)
     ) {
-      return true;
+      continue;
     }
+    return true;
   }
 
   return false;
+}
+
+function hasOnlyVariationSelectors(
+  chars: readonly string[],
+  start: number,
+  end: number,
+): boolean {
+  for (let i = start; i < end; i++) {
+    if (!VARIATION_SELECTOR_RE.test(chars[i] ?? "")) return false;
+  }
+  return true;
+}
+
+function startsWithWhitespaceAfterVariationSelectors(
+  chars: readonly string[],
+  start: number,
+): boolean {
+  let pos = start;
+  while (VARIATION_SELECTOR_RE.test(chars[pos] ?? "")) pos++;
+  return WHITESPACE_RE.test(chars[pos] ?? "");
 }
 
 function hasSplitWordCandidate(value: string, word: string): boolean {

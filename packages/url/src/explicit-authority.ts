@@ -25,8 +25,8 @@ export interface ExplicitUrlTargetMatch extends Match {
 export const parseExplicitUrlTarget = (
   meta: TextMeta,
   start: number,
-  tldSet: ReadonlySet<string>,
-  tldSkeletonSet: ReadonlySet<string>,
+  listedTlds: ReadonlySet<string>,
+  asciiTldTargets: ReadonlySet<string>,
 ): ExplicitUrlTargetMatch | null => {
   let pos = start;
   let skippedAuthorityWhitespace = false;
@@ -81,8 +81,14 @@ export const parseExplicitUrlTarget = (
       meta.whitespace[scannedAuthorityEnd]);
 
   let hostStart = pos;
+  let hostHasDot = false;
   for (let cursor = pos; cursor < authorityEnd; cursor++) {
-    if (meta.symbol[cursor] === "@") hostStart = cursor + 1;
+    if (meta.symbol[cursor] === "@") {
+      hostStart = cursor + 1;
+      hostHasDot = false;
+    } else if (meta.symbol[cursor] === ".") {
+      hostHasDot = true;
+    }
   }
   if (hostStart >= authorityEnd) return null;
 
@@ -90,7 +96,7 @@ export const parseExplicitUrlTarget = (
   let parsedDomain: DomainMatch | null = null;
   let hostEnd = parseBracketedIpv6Host(meta, hostStart, authorityEnd);
   if (hostEnd < 0) {
-    const domain = parseDomain(meta, hostStart, tldSet, tldSkeletonSet, {
+    const domain = parseDomain(meta, hostStart, listedTlds, asciiTldTargets, {
       allowUnknownTld: true,
     });
     parsedDomain = domain;
@@ -150,8 +156,8 @@ export const parseExplicitUrlTarget = (
           parseDomain(
             meta,
             spacedHostContinuation.start,
-            tldSet,
-            tldSkeletonSet,
+            listedTlds,
+            asciiTldTargets,
             { allowUnknownTld: true },
           );
         return {
@@ -189,7 +195,7 @@ export const parseExplicitUrlTarget = (
     hostEnd === authorityEnd &&
     !hasFollowingPathTail &&
     meta.symbol[hostStart] !== "[" &&
-    !meta.symbol.slice(hostStart, authorityEnd).includes(".")
+    !hostHasDot
   ) {
     return null;
   }

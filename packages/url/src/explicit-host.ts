@@ -1,6 +1,13 @@
 import { AUTHORITY_TRAILING_CHARS } from "./chars.js";
 import { parseDot } from "./dots.js";
-import type { DomainMatch, Label, TextMeta } from "./meta.js";
+import {
+  countCodePoints,
+  MAX_HOST_LABEL_CODE_POINTS,
+  MAX_HOSTNAME_CODE_POINTS,
+  type DomainMatch,
+  type Label,
+  type TextMeta,
+} from "./meta.js";
 
 interface ExplicitHostLabel extends Label {
   readonly hasNonAsciiSymbol: boolean;
@@ -132,27 +139,29 @@ export const parseExplicitHostLabel = (
   let hasNonAsciiSymbol = false;
 
   while (pos < authorityEnd) {
-    if (meta.alphaNum[pos] || isExplicitIdnSymbol(meta, pos)) {
+    const isIdnSymbol = isExplicitIdnSymbol(meta, pos);
+    if (meta.alphaNum[pos] || isIdnSymbol) {
       if (first < 0) first = pos;
       last = pos;
       raw += meta.raw[pos];
       skeleton += meta.skeleton[pos];
-      hasNonAsciiSymbol ||= isExplicitIdnSymbol(meta, pos);
+      hasNonAsciiSymbol ||= isIdnSymbol;
       pos++;
       continue;
     }
 
     const gapStart = pos;
     let gapRaw = "";
+    let gapHasZeroWidth = false;
     while (
       pos < authorityEnd &&
       meta.labelJoinSeparator[pos] &&
       !meta.whitespace[pos]
     ) {
+      gapHasZeroWidth ||= meta.zeroWidth[pos];
       gapRaw += meta.raw[pos];
       pos++;
     }
-    const gapHasZeroWidth = meta.zeroWidth.slice(gapStart, pos).some(Boolean);
     if (
       first >= 0 &&
       (gapHasZeroWidth || /^[-_]+$/u.test(gapRaw)) &&
@@ -166,7 +175,13 @@ export const parseExplicitHostLabel = (
     break;
   }
 
-  if (first < 0 || raw.length === 0 || raw.length > 63) return null;
+  if (
+    first < 0 ||
+    raw.length === 0 ||
+    countCodePoints(raw) > MAX_HOST_LABEL_CODE_POINTS
+  ) {
+    return null;
+  }
   return { start: first, end: last + 1, pos, raw, skeleton, hasNonAsciiSymbol };
 };
 
@@ -180,12 +195,15 @@ export const parseExplicitHostDomain = (
 
   const labels: ExplicitHostLabel[] = [first];
   let pos = first.pos;
+  let hostnameLength = countCodePoints(first.raw);
   while (pos < authorityEnd) {
     const dot = parseDot(meta, pos);
     if (!dot || dot.pos > authorityEnd) break;
     const next = parseExplicitHostLabel(meta, dot.pos, authorityEnd);
     if (!next) break;
     labels.push(next);
+    hostnameLength += countCodePoints(next.raw) + 1;
+    if (hostnameLength > MAX_HOSTNAME_CODE_POINTS) return null;
     pos = next.pos;
   }
 

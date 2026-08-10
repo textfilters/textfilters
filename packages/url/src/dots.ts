@@ -1,4 +1,11 @@
-import { DOT_LITERALS, DOT_WORDS_RAW, DOT_WORDS_SKELETON } from "./chars.js";
+import {
+  DOT_LITERALS,
+  DOT_WORDS_RAW,
+  DOT_WORDS_SKELETON,
+  isProseListSeparatorDotSymbol,
+  isSentenceCloserSymbol,
+  isSentenceDotSymbol,
+} from "./chars.js";
 import {
   consumeWord,
   matchesRawChars,
@@ -52,12 +59,35 @@ export const isWhitespaceWrappedDot = (meta: TextMeta, dot: Match): boolean =>
 export const isRightSpacedDotSymbol = (meta: TextMeta, dot: Match): boolean =>
   dot.end === dot.start + 1 && hasWhitespaceBeyondZeroWidth(meta, dot.end, 1);
 
-export const isWhitespaceWrappedListBullet = (
+export const isRightSpacedSentenceDot = (
+  meta: TextMeta,
+  dot: Match,
+  before: number = meta.codePoints.length,
+): boolean => {
+  if (
+    dot.end !== dot.start + 1 ||
+    !isSentenceDotSymbol(meta.raw[dot.start] ?? "")
+  ) {
+    return false;
+  }
+
+  let pos = dot.end;
+  while (
+    pos < before &&
+    (isIgnorableFormatting(meta, pos) ||
+      isSentenceCloserSymbol(meta.raw[pos] ?? ""))
+  ) {
+    pos++;
+  }
+  return pos < before && (meta.whitespace[pos] ?? false);
+};
+
+export const isWhitespaceWrappedListSeparator = (
   meta: TextMeta,
   dot: Match,
 ): boolean =>
   dot.end === dot.start + 1 &&
-  meta.raw[dot.start] === "•" &&
+  isProseListSeparatorDotSymbol(meta.raw[dot.start] ?? "") &&
   isWhitespaceWrappedDot(meta, dot);
 
 export const parseDot = (meta: TextMeta, start: number): Match | null => {
@@ -77,11 +107,26 @@ export const parseDot = (meta: TextMeta, start: number): Match | null => {
     }
   }
 
-  while (pos < meta.codePoints.length && meta.labelJoinSeparator[pos]) pos++;
+  let visibleJoiners = 0;
+  while (pos < meta.codePoints.length && meta.labelJoinSeparator[pos]) {
+    if (!meta.zeroWidth[pos] && !meta.whitespace[pos]) {
+      visibleJoiners++;
+      if (visibleJoiners > 1) return null;
+    }
+    pos++;
+  }
   if (pos >= meta.codePoints.length) return null;
 
   if (meta.symbol[pos] === ".") {
     return { start: pos, end: pos + 1, pos: pos + 1 };
+  }
+  if (
+    meta.symbol[pos] === "/" ||
+    meta.symbol[pos] === ":" ||
+    meta.symbol[pos] === "?" ||
+    meta.symbol[pos] === "#"
+  ) {
+    return null;
   }
 
   for (const word of DOT_WORDS_SKELETON_CHARS) {
