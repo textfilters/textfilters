@@ -358,6 +358,24 @@ export const collectRangeMatches = (
             allowUnknownTld: true,
           });
       const target = explicitTarget ?? fallbackDomain;
+      if (!target && !meta.whitespace[scheme.pos]) {
+        // A malformed dotless authority cannot contain a bare domain. Skip it
+        // as one token so the main loop does not retry an increasingly long
+        // label parse at every character, while preserving invalid-URL output.
+        let malformedEnd = scheme.pos;
+        let hasDomainDot = false;
+        while (
+          malformedEnd < meta.codePoints.length &&
+          !meta.whitespace[malformedEnd]
+        ) {
+          hasDomainDot ||= meta.symbol[malformedEnd] === ".";
+          malformedEnd++;
+        }
+        if (!hasDomainDot && malformedEnd > scheme.pos) {
+          i = malformedEnd - 1;
+          continue;
+        }
+      }
       if (target) {
         const start = scheme.start;
         const end = target.end;

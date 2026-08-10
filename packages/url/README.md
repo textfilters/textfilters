@@ -127,11 +127,21 @@ The lower-level `scanUrlRanges()`, `checkUrlRanges()`, and
 `scanUrlRangeMatches()` exports retain their existing positional signatures.
 Their optional precomputed ASCII-target argument is compatibility-only: each
 helper normalizes the listed TLDs and derives lookalike targets from that same
-set, so a supplied target set cannot broaden or narrow detection.
+set, so a supplied target set cannot broaden or narrow detection. A custom
+`ReadonlySet` is treated as an immutable configuration snapshot and its derived
+lookups are cached by set identity; create a new set after changing the list.
 
 ## Behavior
 
-The package preserves the existing URL filtering behavior and adds stricter explicit-scheme URL handling for common authority forms such as localhost, ports, IPv6, userinfo, and explicit-scheme unknown TLDs.
+The complete IANA snapshot intentionally broadens default bare-domain detection
+beyond the former small built-in subset. Names such as `archive.zip`,
+`document.md`, and `notes.mov` are now treated as domains. Applications that
+need the previous restricted policy must pass their exact legacy suffix subset
+through `tlds`.
+
+Existing direct, defanged, and explicit-scheme URL forms remain supported, with
+stricter authority handling for localhost, ports, IPv6, userinfo, and
+explicit-scheme unknown TLDs.
 
 Bare domains still require the configured TLD list. The default list contains
 the complete IANA root-zone snapshot, including Unicode spellings of IDN TLDs.
@@ -180,7 +190,9 @@ parsing. They do not add new TLD detection rules, and subdomains must be listed
 explicitly. Lookalike folding used for TLD detection does not broaden exact
 allowed-domain trust.
 
-`censor()` preserves the original JavaScript string length and is idempotent.
+`censor()` preserves the original JavaScript string length. With the default
+`*` mask it is idempotent; a custom letter or digit mask can itself form new
+URL-like text and therefore does not carry that guarantee.
 
 ## Architecture
 
@@ -194,8 +206,9 @@ Clearly clean input skips URL parser work through a cheap prefilter. See
 Build the package, then run URL benchmark coverage for scanner setup,
 `check()`, clean text, direct URLs, bare domains, obfuscated URLs, and
 allowlist hits and misses, strict spaced-dot prose, candidate-shaped misses,
-and ASCII and Unicode late-match cases. Reported timings are medians of five
-timed samples:
+ASCII and Unicode late-match cases, prepared scan/sink paths, repeated custom
+TLD snapshots, and adversarial malformed-authority and path-tail inputs.
+Reported timings are medians of five timed samples:
 
 ```sh
 npm run build

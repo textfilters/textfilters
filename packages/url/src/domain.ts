@@ -18,6 +18,7 @@ import {
   toSkeletonFromNormalized,
 } from "./meta.js";
 import { maybeConsumePathTail } from "./path.js";
+import { parseSchemePrefix } from "./scheme.js";
 
 const MAX_DOMAIN_LABELS = 127;
 const ASCII_ONLY_RE = /^[\x00-\x7f]*$/u;
@@ -56,7 +57,14 @@ export const parseLabel = (
   }: { readonly joinSingleCharacterWhitespaceRuns?: boolean } = {},
 ): Label | null => {
   let pos = start;
-  while (pos < meta.codePoints.length && meta.labelJoinSeparator[pos]) pos++;
+  let visibleLeadingJoiners = 0;
+  while (pos < meta.codePoints.length && meta.labelJoinSeparator[pos]) {
+    if (!meta.zeroWidth[pos] && !meta.whitespace[pos]) {
+      visibleLeadingJoiners++;
+      if (visibleLeadingJoiners > 1) return null;
+    }
+    pos++;
+  }
   let first = -1;
   let last = -1;
   let sourceText = "";
@@ -89,6 +97,7 @@ export const parseLabel = (
       let gapHasZeroWidth = false;
       let gapHasNonZeroWidthSymbol = false;
       let visibleGapRaw = "";
+      let visibleGapLength = 0;
       while (pos < meta.codePoints.length && meta.labelJoinSeparator[pos]) {
         gapHasWhitespace ||= meta.whitespace[pos];
         gapHasZeroWidth ||= meta.zeroWidth[pos];
@@ -96,6 +105,7 @@ export const parseLabel = (
           !meta.zeroWidth[pos] && !meta.whitespace[pos];
         if (!meta.zeroWidth[pos] && !meta.whitespace[pos]) {
           visibleGapRaw += meta.raw[pos];
+          visibleGapLength++;
         }
         pos++;
       }
@@ -119,6 +129,18 @@ export const parseLabel = (
 
       const maybeDot = parseDot(meta, gapStart);
       if (maybeDot && maybeDot.start >= gapStart && maybeDot.start <= pos) {
+        pos = gapStart;
+        break;
+      }
+
+      // A long run of unrelated punctuation is a boundary, not an obfuscated
+      // label join. This also prevents an existing mask run from creating a
+      // wider domain when censoring is applied more than once.
+      if (
+        !gapHasZeroWidth &&
+        visibleGapLength > 1 &&
+        !hasOnlyHostnameJoinSymbols
+      ) {
         pos = gapStart;
         break;
       }
@@ -183,15 +205,8 @@ const isValidTld = (
   tldSkeleton: string,
   listedTlds: ReadonlySet<string>,
   asciiTldTargets: ReadonlySet<string>,
-  { allowPunycodeLike = true }: { readonly allowPunycodeLike?: boolean } = {},
 ): boolean => {
   if (!tldRaw) return false;
-  if (
-    allowPunycodeLike &&
-    (tldRaw.startsWith("xn--") || tldSkeleton.startsWith("xn--"))
-  ) {
-    return true;
-  }
   return listedTlds.has(tldRaw) || asciiTldTargets.has(tldSkeleton);
 };
 
@@ -207,6 +222,7 @@ const trimTldTrailingProse = (
     const sourceChar = meta.codePoints[cursor] ?? "";
     const symbol = meta.symbol[cursor];
     const canSplit =
+      (sourceText.length > 0 && parseSchemePrefix(meta, cursor) !== null) ||
       meta.whitespace[cursor] ||
       isIgnorableFormatting(meta, cursor) ||
       symbol === "-" ||
@@ -222,7 +238,6 @@ const trimTldTrailingProse = (
           normalized.skeleton,
           listedTlds,
           asciiTldTargets,
-          { allowPunycodeLike: symbol !== "-" },
         )
       ) {
         return {
@@ -315,6 +330,23 @@ export const parseDomain = (
         pos = trimmedTld.pos;
         break;
       }
+    }
+
+    if (
+      labels.length >= 2 &&
+      currentLabel &&
+      isValidTld(
+        currentLabel.raw,
+        currentLabel.skeleton,
+        listedTlds,
+        asciiTldTargets,
+      ) &&
+      parseSchemePrefix(meta, pos)
+    ) {
+      // A complete domain followed by another, possibly obfuscated, scheme is
+      // an adjacent URL rather than one longer hostname. Finish the first
+      // range so censoring the explicit URL cannot expose the domain later.
+      break;
     }
 
     const dot = parseDot(meta, pos);
@@ -459,10 +491,7 @@ const preferCompletedDomainBeforeSpacedSeparator = (
       (nextLabel !== undefined &&
         nextLabel.raw === label.raw &&
         nextLabel.skeleton === label.skeleton) ||
-      (!label.raw.startsWith("xn--") &&
-        !label.skeleton.startsWith("xn--") &&
-        !listedTlds.has(label.raw) &&
-        !asciiTldTargets.has(label.skeleton))
+      (!listedTlds.has(label.raw) && !asciiTldTargets.has(label.skeleton))
     ) {
       continue;
     }

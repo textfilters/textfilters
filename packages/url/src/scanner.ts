@@ -13,6 +13,7 @@ import {
   isAsciiWhitespaceCode,
   isSentenceDotSymbol,
   LETTER_OR_DIGIT_RE,
+  PATH_START_CHARS,
   WHITESPACE_RE,
 } from "./chars.js";
 import {
@@ -42,6 +43,7 @@ import {
 
 const ASCII_ONLY_RE = /^[\x00-\x7f]*$/u;
 const VARIATION_SELECTOR_RE = /^[\u{fe00}-\u{fe0f}\u{e0100}-\u{e01ef}]$/u;
+const URL_CANDIDATE_MARKERS = [...PATH_START_CHARS, "\\", "[", "]"] as const;
 
 const toCandidateSkeleton = (normalized: string): string =>
   ASCII_ONLY_RE.test(normalized)
@@ -224,18 +226,6 @@ function hasUrlCandidateInput(
   ambiguousSpacedDots: AmbiguousSpacedDotPolicy,
 ): boolean {
   if (!input.text) return false;
-
-  const hints = input.hints;
-  if (
-    hints !== undefined &&
-    hints.hasDot === false &&
-    hints.hasSlash === false &&
-    hints.hasColon === false &&
-    hints.hasNonAscii === false
-  ) {
-    return hasAsciiUrlWordCandidate(input.text);
-  }
-
   return hasUrlCandidate(input.text, ambiguousSpacedDots);
 }
 
@@ -248,11 +238,7 @@ function hasUrlCandidate(
     ? source.toLowerCase()
     : stripZeroWidth(lowerNfkc(source));
   if (
-    normalized.includes(":") ||
-    normalized.includes("/") ||
-    normalized.includes("\\") ||
-    normalized.includes("[") ||
-    normalized.includes("]") ||
+    URL_CANDIDATE_MARKERS.some((marker) => normalized.includes(marker)) ||
     DOT_LITERALS.some((literal) => normalized.includes(literal)) ||
     /\bdot\b/.test(normalized) ||
     /\bd0t\b/.test(normalized) ||
@@ -268,15 +254,6 @@ function hasUrlCandidate(
   const skeleton = isAscii ? normalized : toCandidateSkeleton(normalized);
   return DOT_WORDS_SKELETON.some((word) =>
     hasSplitWordCandidate(skeleton, word),
-  );
-}
-
-function hasAsciiUrlWordCandidate(source: string): boolean {
-  const normalized = source.toLowerCase();
-  return (
-    normalized.includes("http") ||
-    normalized.includes("hxxp") ||
-    DOT_WORDS_SKELETON.some((word) => hasSplitWordCandidate(normalized, word))
   );
 }
 

@@ -2,7 +2,10 @@
 
 ## Goals
 
-The package provides composable URL censoring while preserving existing URL matching behavior. The implementation is split into small parser modules so each rule family can be changed without turning the filter into a framework.
+The package provides composable URL censoring with complete listed-TLD coverage.
+That broader default intentionally detects suffixes outside the former built-in
+subset. The implementation is split into small parser modules so each rule
+family can be changed without turning the filter into a framework.
 
 The matcher keeps two URL paths intentionally separate:
 
@@ -52,7 +55,6 @@ flowchart TD
 graph TD
   index["index.ts"] --> contracts["contracts.ts"]
   index --> scanner["scanner.ts"]
-  index --> tlds["tlds.ts"]
   scanner --> allowed["allowed-domains.ts"]
   scanner --> chars["chars.ts"]
   scanner --> contracts
@@ -85,6 +87,7 @@ graph TD
   domain --> dots
   domain --> meta
   domain --> path
+  domain --> scheme
   scheme --> chars
   scheme --> meta
   dots --> chars
@@ -132,7 +135,7 @@ Ranges always point back to the original code point indexes. This keeps masking 
 Real URL schemes match `http` and `https`. Obfuscated schemes match `hxxp`, split-letter forms such as `h t t p`, and defanged delimiters such as `[:]//` or `[://]`.
 
 Bare domains are parsed from labels separated by real, Unicode, or defanged
-dots. They require a configured TLD unless the TLD is punycode-like. The
+dots. They require a configured TLD. The
 default list covers the complete IANA root-zone snapshot, and the existing
 lookalike skeleton matches mapped visual substitutions against ASCII entries in
 that list. Unicode TLD entries remain valid by normalized raw spelling but do
@@ -153,7 +156,9 @@ targets only from normalized ASCII entries. The scanner combines those lookups
 with the exact-host allowlist and normalized spaced-dot policy once per factory
 instance. Low-level compatibility wrappers build the same policy from their
 listed TLDs; the retained precomputed-target argument cannot replace the
-derived targets.
+derived targets. Repeated calls reuse derived lookups by `ReadonlySet` identity,
+so custom sets are immutable configuration snapshots rather than mutable
+registries.
 
 A bare candidate whose final two labels use a literal single-character dot
 followed by whitespace and no URL-tail evidence is intentionally
@@ -194,8 +199,9 @@ The embedded IANA root-zone snapshot is updated manually; the package never
 fetches or generates TLD data at build time or runtime. A refresh must replace
 the ASCII entries and their decoded Unicode IDN spellings together, update the
 version header in `src/tlds.ts`, and verify that the list has no missing, extra,
-empty, or duplicate values relative to the captured IANA source. Run the full
-package check and URL benchmark before committing a refreshed snapshot.
+empty, or duplicate values relative to the captured IANA source. Update the
+ASCII snapshot checksum in `tests/tlds.spec.ts`, then run the full package check
+and URL benchmark before committing a refreshed snapshot.
 
 The Unicode lookalike snapshot is also maintained manually from the recorded
 UTS #39 `confusables.txt` version. Keep only single-code-point letters whose
@@ -225,14 +231,20 @@ The public `createUrlScanner()` wrapper returns code point ranges in a shape
 that can be used by the shared core range scanner contract. It also exposes
 `check(input)` for boolean checks and `scan(input, sink)` for allocation-aware
 range streaming with early stop support. Inputs may include shared-style text
-hints such as dot, slash, colon, and non-ASCII markers so clearly clean text can
-skip parser metadata allocation. The existing `createUrlFilter()`, `urlFilter()`,
-and `filter` wrappers use that scanner while preserving their public censor
-behavior.
+hints for pipeline compatibility, but the source text remains authoritative so
+stale or manually supplied hints cannot suppress a URL candidate. The existing
+`createUrlFilter()`, `urlFilter()`, and `filter` wrappers use that scanner while
+preserving their public censor behavior.
 
 Trailing punctuation and glued prose are trimmed before a range is emitted. Surrounding quotes and brackets stay outside explicit authority ranges unless they are structurally part of the URL, such as IPv6 brackets or balanced path parentheses.
 
-Masking is idempotent because ranges are collected from the original text before any replacement happens. Masking preserves input length because replacement happens per original code point range.
+With the default `*` mask, masking is idempotent because parser boundaries keep
+completed domains and adjacent URL-like syntax in the same censor pass without
+allowing an existing mask run to join unrelated text. Regression fixtures apply
+the filter twice to boundary-heavy inputs. A custom letter or digit mask can
+itself form new URL-like text and therefore does not carry the same guarantee.
+Masking preserves input length because replacement happens per original code
+point range.
 
 ## Change Guide
 

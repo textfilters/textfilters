@@ -4,6 +4,13 @@ import { createUrlFilter, filter } from "../src/index.js";
 import { mask } from "./helpers.js";
 
 describe("explicit URL authority behavior", () => {
+  it("skips malformed dotless explicit authorities as one token", () => {
+    for (const text of ["http://]", `http://[${"a[".repeat(256)}:a]`]) {
+      expect(filter.censor(text)).toBe(text);
+    }
+    expect(filter.censor("http:// next")).toBe("http:// next");
+  });
+
   it("censors explicit-scheme URLs with unknown TLDs while preserving bare-domain TLD rules", () => {
     expect(filter.censor("go https://example.unknown/path now")).toBe(
       `go ${mask("https://example.unknown/path")} now`,

@@ -1,5 +1,11 @@
 import { performance } from "node:perf_hooks";
-import { createUrlFilter, createUrlScanner } from "../dist/index.js";
+import {
+  checkUrlRanges,
+  createUrlFilter,
+  createUrlScanner,
+  scanUrlRangeMatches,
+  scanUrlRanges,
+} from "../dist/index.js";
 
 const ITERATIONS = 1_000;
 const SETUP_ITERATIONS = 100;
@@ -21,6 +27,13 @@ const CANDIDATE_SHAPED_MISS =
   "Review placeholder.invalid before release. ".repeat(50);
 const UNICODE_LATE_MATCH =
   "Café résumé without a link. ".repeat(40) + "example.рф";
+const MALFORMED_AUTHORITY = `http://[${"a[".repeat(2_000)}:a]`;
+const TRAILING_PATH_CLOSERS = `https://example.com/${")".repeat(4_000)}`;
+const CUSTOM_TLDS = new Set([
+  "com",
+  ...Array.from({ length: 1_500 }, (_, index) => `custom${index}`),
+]);
+const CUSTOM_TLD_TARGETS = new Set(CUSTOM_TLDS);
 
 const median = (values) => {
   const sorted = [...values].sort((left, right) => left - right);
@@ -76,22 +89,12 @@ const hintedInput = (text) => ({
 // Prepare scanner inputs outside timed loops so steady-state rows measure the
 // scanner rather than repeated input construction.
 const scannerInputs = {
-  shortClean: input(SHORT_CLEAN),
   longClean: input(LONG_CLEAN),
   directUrl: input(DIRECT_URL),
   bareDomain: input(BARE_DOMAIN),
-  allowlistHit: input(ALLOWLISTED_URL),
-  allowlistMiss: input(ALLOWLIST_MISS),
-  lateMatch: input(LATE_MATCH),
-  strictSpacedDot: input(STRICT_SPACED_DOT),
-  candidateShapedMiss: input(CANDIDATE_SHAPED_MISS),
-  unicodeLateMatch: input(UNICODE_LATE_MATCH),
+  malformedAuthority: input(MALFORMED_AUTHORITY),
+  trailingPathClosers: input(TRAILING_PATH_CLOSERS),
 };
-const hintedScannerInputs = {
-  shortClean: hintedInput(SHORT_CLEAN),
-  longClean: hintedInput(LONG_CLEAN),
-};
-
 printResults([
   bench("createUrlFilter()", () => createUrlFilter(), SETUP_ITERATIONS),
   bench("createUrlScanner()", () => createUrlScanner(), SETUP_ITERATIONS),
@@ -105,31 +108,68 @@ printResults([
     () => createUrlScanner({ allowedDomains: ALLOWED_DOMAINS }),
     SETUP_ITERATIONS,
   ),
-  bench("check short clean", () => scanner.check(scannerInputs.shortClean)),
+  // Keep input construction in the original row names so results remain
+  // comparable with earlier revisions. Prepared-input rows below isolate the
+  // steady-state allocation-aware scanner contract.
+  bench("check short clean", () => scanner.check(input(SHORT_CLEAN))),
   bench("check hinted short clean", () =>
-    scanner.check(hintedScannerInputs.shortClean),
+    scanner.check(hintedInput(SHORT_CLEAN)),
   ),
-  bench("check long clean", () => scanner.check(scannerInputs.longClean)),
+  bench("check long clean", () => scanner.check(input(LONG_CLEAN))),
   bench("check hinted long clean", () =>
-    scanner.check(hintedScannerInputs.longClean),
+    scanner.check(hintedInput(LONG_CLEAN)),
   ),
-  bench("check direct URL", () => scanner.check(scannerInputs.directUrl)),
-  bench("check bare domain", () => scanner.check(scannerInputs.bareDomain)),
+  bench("check direct URL", () => scanner.check(input(DIRECT_URL))),
+  bench("check bare domain", () => scanner.check(input(BARE_DOMAIN))),
   bench("check allowlist hit", () =>
-    allowlistScanner.check(scannerInputs.allowlistHit),
+    allowlistScanner.check(input(ALLOWLISTED_URL)),
   ),
   bench("check allowlist miss", () =>
-    allowlistScanner.check(scannerInputs.allowlistMiss),
+    allowlistScanner.check(input(ALLOWLIST_MISS)),
   ),
-  bench("check late-match URL", () => scanner.check(scannerInputs.lateMatch)),
+  bench("check late-match URL", () => scanner.check(input(LATE_MATCH))),
   bench("check strict spaced-dot prose", () =>
-    strictScanner.check(scannerInputs.strictSpacedDot),
+    strictScanner.check(input(STRICT_SPACED_DOT)),
   ),
   bench("check candidate-shaped miss", () =>
-    scanner.check(scannerInputs.candidateShapedMiss),
+    scanner.check(input(CANDIDATE_SHAPED_MISS)),
   ),
   bench("check Unicode late match", () =>
-    scanner.check(scannerInputs.unicodeLateMatch),
+    scanner.check(input(UNICODE_LATE_MATCH)),
+  ),
+  bench("prepare long scanner input", () => input(LONG_CLEAN)),
+  bench("check prepared long clean", () =>
+    scanner.check(scannerInputs.longClean),
+  ),
+  bench("scan prepared direct URL", () =>
+    scanner.scan(scannerInputs.directUrl),
+  ),
+  bench("scan sink prepared direct URL", () =>
+    scanner.scan(scannerInputs.directUrl, () => true),
+  ),
+  bench("checkUrlRanges custom TLD snapshot", () =>
+    checkUrlRanges(scannerInputs.bareDomain, CUSTOM_TLDS, CUSTOM_TLD_TARGETS),
+  ),
+  bench("scanUrlRanges custom TLD snapshot", () =>
+    scanUrlRanges(BARE_DOMAIN, CUSTOM_TLDS, CUSTOM_TLD_TARGETS),
+  ),
+  bench("scanUrlRangeMatches custom snapshot", () =>
+    scanUrlRangeMatches(
+      scannerInputs.bareDomain,
+      () => true,
+      CUSTOM_TLDS,
+      CUSTOM_TLD_TARGETS,
+    ),
+  ),
+  bench(
+    "check malformed explicit authority",
+    () => scanner.check(scannerInputs.malformedAuthority),
+    100,
+  ),
+  bench(
+    "check trailing path closers",
+    () => scanner.check(scannerInputs.trailingPathClosers),
+    100,
   ),
   bench("censor short clean", () => filter.censor(SHORT_CLEAN)),
   bench("censor long clean", () => filter.censor(LONG_CLEAN)),

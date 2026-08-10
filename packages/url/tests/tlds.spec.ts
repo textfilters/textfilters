@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { domainToUnicode } from "node:url";
 
 import { describe, expect, it } from "vitest";
@@ -83,6 +84,9 @@ describe("TLD matching", () => {
     expect(asciiTlds).toHaveLength(1_438);
     expect(punycodeTlds).toHaveLength(151);
     expect(unicodeTlds).toHaveLength(151);
+    expect(
+      createHash("sha256").update(asciiTlds.join("\n")).digest("hex"),
+    ).toBe("28ba34fb719527e5f83f3d35998b811fcfd8e0af46fbb3670032ec910f1c528c");
     expect(new Set(DEFAULT_TLDS.map((tld) => tld.normalize("NFKC"))).size).toBe(
       DEFAULT_TLDS.length,
     );
@@ -390,11 +394,9 @@ describe("TLD matching", () => {
       `${first} ${mask(second)}`,
     );
 
-    const punycode = "x.xn--unknown y.org";
-    const punycodeEnd = Array.from("x.xn--unknown").length;
-    expect(scanUrlRanges(punycode)).toEqual([
-      [0, punycodeEnd],
-      [punycodeEnd + 1, Array.from(punycode).length],
-    ]);
+    expect(scanUrlRanges("x.xn--unknown")).toEqual([]);
+    expect(createUrlFilter().censor("https://x.xn--unknown/path")).toBe(
+      mask("https://x.xn--unknown/path"),
+    );
   });
 });

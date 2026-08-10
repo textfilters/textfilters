@@ -347,6 +347,8 @@ describe("URL scanner", () => {
       ["Use e.g. com:443 now", "Use e.g. com:443"],
       ["Use e.g. com?x=1 now", "Use e.g. com?x=1"],
       ["Use e.g. com#frag now", "Use e.g. com#frag"],
+      ["Visit evil. com?x=1 now", "evil. com?x=1"],
+      ["Visit evil. com#frag now", "evil. com#frag"],
     ] as const) {
       const start = Array.from(text.slice(0, text.indexOf(candidate))).length;
       expectScannerFixture({
@@ -377,6 +379,31 @@ describe("URL scanner", () => {
 
     const spacedBeforeDot = "Fine . Be careful.";
     expectScannerFixture({ text: spacedBeforeDot, ranges: [[0, 9]] });
+  });
+
+  it("does not let caller-provided hints suppress parser evidence", () => {
+    for (const text of [
+      "example.com",
+      "example[.]com",
+      "example。com",
+      "evil. com?x=1",
+      "evil. com#frag",
+    ]) {
+      const input = {
+        text,
+        codePoints: Array.from(text),
+        hints: {
+          hasDot: false,
+          hasSlash: false,
+          hasColon: false,
+          hasNonAscii: false,
+        },
+      };
+      const scanner = createUrlScanner();
+
+      expect(scanner.check(input)).toBe(true);
+      expect(scanner.scan(input).ranges).not.toEqual([]);
+    }
   });
 
   it("normalizes invalid spaced-dot policies consistently", () => {

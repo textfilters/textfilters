@@ -70,6 +70,7 @@ export const isAllowedDomain = (
   const hostname = domain.labels
     .map((label, index) => {
       const start = index === 0 ? firstLabelStart : label.start;
+      const nextLabel = domain.labels[index + 1];
       let sourceLabel = "";
       for (let cursor = start; cursor < label.end; cursor++) {
         const source = meta.codePoints[cursor] ?? "";
@@ -81,6 +82,31 @@ export const isAllowedDomain = (
           /[\p{M}\p{S}]/u.test(source)
         ) {
           sourceLabel += source;
+        }
+      }
+      if (nextLabel) {
+        // Preserve hostname join syntax skipped by the dot parser. Otherwise
+        // `trusted-.com` and `trusted_.com` collapse to an allowlisted
+        // `trusted.com` even though the parsed source hosts are distinct.
+        for (let cursor = label.end; cursor < nextLabel.start; cursor++) {
+          if (meta.raw[cursor] === "-" || meta.raw[cursor] === "_") {
+            sourceLabel += meta.raw[cursor];
+          }
+        }
+      } else {
+        // A final joiner can sit just outside the selected label range in an
+        // explicit authority. Keep it in the trust comparison while ignoring
+        // zero-width formatting that exact allowlists intentionally normalize.
+        let cursor = label.end;
+        while (
+          meta.zeroWidth[cursor] ||
+          meta.raw[cursor] === "-" ||
+          meta.raw[cursor] === "_"
+        ) {
+          if (meta.raw[cursor] === "-" || meta.raw[cursor] === "_") {
+            sourceLabel += meta.raw[cursor];
+          }
+          cursor++;
         }
       }
       return stripZeroWidth(lowerNfkc(sourceLabel));

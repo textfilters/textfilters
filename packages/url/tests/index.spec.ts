@@ -382,6 +382,20 @@ describe("compatibility behavior", () => {
     expect(twice).toBe(once);
   });
 
+  it("does not join prose through an existing mask run", () => {
+    for (const input of [
+      "d•a]foo.com x",
+      "x foo.com. com?x=1",
+      "p/9。sυ dot om",
+      "s•st.http://[::]",
+      "υ.sd*h ttp://c",
+      "x。\ny.cx(υy/",
+    ]) {
+      const once = filter.censor(input);
+      expect(filter.censor(once)).toBe(once);
+    }
+  });
+
   it("preserves UTF-16 length for astral code points inside URLs", () => {
     const input = "go http://😀.com/ now";
     const output = filter.censor(input);
@@ -503,6 +517,20 @@ describe("compatibility behavior", () => {
       "https://evil.com@trusted.com/path",
     );
     expect(f.censor(homograph)).toBe(mask(homograph));
+
+    const untrustedJoinerHosts = [
+      "trusted-.com",
+      "trusted_.com",
+      "https://trusted-.com/path",
+      "https://trusted_.com/path",
+      "https://trusted.com-/path",
+      "https://trusted.com_/path",
+    ];
+    const blocked = createUrlFilter();
+    for (const host of untrustedJoinerHosts) {
+      expect(f.censor(host)).toBe(blocked.censor(host));
+      expect(f.censor(host)).not.toBe(host);
+    }
   });
 
   it("normalizes Unicode allowed domains without broadening scripts", () => {

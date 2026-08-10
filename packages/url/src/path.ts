@@ -19,21 +19,41 @@ export const hasQueryOrFragmentAfter = (
   return false;
 };
 
-const isBalancedPathClose = (
+const collectBalancedPathCloses = (
   meta: TextMeta,
   pathStart: number,
-  closeIndex: number,
-): boolean => {
-  const close = meta.symbol[closeIndex];
-  const open =
-    close === ")" ? "(" : close === "]" ? "[" : close === "}" ? "{" : "";
-  if (!open) return false;
-  let depth = 0;
-  for (let cursor = pathStart; cursor <= closeIndex; cursor++) {
-    if (meta.symbol[cursor] === open) depth++;
-    if (meta.symbol[cursor] === close) depth--;
+  pathEnd: number,
+): ReadonlySet<number> => {
+  const balanced = new Set<number>();
+  let parentheses = 0;
+  let brackets = 0;
+  let braces = 0;
+  for (let cursor = pathStart; cursor < pathEnd; cursor++) {
+    switch (meta.symbol[cursor]) {
+      case "(":
+        parentheses++;
+        break;
+      case ")":
+        parentheses--;
+        if (parentheses === 0) balanced.add(cursor);
+        break;
+      case "[":
+        brackets++;
+        break;
+      case "]":
+        brackets--;
+        if (brackets === 0) balanced.add(cursor);
+        break;
+      case "{":
+        braces++;
+        break;
+      case "}":
+        braces--;
+        if (braces === 0) balanced.add(cursor);
+        break;
+    }
   }
-  return depth === 0;
+  return balanced;
 };
 
 const nextNonZeroWidth = (
@@ -150,6 +170,13 @@ export const maybeConsumePathTail = (
 
   if (end === pos + 1 && meta.symbol[pos] !== "/") return null;
 
+  let balancedPathCloses: ReadonlySet<number> | undefined;
+  const isBalancedClose = (closeIndex: number): boolean => {
+    const close = meta.symbol[closeIndex];
+    if (close !== ")" && close !== "]" && close !== "}") return false;
+    balancedPathCloses ??= collectBalancedPathCloses(meta, pos, end);
+    return balancedPathCloses.has(closeIndex);
+  };
   let trimmedTrailingPunctuation = false;
   while (end > pos + 1) {
     let cursor = end;
@@ -162,7 +189,7 @@ export const maybeConsumePathTail = (
       if (
         cursor > pos + 1 &&
         PATH_TRAILING_CHARS.has(meta.symbol[cursor - 1]) &&
-        !isBalancedPathClose(meta, pos, cursor - 1)
+        !isBalancedClose(cursor - 1)
       ) {
         end = cursor - 1;
         trimmedTrailingPunctuation = true;
@@ -174,7 +201,7 @@ export const maybeConsumePathTail = (
     }
     if (
       PATH_TRAILING_CHARS.has(meta.symbol[end - 1]) &&
-      !isBalancedPathClose(meta, pos, end - 1)
+      !isBalancedClose(end - 1)
     ) {
       end--;
       trimmedTrailingPunctuation = true;
@@ -310,6 +337,18 @@ export const consumeSpacedHostContinuation = (
     cursor++;
   }
 
+  const balancedPathStart = pathStart >= 0 ? pathStart : pos;
+  let balancedPathCloses: ReadonlySet<number> | undefined;
+  const isBalancedClose = (closeIndex: number): boolean => {
+    const close = meta.symbol[closeIndex];
+    if (close !== ")" && close !== "]" && close !== "}") return false;
+    balancedPathCloses ??= collectBalancedPathCloses(
+      meta,
+      balancedPathStart,
+      end,
+    );
+    return balancedPathCloses.has(closeIndex);
+  };
   let trimmedTrailingPunctuation = false;
   while (end > pos) {
     let trimCursor = end;
@@ -318,11 +357,7 @@ export const consumeSpacedHostContinuation = (
       if (
         trimCursor > pos &&
         PATH_TRAILING_CHARS.has(meta.symbol[trimCursor - 1]) &&
-        !isBalancedPathClose(
-          meta,
-          pathStart >= 0 ? pathStart : pos,
-          trimCursor - 1,
-        )
+        !isBalancedClose(trimCursor - 1)
       ) {
         end = trimCursor - 1;
         trimmedTrailingPunctuation = true;
@@ -334,7 +369,7 @@ export const consumeSpacedHostContinuation = (
     }
     if (
       PATH_TRAILING_CHARS.has(meta.symbol[end - 1]) &&
-      !isBalancedPathClose(meta, pathStart >= 0 ? pathStart : pos, end - 1)
+      !isBalancedClose(end - 1)
     ) {
       end--;
       trimmedTrailingPunctuation = true;

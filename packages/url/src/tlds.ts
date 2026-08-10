@@ -167,22 +167,29 @@ const createLookupsFromNormalizedTlds = (
 });
 
 const DEFAULT_LISTED_TLDS: ReadonlySet<string> = new Set(DEFAULT_TLDS);
+const TLD_LOOKUP_CACHE = new WeakMap<ReadonlySet<string>, TldLookups>();
 
 export const DEFAULT_TLD_LOOKUPS: TldLookups = Object.freeze(
   createLookupsFromNormalizedTlds(DEFAULT_LISTED_TLDS),
 );
+TLD_LOOKUP_CACHE.set(DEFAULT_LISTED_TLDS, DEFAULT_TLD_LOOKUPS);
 
-export const createTldLookups = (tlds: Iterable<string>): TldLookups => {
-  if (tlds === DEFAULT_TLDS || tlds === DEFAULT_LISTED_TLDS) {
+export const createTldLookups = (tlds: ReadonlySet<string>): TldLookups => {
+  if (tlds === DEFAULT_LISTED_TLDS) {
     return DEFAULT_TLD_LOOKUPS;
   }
+
+  const cached = TLD_LOOKUP_CACHE.get(tlds);
+  if (cached) return cached;
 
   const listedTlds = new Set<string>();
   for (const value of tlds) {
     const tld = normalizeTld(value);
     if (tld) listedTlds.add(tld);
   }
-  return createLookupsFromNormalizedTlds(listedTlds);
+  const lookups = createLookupsFromNormalizedTlds(listedTlds);
+  TLD_LOOKUP_CACHE.set(tlds, lookups);
+  return lookups;
 };
 
 export const resolveTldLookups = (

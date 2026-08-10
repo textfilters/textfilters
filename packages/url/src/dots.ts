@@ -107,11 +107,26 @@ export const parseDot = (meta: TextMeta, start: number): Match | null => {
     }
   }
 
-  while (pos < meta.codePoints.length && meta.labelJoinSeparator[pos]) pos++;
+  let visibleJoiners = 0;
+  while (pos < meta.codePoints.length && meta.labelJoinSeparator[pos]) {
+    if (!meta.zeroWidth[pos] && !meta.whitespace[pos]) {
+      visibleJoiners++;
+      if (visibleJoiners > 1) return null;
+    }
+    pos++;
+  }
   if (pos >= meta.codePoints.length) return null;
 
   if (meta.symbol[pos] === ".") {
     return { start: pos, end: pos + 1, pos: pos + 1 };
+  }
+  if (
+    meta.symbol[pos] === "/" ||
+    meta.symbol[pos] === ":" ||
+    meta.symbol[pos] === "?" ||
+    meta.symbol[pos] === "#"
+  ) {
+    return null;
   }
 
   for (const word of DOT_WORDS_SKELETON_CHARS) {
