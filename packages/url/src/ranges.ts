@@ -127,8 +127,19 @@ const isPlainLabel = (
   meta: TextMeta,
   label: DomainMatch["labels"][number],
 ): boolean => {
+  let hasLetterOrDigit = false;
   for (let cursor = label.start; cursor < label.end; cursor++) {
-    if (!meta.alphaNum[cursor] && meta.raw[cursor] !== "-") return false;
+    if (meta.alphaNum[cursor]) {
+      hasLetterOrDigit = true;
+      continue;
+    }
+    if (
+      meta.raw[cursor] !== "-" &&
+      (!hasLetterOrDigit ||
+        !COMBINING_MARK_RE.test(meta.codePoints[cursor] ?? ""))
+    ) {
+      return false;
+    }
   }
   return true;
 };

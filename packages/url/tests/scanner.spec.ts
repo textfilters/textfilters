@@ -501,6 +501,10 @@ describe("URL scanner", () => {
       ["please open phishing. net!", "phishing. net"],
       ["Visit evil. com now", "evil. com"],
       ["Please visit Evil. com now", "Evil. com"],
+      ["Hello܁ com next", "Hello܁ com"],
+      ["Hello܂ com next", "Hello܂ com"],
+      ["Hello꘎ com next", "Hello꘎ com"],
+      ["Hello𐩐 com next", "Hello𐩐 com"],
     ] as const;
 
     for (const [text, candidate] of cases) {
@@ -678,6 +682,9 @@ describe("URL scanner", () => {
       "me \ufe0f•\ufe0e Me",
       "me \u{e0100}•\u{e0100} Me",
       "foo-bar • Foo-bar follows",
+      "भारत • भारत",
+      "कॉम • कॉम",
+      "বাংলা • বাংলা",
       "info • Info: details",
       "me • Me?",
       "me • Me?.",
