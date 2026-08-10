@@ -50,7 +50,7 @@ export const toRawChar = (ch: string): string =>
 
 export const toSkeletonFromNormalized = (value: string): string =>
   Array.from(value)
-    .map((ch) => LOOKALIKE_TO_ASCII[ch] ?? ch)
+    .map((ch) => LOOKALIKE_TO_ASCII.get(ch) ?? ch)
     .join("");
 
 export const toSkeleton = (value: unknown): string =>
@@ -60,7 +60,7 @@ export const toRawChars = (value: string): string[] =>
   Array.from(lowerNfkc(value));
 
 export const toSkeletonChars = (value: string): string[] =>
-  toRawChars(value).map((ch) => LOOKALIKE_TO_ASCII[ch] ?? ch);
+  toRawChars(value).map((ch) => LOOKALIKE_TO_ASCII.get(ch) ?? ch);
 
 // TextMeta stores parallel per-code-point views so later parsers can reason in
 // stable code-point offsets while still preserving UTF-16 lengths when masking.
@@ -78,7 +78,7 @@ export const createMeta = (source: string): TextMeta => {
   for (let i = 0; i < codePoints.length; i++) {
     const ch = codePoints[i];
     const rawChar = toRawChar(ch);
-    const skeletonChar = LOOKALIKE_TO_ASCII[rawChar] ?? rawChar;
+    const skeletonChar = LOOKALIKE_TO_ASCII.get(rawChar) ?? rawChar;
     const symbolChar = DOT_CHAR_SET.has(rawChar)
       ? "."
       : rawChar === "\\"

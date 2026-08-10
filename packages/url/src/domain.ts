@@ -22,8 +22,13 @@ import { maybeConsumePathTail } from "./path.js";
 
 const MAX_DOMAIN_TEXT_LENGTH = 253;
 const MAX_DOMAIN_LABELS = 127;
+const ASCII_ONLY_RE = /^[\x00-\x7f]*$/u;
 
 const finalizeLabelText = (source: string): LabelText => {
+  if (ASCII_ONLY_RE.test(source)) {
+    const raw = source.toLowerCase();
+    return { raw, skeleton: raw };
+  }
   const raw = lowerNfkc(source);
   return { raw, skeleton: toSkeletonFromNormalized(raw) };
 };
@@ -58,11 +63,13 @@ export const parseLabel = (
   let last = -1;
   let normalizedLength = 0;
   let sourceText = "";
+  let requiresWholeLabelNormalization = false;
 
   while (pos < meta.codePoints.length) {
     const sourceChar = meta.codePoints[pos] ?? "";
     const rawChar = meta.raw[pos];
     const isAttachedMark =
+      !meta.alphaNum[pos] &&
       first >= 0 &&
       !isIgnorableFormatting(meta, pos) &&
       COMBINING_MARK_RE.test(sourceChar);
@@ -70,7 +77,10 @@ export const parseLabel = (
       if (rawChar) {
         if (first < 0) first = pos;
         last = pos;
-        sourceText += sourceChar;
+        const isAsciiSourceChar =
+          sourceChar.length === 1 && sourceChar.charCodeAt(0) <= 0x7f;
+        sourceText += isAsciiSourceChar ? rawChar : sourceChar;
+        requiresWholeLabelNormalization ||= !isAsciiSourceChar;
         normalizedLength += rawChar.length;
         if (normalizedLength > 63) return null;
       }
@@ -159,7 +169,9 @@ export const parseLabel = (
   }
 
   if (first < 0 || normalizedLength === 0 || normalizedLength > 63) return null;
-  const normalized = finalizeLabelText(sourceText);
+  const normalized = requiresWholeLabelNormalization
+    ? finalizeLabelText(sourceText)
+    : { raw: sourceText, skeleton: sourceText };
   if (!normalized.raw || normalized.raw.length > 63) return null;
   return {
     start: first,
@@ -225,6 +237,7 @@ const trimTldTrailingProse = (
       }
     }
     const isAttachedMark =
+      !meta.alphaNum[cursor] &&
       sourceText.length > 0 &&
       !isIgnorableFormatting(meta, cursor) &&
       COMBINING_MARK_RE.test(sourceChar);

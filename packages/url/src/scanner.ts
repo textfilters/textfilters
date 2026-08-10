@@ -22,11 +22,17 @@ import {
   EMPTY_ALLOWED_DOMAINS,
   normalizeAllowedDomains,
 } from "./allowed-domains.js";
-import { createMeta, toSkeleton, toSkeletonFromNormalized } from "./meta.js";
+import { createMeta, toSkeletonFromNormalized } from "./meta.js";
 import { collectRangeMatches, collectRanges } from "./ranges.js";
 import { DEFAULT_TLDS, normalizeTld, normalizeTlds } from "./tlds.js";
 
 const ASCII_TLD_RE = /^[a-z0-9-]+$/u;
+const ASCII_ONLY_RE = /^[\x00-\x7f]*$/u;
+
+const toCandidateSkeleton = (normalized: string): string =>
+  ASCII_ONLY_RE.test(normalized)
+    ? normalized
+    : toSkeletonFromNormalized(normalized);
 
 const createTldSkeletonSet = (tlds: Iterable<string>): ReadonlySet<string> => {
   const skeletons = new Set<string>();
@@ -223,7 +229,7 @@ function hasUrlCandidateInput(input: UrlScanInput): boolean {
 
 function hasUrlCandidate(source: string): boolean {
   const normalized = stripZeroWidth(lowerNfkc(source));
-  const skeleton = toSkeleton(normalized);
+  const skeleton = toCandidateSkeleton(normalized);
   return (
     hasLikelyDomainDot(normalized) ||
     normalized.includes(":") ||
@@ -243,7 +249,7 @@ function hasUrlCandidate(source: string): boolean {
 
 function hasUrlWordCandidate(source: string): boolean {
   const normalized = stripZeroWidth(lowerNfkc(source));
-  const skeleton = toSkeleton(normalized);
+  const skeleton = toCandidateSkeleton(normalized);
   return (
     normalized.includes("http") ||
     normalized.includes("hxxp") ||

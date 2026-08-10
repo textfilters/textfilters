@@ -6,7 +6,7 @@ import {
   type UrlFilterConfig,
 } from "./contracts.js";
 import { createUrlScanner, scanUrlRanges } from "./scanner.js";
-import { DEFAULT_TLDS, normalizeTlds } from "./tlds.js";
+import { DEFAULT_TLDS } from "./tlds.js";
 
 export {
   URL_FILTER_NAME,
@@ -30,7 +30,7 @@ export {
 
 export function createUrlFilter(config: UrlFilterConfig = {}): UrlFilter {
   const scanner = createUrlScanner({
-    tlds: normalizeTlds(config.tlds),
+    tlds: config.tlds,
     allowedDomains: config.allowedDomains,
     ambiguousSpacedDots: config.ambiguousSpacedDots,
   });
