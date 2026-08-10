@@ -9,9 +9,13 @@ export const WHITESPACE_RE = /\s/u;
 // middle-dot characters remain obfuscated domain separators.
 const SENTENCE_DOT_SYMBOLS = [".", "。", "܁", "܂", "꘎", "𐩐"] as const;
 const SENTENCE_DOT_SYMBOL_SET = new Set<string>(SENTENCE_DOT_SYMBOLS);
+const SENTENCE_CLOSER_RE = /[\p{Pe}\p{Pf}]/u;
 
 export const isSentenceDotSymbol = (value: string): boolean =>
   SENTENCE_DOT_SYMBOL_SET.has(value);
+
+export const isSentenceCloserSymbol = (value: string): boolean =>
+  value === '"' || value === "'" || SENTENCE_CLOSER_RE.test(value);
 
 export const PATH_START_CHARS = new Set([":", "/", "?", "#"]);
 export const PATH_TRAILING_CHARS = new Set([

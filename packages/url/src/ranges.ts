@@ -1,11 +1,12 @@
 import { mergeCodePointRanges } from "@textfilters/core";
 
 import { isAllowedDomain } from "./allowed-domains.js";
-import { COMBINING_MARK_RE, isSentenceDotSymbol } from "./chars.js";
+import { COMBINING_MARK_RE } from "./chars.js";
 import type { AmbiguousSpacedDotPolicy } from "./contracts.js";
 import {
   isIgnorableFormatting,
   isRightSpacedDotSymbol,
+  isRightSpacedSentenceDot,
   isWhitespaceWrappedDot,
   isWhitespaceWrappedListSeparator,
   parseDot,
@@ -14,6 +15,7 @@ import { parseDomain } from "./domain.js";
 import { parseExplicitUrlTarget } from "./explicit-authority.js";
 import {
   countCodePoints,
+  MAX_HOST_LABEL_CODE_POINTS,
   type CodePointRange,
   type DomainMatch,
   type TextMeta,
@@ -27,8 +29,6 @@ export interface UrlMatchPolicy extends TldLookups {
   readonly allowedDomains: ReadonlySet<string>;
   readonly ambiguousSpacedDots: AmbiguousSpacedDotPolicy;
 }
-
-const SENTENCE_CLOSER_RE = /[\p{Pe}\p{Pf}]/u;
 
 // Formatting and combining marks continue the preceding label. Skipping over
 // them prevents a rejected long label from restarting at an internal suffix.
@@ -112,7 +112,7 @@ const maybeExpandBareSplitPrefix = (
   // Only expand a preceding word when it looks like a deliberately split first
   // host label; otherwise normal prose before a URL would be masked.
   if (!hasSplitLabelEvidence) return domain.start;
-  if (prefixLength + firstLabelLength > 63) {
+  if (prefixLength + firstLabelLength > MAX_HOST_LABEL_CODE_POINTS) {
     return domain.start;
   }
   if (
@@ -126,9 +126,6 @@ const maybeExpandBareSplitPrefix = (
 
   return prefixStart;
 };
-
-const isSentenceCloser = (value: string): boolean =>
-  value === '"' || value === "'" || SENTENCE_CLOSER_RE.test(value);
 
 const isPlainLabel = (
   meta: TextMeta,
@@ -211,33 +208,23 @@ const isStandaloneRepeatedListProse = (
   return true;
 };
 
-const isAmbiguousRightSpacedDomain = (
+const hasAmbiguousRightSpacedSuffix = (
   meta: TextMeta,
   domain: DomainMatch,
 ): boolean => {
-  if (domain.labels.length !== 2) return false;
-  const [previous, tld] = domain.labels;
+  const previous = domain.labels.at(-2);
+  const tld = domain.labels.at(-1);
   if (!previous || !tld || domain.end !== tld.end) return false;
 
   const dot = parseDot(meta, previous.pos);
   if (
     !dot ||
     !hasOnlyIgnorableFormatting(meta, previous.end, dot.start) ||
-    dot.end !== dot.start + 1 ||
-    !isSentenceDotSymbol(meta.raw[dot.start] ?? "")
+    !isRightSpacedSentenceDot(meta, dot, tld.start)
   ) {
     return false;
   }
-
-  let afterDot = dot.end;
-  while (
-    afterDot < tld.start &&
-    (isIgnorableFormatting(meta, afterDot) ||
-      isSentenceCloser(meta.raw[afterDot] ?? ""))
-  ) {
-    afterDot++;
-  }
-  return meta.whitespace[afterDot] ?? false;
+  return true;
 };
 
 const shouldPreserveBareDomainAsProse = (
@@ -247,7 +234,7 @@ const shouldPreserveBareDomainAsProse = (
 ): boolean =>
   isStandaloneRepeatedListProse(meta, domain) ||
   (ambiguousSpacedDots === "preserve" &&
-    isAmbiguousRightSpacedDomain(meta, domain));
+    hasAmbiguousRightSpacedSuffix(meta, domain));
 
 const preferCompletedDomainBeforeSpacedSeparator = (
   meta: TextMeta,
@@ -330,26 +317,11 @@ const maybePreferBareDomainAfterSentence = (
     const dot = parseDot(meta, previous.pos);
     if (
       !dot ||
-      dot.start !== previous.pos ||
-      dot.end !== dot.start + 1 ||
-      !isSentenceDotSymbol(meta.raw[dot.start] ?? "")
+      !hasOnlyIgnorableFormatting(meta, previous.end, dot.start) ||
+      !isRightSpacedSentenceDot(meta, dot, next.start)
     ) {
       continue;
     }
-
-    let afterDot = dot.pos;
-    while (afterDot < next.start) {
-      if (isIgnorableFormatting(meta, afterDot)) {
-        afterDot++;
-        continue;
-      }
-      if (isSentenceCloser(meta.raw[afterDot] ?? "")) {
-        afterDot++;
-        continue;
-      }
-      break;
-    }
-    if (afterDot >= next.start || !meta.whitespace[afterDot]) continue;
 
     const suffix = parseDomain(meta, next.start, listedTlds, asciiTldTargets);
     if (suffix && suffix.end === domain.end) {

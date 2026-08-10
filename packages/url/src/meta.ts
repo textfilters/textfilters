@@ -40,6 +40,9 @@ export interface DomainMatch extends Match {
 
 export type CodePointRange = TextCodePointRange;
 
+export const MAX_HOST_LABEL_CODE_POINTS = 63;
+export const MAX_HOSTNAME_CODE_POINTS = 253;
+
 export const countCodePoints = (value: string): number => {
   let length = 0;
   for (const _codePoint of value) length++;

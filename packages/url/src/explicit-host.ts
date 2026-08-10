@@ -1,8 +1,9 @@
 import { AUTHORITY_TRAILING_CHARS } from "./chars.js";
-import { MAX_HOSTNAME_CODE_POINTS } from "./domain.js";
 import { parseDot } from "./dots.js";
 import {
   countCodePoints,
+  MAX_HOST_LABEL_CODE_POINTS,
+  MAX_HOSTNAME_CODE_POINTS,
   type DomainMatch,
   type Label,
   type TextMeta,
@@ -172,7 +173,13 @@ export const parseExplicitHostLabel = (
     break;
   }
 
-  if (first < 0 || raw.length === 0 || countCodePoints(raw) > 63) return null;
+  if (
+    first < 0 ||
+    raw.length === 0 ||
+    countCodePoints(raw) > MAX_HOST_LABEL_CODE_POINTS
+  ) {
+    return null;
+  }
   return { start: first, end: last + 1, pos, raw, skeleton, hasNonAsciiSymbol };
 };
 

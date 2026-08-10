@@ -233,6 +233,14 @@ describe("URL scanner", () => {
       ["Fine. Be careful.", "Fine. Be"],
       ["Hello. Fine. Be careful.", "Fine. Be"],
       ["Mr. Fine. Be careful.", "Fine. Be"],
+      ["Use e.g. In practice.", "Use e.g. In"],
+      ["Use i.e. It works.", "Use i.e. It"],
+      ["At p.m. Be ready.", "At p.m. Be"],
+      ["Use U.S. In practice.", "Use U.S. In"],
+      ["Version 1.2. In production.", "Version 1.2. In"],
+      ["Use e.g\u200b. In practice.", "Use e.g\u200b. In"],
+      ["Use e.g.” In practice.", "Use e.g.” In"],
+      ["sub.evil. com now", "sub.evil. com"],
       ["Fine\u200b. Be careful.", "Fine\u200b. Be"],
       ["Fine\ufe0f. Be careful.", "Fine\ufe0f. Be"],
       ["Fine\u{e0100}. Be careful.", "Fine\u{e0100}. Be"],
@@ -261,15 +269,19 @@ describe("URL scanner", () => {
       });
     }
 
-    const strongEvidence = "Visit evil. com/path now";
-    const candidate = "evil. com/path";
-    const start = Array.from(
-      strongEvidence.slice(0, strongEvidence.indexOf(candidate)),
-    ).length;
-    expectScannerFixture({
-      text: strongEvidence,
-      ranges: [[start, start + Array.from(candidate).length]],
-    });
+    for (const [text, candidate] of [
+      ["Visit evil. com/path now", "evil. com/path"],
+      ["Use e.g. com/path now", "Use e.g. com/path"],
+      ["Use e.g. com:443 now", "Use e.g. com:443"],
+      ["Use e.g. com?x=1 now", "Use e.g. com?x=1"],
+      ["Use e.g. com#frag now", "Use e.g. com#frag"],
+    ] as const) {
+      const start = Array.from(text.slice(0, text.indexOf(candidate))).length;
+      expectScannerFixture({
+        text,
+        ranges: [[start, start + Array.from(candidate).length]],
+      });
+    }
 
     const adjacentDomainText = "foo. com evil.org";
     const adjacentDomain = "evil.org";
@@ -375,6 +387,10 @@ describe("URL scanner", () => {
     for (const sentenceText of [
       "foo.invalid﹒ evil.com",
       "foo.invalid.” evil.com",
+      "foo.invalid\u200b. evil.com",
+      "foo.invalid\ufe0f. evil.com",
+      "foo.invalid\u{e0100}. evil.com",
+      "foo.invalid\u200b.” evil.com",
     ]) {
       const sentenceSuffixStart = Array.from(
         sentenceText.slice(0, sentenceText.indexOf(suffix)),
@@ -456,6 +472,50 @@ describe("URL scanner", () => {
       ]);
       expect(createUrlFilter().censor(text)).toBe(prefix + mask(domain));
     }
+  });
+
+  it("keeps completed domains before quoted sentence endings independent", () => {
+    const completed = "example.com";
+    for (const ending of [
+      ".” Next step.",
+      ".\u200b” Next step.",
+      ".”\u200b Next step.",
+      ".) Next step.",
+      ".» Next step.",
+    ]) {
+      const text = completed + ending;
+      const completedRange: Range = [0, Array.from(completed).length];
+
+      expectScannerFixture({ text, ranges: [completedRange] });
+      expectScannerFixture({
+        text,
+        ranges: [],
+        allowedDomains: [completed],
+      });
+    }
+
+    const adjacent = "example.com.” evil.org";
+    const next = "evil.org";
+    const nextStart = Array.from(
+      adjacent.slice(0, adjacent.indexOf(next)),
+    ).length;
+    expectScannerFixture({
+      text: adjacent,
+      ranges: [
+        [0, Array.from(completed).length],
+        [nextStart, nextStart + Array.from(next).length],
+      ],
+    });
+    expectScannerFixture({
+      text: adjacent,
+      ranges: [[nextStart, nextStart + Array.from(next).length]],
+      allowedDomains: [completed],
+    });
+    expectScannerFixture({
+      text: adjacent,
+      ranges: [[0, Array.from(completed).length]],
+      allowedDomains: [next],
+    });
   });
 
   it("keeps obfuscated non-sentence dots inside domain ranges", () => {

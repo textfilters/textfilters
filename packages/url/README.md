@@ -53,9 +53,10 @@ const proseSafe = createUrlFilter({ ambiguousSpacedDots: "preserve" });
 const strict = createUrlFilter({ ambiguousSpacedDots: "block" });
 ```
 
-`preserve` is the default and leaves a bare two-label candidate such as
-`example. com` unchanged when it has no path, query, fragment, port, scheme, or
-other URL evidence. `block` treats the same candidate as a defanged domain.
+`preserve` is the default and leaves a bare candidate unchanged when its final
+two labels form an ambiguous suffix such as `example. com` and it has no path,
+query, fragment, port, scheme, or other URL evidence. `block` treats the same
+candidate as a defanged domain.
 Both modes continue to detect stronger forms such as `example. com/path`,
 `example[.]com`, and `example dot com`. `createUrlScanner()` accepts the same
 option.

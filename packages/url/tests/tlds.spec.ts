@@ -154,6 +154,37 @@ describe("TLD matching", () => {
     expect(failures.result()).toEqual({ failures: 0, samples: [] });
   });
 
+  it("applies the ambiguous final-suffix policy to every default TLD", () => {
+    const failures = createFailureRecorder();
+
+    for (const tld of DEFAULT_TLDS) {
+      const candidate = `Use e.g. ${tld}`;
+      const text = `${candidate} prose`;
+      const expectedBlockedRange = wholeRange(candidate);
+      const preservedRanges = scanUrlRanges(text);
+      const blockedRanges = scanUrlRanges(
+        text,
+        undefined,
+        undefined,
+        undefined,
+        "block",
+      );
+      if (
+        preservedRanges.length > 0 ||
+        !rangesEqual(blockedRanges, expectedBlockedRange)
+      ) {
+        failures.record({
+          tld,
+          preservedRanges,
+          blockedRanges,
+          expectedBlockedRange,
+        });
+      }
+    }
+
+    expect(failures.result()).toEqual({ failures: 0, samples: [] });
+  });
+
   it("applies the label length limit after whole-label normalization", () => {
     const composed = `${"é".repeat(50)}.com`;
     const decomposed = composed.normalize("NFD");

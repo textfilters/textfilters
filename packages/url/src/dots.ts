@@ -3,6 +3,8 @@ import {
   DOT_WORDS_RAW,
   DOT_WORDS_SKELETON,
   isProseListSeparatorDotSymbol,
+  isSentenceCloserSymbol,
+  isSentenceDotSymbol,
 } from "./chars.js";
 import {
   consumeWord,
@@ -56,6 +58,29 @@ export const isWhitespaceWrappedDot = (meta: TextMeta, dot: Match): boolean =>
 
 export const isRightSpacedDotSymbol = (meta: TextMeta, dot: Match): boolean =>
   dot.end === dot.start + 1 && hasWhitespaceBeyondZeroWidth(meta, dot.end, 1);
+
+export const isRightSpacedSentenceDot = (
+  meta: TextMeta,
+  dot: Match,
+  before: number = meta.codePoints.length,
+): boolean => {
+  if (
+    dot.end !== dot.start + 1 ||
+    !isSentenceDotSymbol(meta.raw[dot.start] ?? "")
+  ) {
+    return false;
+  }
+
+  let pos = dot.end;
+  while (
+    pos < before &&
+    (isIgnorableFormatting(meta, pos) ||
+      isSentenceCloserSymbol(meta.raw[pos] ?? ""))
+  ) {
+    pos++;
+  }
+  return pos < before && (meta.whitespace[pos] ?? false);
+};
 
 export const isWhitespaceWrappedListSeparator = (
   meta: TextMeta,

@@ -1,18 +1,17 @@
 import { lowerNfkc } from "@textfilters/core";
 
-import {
-  COMBINING_MARK_RE,
-  isSentenceDotSymbol,
-  PATH_START_CHARS,
-} from "./chars.js";
+import { COMBINING_MARK_RE, PATH_START_CHARS } from "./chars.js";
 import {
   isIgnorableFormatting,
   isRightSpacedDotSymbol,
+  isRightSpacedSentenceDot,
   isWhitespaceWrappedDot,
   parseDot,
 } from "./dots.js";
 import {
   countCodePoints,
+  MAX_HOST_LABEL_CODE_POINTS,
+  MAX_HOSTNAME_CODE_POINTS,
   type DomainMatch,
   type Label,
   type TextMeta,
@@ -20,7 +19,6 @@ import {
 } from "./meta.js";
 import { maybeConsumePathTail } from "./path.js";
 
-export const MAX_HOSTNAME_CODE_POINTS = 253;
 const MAX_DOMAIN_LABELS = 127;
 const ASCII_ONLY_RE = /^[\x00-\x7f]*$/u;
 
@@ -167,7 +165,12 @@ export const parseLabel = (
   const normalized = requiresWholeLabelNormalization
     ? finalizeLabelText(sourceText)
     : { raw: sourceText, skeleton: sourceText };
-  if (!normalized.raw || countCodePoints(normalized.raw) > 63) return null;
+  if (
+    !normalized.raw ||
+    countCodePoints(normalized.raw) > MAX_HOST_LABEL_CODE_POINTS
+  ) {
+    return null;
+  }
   return {
     start: first,
     end: last + 1,
@@ -336,20 +339,9 @@ export const parseDomain = (
         labels: [...labels],
       };
     }
-    let afterDot = dot.pos;
-    while (
-      afterDot < meta.codePoints.length &&
-      isIgnorableFormatting(meta, afterDot)
-    ) {
-      afterDot++;
-    }
     if (
       labels.length >= 2 &&
-      dot.start >= pos &&
-      dot.end === dot.start + 1 &&
-      isSentenceDotSymbol(meta.raw[dot.start] ?? "") &&
-      afterDot < meta.codePoints.length &&
-      meta.whitespace[afterDot] &&
+      isRightSpacedSentenceDot(meta, dot) &&
       (allowUnknownTld ||
         isValidTld(
           currentTld.raw,

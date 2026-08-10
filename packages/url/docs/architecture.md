@@ -21,7 +21,7 @@ The default `filter` export is a shared instance with the default TLD list. `url
 - `maskChar`: the replacement character passed through core mask normalization;
 - `tlds`: a custom bare-domain TLD allowlist. A non-empty normalized custom list replaces the default list; normalized-empty input retains the defaults.
 - `allowedDomains`: case-insensitive exact hostnames excluded from filter and scanner results after parsing.
-- `ambiguousSpacedDots`: whether a bare two-label candidate with a literal dot followed by whitespace and no URL-tail evidence is preserved as prose or blocked as a defanged domain. The default is `preserve`.
+- `ambiguousSpacedDots`: whether a bare candidate whose final two labels use a literal dot followed by whitespace and no URL-tail evidence is preserved as prose or blocked as a defanged domain. The default is `preserve`.
 
 `allowedDomains` is a synchronous configuration snapshot. Consuming
 applications own external loading, validation, caching, and refresh behavior.
@@ -151,12 +151,13 @@ instance. Low-level compatibility wrappers build the same policy from their
 listed TLDs; the retained precomputed-target argument cannot replace the
 derived targets.
 
-A bare two-label candidate with a literal single-character dot followed by
-whitespace and no URL-tail evidence is intentionally policy-controlled because
-its syntax is identical to sentence punctuation. `preserve` leaves it unchanged
-without lexical or capitalization heuristics. `block` treats it as a defanged
-domain. Explicit schemes, paths, queries, fragments, ports, non-literal dot
-markers, and other stronger URL evidence are unaffected by this policy.
+A bare candidate whose final two labels use a literal single-character dot
+followed by whitespace and no URL-tail evidence is intentionally
+policy-controlled because its suffix is identical to sentence punctuation.
+`preserve` leaves it unchanged without lexical or capitalization heuristics.
+`block` treats it as a defanged domain. Explicit schemes, paths, queries,
+fragments, ports, non-literal dot markers, and other stronger URL evidence are
+unaffected by this policy.
 
 Explicit authorities are parsed after a scheme and can use broader host syntax than bare domains. That path accepts localhost, ports, IPv6 bracket hosts, userinfo, underscores, IDN and emoji labels, and unknown TLDs.
 
