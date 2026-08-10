@@ -11,6 +11,7 @@ import {
   type UrlRangeScanResult,
   type UrlScanHints,
 } from "../src/index.js";
+import { DOT_CHAR_SET, LOOKALIKE_TO_ASCII } from "../src/chars.js";
 import { toSkeleton } from "../src/meta.js";
 import { DEFAULT_TLDS } from "../src/tlds.js";
 import { mask } from "./helpers.js";
@@ -191,6 +192,49 @@ describe("URL scanner", () => {
     }
 
     expect(failures.result()).toEqual({ failures: 0, samples: [] });
+  });
+
+  it("applies every mapped Unicode letter and dot lookalike to delegated TLDs", () => {
+    const asciiTlds = DEFAULT_TLDS.filter((tld) => /^[a-z]+$/u.test(tld));
+    const failures = createFailureRecorder();
+
+    for (const [lookalike, ascii] of LOOKALIKE_TO_ASCII) {
+      const tld = asciiTlds.find((candidate) => candidate.includes(ascii));
+      if (!tld) {
+        failures.record({ lookalike, ascii, reason: "missing target TLD" });
+        continue;
+      }
+      const index = tld.indexOf(ascii);
+      const variant = `${tld.slice(0, index)}${lookalike}${tld.slice(index + 1)}`;
+      const text = `x.${variant}`;
+      const ranges = scanUrlRanges(text);
+      if (!rangesEqual(ranges, wholeRange(text))) {
+        failures.record({ lookalike, ascii, tld, variant, ranges });
+      }
+    }
+
+    for (const dot of DOT_CHAR_SET) {
+      const text = `x${dot}com`;
+      const ranges = scanUrlRanges(text);
+      if (!rangesEqual(ranges, wholeRange(text))) {
+        failures.record({ dot, ranges });
+      }
+    }
+
+    expect(failures.result()).toEqual({ failures: 0, samples: [] });
+  });
+
+  it("applies the label length limit after whole-label normalization", () => {
+    const composed = `${"é".repeat(50)}.com`;
+    const decomposed = composed.normalize("NFD");
+    const overlong = `${"a".repeat(64)}.com`;
+    const overlongDecomposed = `${"é".repeat(64)}.com`.normalize("NFD");
+
+    expect(scanUrlRanges(composed)).toEqual(wholeRange(composed));
+    expect(scanUrlRanges(decomposed)).toEqual(wholeRange(decomposed));
+    expect(createUrlFilter().censor(decomposed)).toBe(mask(decomposed));
+    expect(scanUrlRanges(overlong)).toEqual([]);
+    expect(scanUrlRanges(overlongDecomposed)).toEqual([]);
   });
 
   it("normalizes compatibility expansions from original label code points", () => {

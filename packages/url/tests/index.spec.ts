@@ -268,8 +268,14 @@ describe("compatibility behavior", () => {
       "account.bız/account/profile",
       "account.rυ/account/profile",
       "account.cοm/path",
+      "account.cօm/path",
+      "account.cᴏm/path",
+      "account.cσm/path",
       "account.ѕite/path",
       "account.deν/path",
+      "x܁com",
+      "x܂com",
+      "x꘎com",
       "example.कॉम",
       "example.भारत",
       "example.இந்தியா",
@@ -279,11 +285,19 @@ describe("compatibility behavior", () => {
       expect(filter.censor(input)).toBe(mask(input));
     }
 
+    const astralDot = "x𐩐com";
+    expect(filter.censor(astralDot)).toBe("*".repeat(astralDot.length));
+
     const allowed = createUrlFilter({
       allowedDomains: ["youtu.be", "account.biz"],
     });
     expect(allowed.censor("youtu.be/path")).toBe("youtu.be/path");
     expect(allowed.censor("account.bız/path")).toBe(mask("account.bız/path"));
+    expect(
+      createUrlFilter({ allowedDomains: ["account.com"] }).censor(
+        "account.cօm/path",
+      ),
+    ).toBe(mask("account.cօm/path"));
   });
 
   it("keeps lookalike TLD folding directional", () => {

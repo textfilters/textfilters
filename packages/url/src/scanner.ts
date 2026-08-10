@@ -37,10 +37,7 @@ const toCandidateSkeleton = (normalized: string): string =>
 const createTldSkeletonSet = (tlds: Iterable<string>): ReadonlySet<string> => {
   const skeletons = new Set<string>();
   for (const tld of tlds) {
-    const normalized = normalizeTld(tld);
-    if (ASCII_TLD_RE.test(normalized)) {
-      skeletons.add(toSkeletonFromNormalized(normalized));
-    }
+    if (ASCII_TLD_RE.test(tld)) skeletons.add(tld);
   }
   return skeletons;
 };

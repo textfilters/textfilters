@@ -1,7 +1,7 @@
 import { mergeCodePointRanges } from "@textfilters/core";
 
 import { EMPTY_ALLOWED_DOMAINS, isAllowedDomain } from "./allowed-domains.js";
-import { isSentenceDotSymbol } from "./chars.js";
+import { COMBINING_MARK_RE, isSentenceDotSymbol } from "./chars.js";
 import type { AmbiguousSpacedDotPolicy } from "./contracts.js";
 import {
   isIgnorableFormatting,
@@ -23,21 +23,37 @@ export type UrlRangeSink = (range: CodePointRange) => boolean | void;
 
 const SENTENCE_CLOSER_RE = /[\p{Pe}\p{Pf}]/u;
 
+// Formatting and combining marks continue the preceding label. Skipping over
+// them prevents a rejected long label from restarting at an internal suffix.
+const hasBareStartBoundary = (
+  meta: TextMeta,
+  start: number,
+  ranges: readonly CodePointRange[],
+): boolean => {
+  if (start === 0) return true;
+  let cursor = start - 1;
+  while (
+    cursor >= 0 &&
+    (isIgnorableFormatting(meta, cursor) ||
+      COMBINING_MARK_RE.test(meta.codePoints[cursor] ?? ""))
+  ) {
+    cursor--;
+  }
+  return (
+    cursor < 0 ||
+    !meta.alphaNum[cursor] ||
+    ranges.some((range) => range[1] === start)
+  );
+};
+
 const hasBareBoundary = (
   meta: TextMeta,
   start: number,
   end: number,
   ranges: readonly CodePointRange[],
 ): boolean => {
-  if (
-    start > 0 &&
-    meta.alphaNum[start - 1] &&
-    !ranges.some((range) => range[1] === start)
-  ) {
-    return false;
-  }
-  if (end < meta.codePoints.length && meta.alphaNum[end]) return false;
-  return true;
+  if (!hasBareStartBoundary(meta, start, ranges)) return false;
+  return end >= meta.codePoints.length || !meta.alphaNum[end];
 };
 
 // Scheme candidates are cheap to reject; use this guard before trying the more
@@ -408,7 +424,9 @@ export const collectRangeMatches = (
       }
     }
 
-    if (!meta.alphaNum[i]) continue;
+    if (!meta.alphaNum[i] || !hasBareStartBoundary(meta, i, consumedRanges)) {
+      continue;
+    }
     const parsedDomain = parseDomain(meta, i, tldSet, tldSkeletonSet);
     if (!parsedDomain) continue;
     const preferredDomain = maybePreferBareDomainAfterSentence(

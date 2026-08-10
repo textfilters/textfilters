@@ -61,7 +61,6 @@ export const parseLabel = (
   while (pos < meta.codePoints.length && meta.labelJoinSeparator[pos]) pos++;
   let first = -1;
   let last = -1;
-  let normalizedLength = 0;
   let sourceText = "";
   let requiresWholeLabelNormalization = false;
 
@@ -81,8 +80,6 @@ export const parseLabel = (
           sourceChar.length === 1 && sourceChar.charCodeAt(0) <= 0x7f;
         sourceText += isAsciiSourceChar ? rawChar : sourceChar;
         requiresWholeLabelNormalization ||= !isAsciiSourceChar;
-        normalizedLength += rawChar.length;
-        if (normalizedLength > 63) return null;
       }
       pos++;
       continue;
@@ -108,8 +105,6 @@ export const parseLabel = (
       const hasOnlyHostnameJoinSymbols = /^[-_]+$/u.test(visibleGapRaw);
       if (!gapHasWhitespace && /^-+$/u.test(visibleGapRaw)) {
         sourceText += visibleGapRaw;
-        normalizedLength += visibleGapRaw.length;
-        if (normalizedLength > 63) return null;
       }
       // Join only very short whitespace-split pieces. Longer visible runs are
       // usually prose before a normal URL, even if the run contains zero-width.
@@ -168,7 +163,7 @@ export const parseLabel = (
     break;
   }
 
-  if (first < 0 || normalizedLength === 0 || normalizedLength > 63) return null;
+  if (first < 0 || sourceText.length === 0) return null;
   const normalized = requiresWholeLabelNormalization
     ? finalizeLabelText(sourceText)
     : { raw: sourceText, skeleton: sourceText };

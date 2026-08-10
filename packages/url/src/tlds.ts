@@ -1,6 +1,6 @@
 import { lowerNfkc } from "@textfilters/core";
 
-// Version 2026080801, Last Updated Sun Aug  9 07:07:01 2026 UTC
+// Version 2026081000, Last Updated Mon Aug 10 07:07:01 2026 UTC
 // Source: https://data.iana.org/TLD/tlds-alpha-by-domain.txt
 const DEFAULT_TLD_SOURCE = `
 aaa aarp abb abbott abbvie abc able abogado abudhabi ac academy accenture accountant accountants

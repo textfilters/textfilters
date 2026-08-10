@@ -96,7 +96,11 @@ graph TD
 
 ## Matching Strategy
 
-The parser reads the original input as code points and builds parallel metadata arrays. `raw` text is NFKC-normalized and lowercased through `@textfilters/core`. `skeleton` additionally folds common Cyrillic and Latin lookalikes so obfuscated hosts and schemes can be compared against ASCII rules.
+The parser reads the original input as code points and builds parallel metadata
+arrays. `raw` text is NFKC-normalized and lowercased through
+`@textfilters/core`. `skeleton` additionally folds a versioned set of
+single-code-point Unicode letter confusables toward ASCII so obfuscated hosts
+and schemes can be compared against ASCII rules.
 
 Ranges always point back to the original code point indexes. This keeps masking length-preserving and avoids recalculating offsets after normalization.
 
@@ -148,6 +152,22 @@ Examples:
 - `example.unknown/path` should not match by default because bare domains require configured TLDs.
 - `http://localhost:3000/admin` should match because localhost is valid after an explicit scheme.
 - `svc.internal` should match only with custom TLD config such as `{ tlds: ["internal"] }`.
+
+## Embedded Snapshot Maintenance
+
+The embedded IANA root-zone snapshot is updated manually; the package never
+fetches or generates TLD data at build time or runtime. A refresh must replace
+the ASCII entries and their decoded Unicode IDN spellings together, update the
+version header in `src/tlds.ts`, and verify that the list has no missing, extra,
+empty, or duplicate values relative to the captured IANA source. Run the full
+package check and URL benchmark before committing a refreshed snapshot.
+
+The Unicode lookalike snapshot is also maintained manually from the recorded
+UTS #39 `confusables.txt` version. Keep only single-code-point letters whose
+lowercase NFKC form maps toward an ASCII letter, preserve the documented
+direction for case-folding collisions, and keep dot additions limited to
+punctuation entries mapped directly to `.`. The exhaustive scanner test must
+cover every embedded mapping after each refresh.
 
 ## Range And Masking Rules
 
