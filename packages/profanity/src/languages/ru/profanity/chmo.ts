@@ -52,6 +52,26 @@ const CHMO_TRANSLIT_SOURCE = regexGroup([
   )}`,
   String.raw`[cс][hн][mм][yу]r${optionalRegexGroup(CHMYR_TRANSLIT_TAILS)}`,
 ]);
+const CHMOSHN_TAIL = regexGroup([
+  String.raw`ый`,
+  String.raw`ая`,
+  String.raw`ое`,
+  String.raw`ые`,
+  String.raw`ого`,
+  String.raw`ому`,
+  String.raw`ую`,
+  String.raw`ой`,
+  String.raw`ом`,
+  String.raw`ым`,
+  String.raw`ыми`,
+  String.raw`ых`,
+  String.raw`о`,
+]);
+const CHMO_DERIVATIVES = regexGroup([
+  String.raw`чмошн${CHMOSHN_TAIL}`,
+  String.raw`чмошк(?:а|и|е|у|ой|ами?|ах)`,
+  String.raw`(?:за)?чмор(?:ить|ю|ишь|ит|им|ите|ят|ил(?:а|и|о)?)`,
+]);
 
 const CHMO_SPLIT_SEP = String.raw`[-._]+`;
 const chmoSplit = (sources: readonly string[]): string =>
@@ -227,5 +247,12 @@ export default russianFamilyDictionary([
     source: CHMO_SPLIT_GUARDED_SOURCE,
     match: "loose",
     loose: {},
+  }),
+  russianRule({
+    id: "ru.insult.chmo.derivatives",
+    category: "STRONG_INSULT",
+    severity: "medium",
+    source: token(CHMO_DERIVATIVES),
+    match: "strict",
   }),
 ]);

@@ -388,6 +388,32 @@ describe("internal profanity rules", () => {
     );
   });
 
+  it("keeps separators inside optional loose suffix ranges", () => {
+    const compile = (source: string) =>
+      compileLooseInternalRulePatterns(
+        createBuiltInProfanityRules([source], "loose"),
+      )[0]!;
+    const classSuffix = compile(String.raw`bad(?:[a-z]+)?`);
+    const groupSuffix = compile(String.raw`bad(?:ly|ness)?`);
+    const matchedText = (
+      pattern: typeof classSuffix,
+      input: string,
+    ): string | undefined => {
+      pattern.re.lastIndex = 0;
+      return pattern.re.exec(input)?.[0];
+    };
+
+    expect(matchedText(classSuffix, "bad!")).toBe("bad");
+    expect(matchedText(classSuffix, "badwords!")).toBe("badwords");
+    expect(matchedText(classSuffix, "bad-words!")).toBe("bad-words");
+    expect(matchedText(classSuffix, "bad-w-o-r-d-s!")).toBe("bad-w-o-r-d-s");
+    expect(matchedText(groupSuffix, "bad!")).toBe("bad");
+    expect(matchedText(groupSuffix, "bad-ly!")).toBe("bad-ly");
+    expect(matchedText(groupSuffix, "bad\uFEFFly!")).toBe("bad\uFEFFly");
+    expect(matchedText(groupSuffix, "bad—ly!")).toBe("bad");
+    expect(matchedText(groupSuffix, "bad,ly!")).toBe("bad");
+  });
+
   it("keeps compiled scan-start guards conservative and case-insensitive", () => {
     const rule = createBuiltInProfanityRules(
       [String.raw`(?<!\p{L})[bьв]l[yу]a(?!\p{L})`],

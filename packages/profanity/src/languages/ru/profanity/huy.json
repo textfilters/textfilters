@@ -105,7 +105,7 @@
       "id": "ru.vulgar.huyach.family",
       "category": "VULGAR",
       "severity": "medium",
-      "source": "(?:о|за|пере|от|об)?хуя[ч4](?:[а-яё]+)?",
+      "source": "(?:а|о|за|пере|от|об|в|при|под|рас|с)?хуя[ч4](?:[а-яё]+)?",
       "match": {
         "strict": {}
       }
@@ -300,7 +300,7 @@
       "id": "ru.vulgar.nahuy.in.token.loose",
       "category": "VULGAR",
       "severity": "medium",
-      "source": "(?<!\\p{L})(?:[нз]а|по)[^\\p{L}\\p{N}\\s]*х[^\\p{L}\\p{N}\\s]*у[^\\p{L}\\p{N}\\s]*[йяиёею](?:[\\p{L}-]+)?(?!\\p{L})",
+      "source": "(?<!\\p{L})(?!п[^\\p{L}\\p{N}\\s]*о[^\\p{L}\\p{N}\\s]*о[^\\p{L}\\p{N}\\s]*х[^\\p{L}\\p{N}\\s]*у[^\\p{L}\\p{N}\\s]*е)(?:[нз]а|по)[^\\p{L}\\p{N}\\s]*х[^\\p{L}\\p{N}\\s]*у[^\\p{L}\\p{N}\\s]*[йяиёею](?:[\\p{L}-]+)?(?!\\p{L})",
       "match": {
         "loose": {
           "stretch": true
@@ -421,6 +421,69 @@
       "source": "(?<!\\p{L})н[^\\p{L}\\p{N}]+[иu][^\\p{L}\\p{N}]+х[^\\p{L}\\p{N}]+у[^\\p{L}\\p{N}]+я(?!\\p{L})",
       "match": {
         "loose": {}
+      }
+    },
+    {
+      "id": "ru.vulgar.ahue.split.loose",
+      "category": "VULGAR",
+      "severity": "medium",
+      "source": "(?<!\\p{L})(?:а\\s+х\\s+у\\s+е\\s+л\\s+[аио]|(?!ахуел[аио](?!\\p{L}))(?!ахуел(?![^\\p{L}\\p{N}\\s]*[аио](?!\\p{L}))(?!\\p{L}))ахуел(?:[аио])?)(?!\\p{L})",
+      "match": {
+        "loose": {}
+      }
+    },
+    {
+      "id": "ru.vulgar.ahue.extended.family",
+      "category": "VULGAR",
+      "severity": "medium",
+      "source": "(?<!\\p{L})(?:ахуе(?:л(?:а|и|о)?|ю|ешь|ет|ем|ете|ют|й|йте|ть(?:ка|е)?|нн(?:ый|ая|ое|ые|ого|ому|ую|ой|ом|ым|ыми|ых|о|ее))|ахуительн(?:ый|ая|ое|ые|ого|ому|ую|ой|ом|ым|ыми|ых|о|ее|ость))(?!\\p{L})",
+      "match": {
+        "strict": {}
+      }
+    },
+    {
+      "id": "ru.vulgar.ohue.prefixed.family",
+      "category": "VULGAR",
+      "severity": "medium",
+      "source": "(?<!\\p{L})(?:(?:(?:по|под|за|пере|недо)охуе|(?:про|раз)хуе)(?:л(?:а|и|о)?|[а-яё]+))(?!\\p{L})",
+      "match": {
+        "strict": {}
+      }
+    },
+    {
+      "id": "ru.vulgar.ohue.prefixed.split.loose",
+      "category": "VULGAR",
+      "severity": "medium",
+      "source": "(?<!\\p{L})(?!(?:(?:(?:по|под|за|пере|недо)охуе|(?:про|раз)хуе)л(?:[аио])?)(?!\\p{L}))(?:(?:(?:по|под|за|пере|недо)охуе|(?:про|раз)хуе)л(?:[аио])?)(?!\\p{L})",
+      "match": {
+        "loose": {}
+      }
+    },
+    {
+      "id": "ru.vulgar.huyar.family",
+      "category": "VULGAR",
+      "severity": "medium",
+      "source": "(?<!\\p{L})(?:а|в|при|под|рас|с)?хуяр(?:ить|ю|ишь|ит|им|ите|ят|ил|ила|или|ило|ь|ьте)(?!\\p{L})",
+      "match": {
+        "strict": {}
+      }
+    },
+    {
+      "id": "ru.vulgar.huy.quantity",
+      "category": "VULGAR",
+      "severity": "medium",
+      "source": "(?<!\\p{L})доху(?:я|ища|ялиард(?:[а-яё]+)?)(?!\\p{L})",
+      "match": {
+        "strict": {}
+      }
+    },
+    {
+      "id": "ru.obscene.huy.compounds",
+      "category": "OBSCENE_MAT",
+      "severity": "high",
+      "source": "(?<!\\p{L})(?:мозго[её]б|ското[её]б|хуепутало|(?:хуеморд|хуеголов|хуегрыз|хуемраз|хуем[её]т|хуепл[её]т|хуеглот|хуежоп)(?:[а-яё]+)?)(?!\\p{L})",
+      "match": {
+        "strict": {}
       }
     }
   ]

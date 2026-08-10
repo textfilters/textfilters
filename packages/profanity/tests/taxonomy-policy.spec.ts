@@ -58,12 +58,13 @@ describe("built-in taxonomy policy", () => {
 
   it("locks the audited taxonomy distribution for every built-in rule", () => {
     expect(metadataCounts(RUSSIAN_PROFANITY_DICTIONARY.rules)).toEqual({
-      "OBSCENE_MAT/high": 69,
-      "STRONG_INSULT/high": 39,
-      "STRONG_INSULT/medium": 23,
-      "VULGAR/medium": 28,
-      "VULGAR/low": 20,
-      "EUPHEMISM/low": 11,
+      "OBSCENE_MAT/high": 73,
+      "STRONG_INSULT/high": 41,
+      "STRONG_INSULT/medium": 27,
+      "STRONG_INSULT/low": 1,
+      "VULGAR/medium": 34,
+      "VULGAR/low": 29,
+      "EUPHEMISM/low": 12,
       "EUPHEMISM/soft": 3,
     });
     expect(metadataCounts(englishProfanityDictionary.rules)).toEqual({
@@ -84,6 +85,7 @@ describe("built-in taxonomy policy", () => {
     ["сру", "ru.vulgar.sru.family", "VULGAR", "low"],
     ["дрочить", "ru.vulgar.droch.family", "VULGAR", "low"],
     ["хер", "ru.euphemism.her.base", "EUPHEMISM", "low"],
+    ["нахрен", "ru.euphemism.hren.family", "EUPHEMISM", "low"],
     ["ёпт", "ru.euphemism.yopt.family", "EUPHEMISM", "soft"],
     ["лять", "ru.euphemism.lyat", "EUPHEMISM", "soft"],
     ["сука", "ru.insult.suka.family", "STRONG_INSULT", "medium"],

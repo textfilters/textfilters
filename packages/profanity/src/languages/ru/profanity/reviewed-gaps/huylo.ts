@@ -15,6 +15,8 @@ const HUYLO_FORMS = [
   String.raw`ху(?:й|и)лам`,
   String.raw`ху(?:й|и)лами`,
   String.raw`ху(?:й|и)лах`,
+  String.raw`ху(?:й|и)лоид(?:[а-яё]+)?`,
+  String.raw`ху(?:й|и)ловидн(?:[а-яё]+)?`,
 ] as const;
 
 export default russianFamilyDictionary([

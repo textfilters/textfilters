@@ -6,7 +6,7 @@ import { ruleIdentityMetadata, ruleSourceMetadata } from "./rule-metadata.js";
 import { splitTopLevelAlternatives } from "./rule-scanner.js";
 import type { ProfanityTaxonomyMetadata } from "../types.js";
 
-const IN_TOKEN_SEPARATOR = String.raw`[^\p{L}\p{N}\s]*`;
+const IN_TOKEN_SEPARATOR = String.raw`[./@*#\uFFFF\p{S}\p{M}\p{Cf}\p{Pc}-]*`;
 
 export interface InternalProfanityRule extends ProfanityTaxonomyMetadata {
   readonly id: string;
@@ -99,8 +99,11 @@ export const loosenInternalRuleSource = (
   let result = "";
 
   for (const atom of readRuleAtoms(source)) {
-    result += looseSeparatorBefore(previousAtom, atom);
-    result += loosenRuleAtom(atom, options);
+    const separator = looseSeparatorBefore(previousAtom, atom);
+
+    result += isOptionalSuffixAtom(atom)
+      ? loosenOptionalSuffix(atom, options, separator)
+      : `${separator}${loosenRuleAtom(atom, options)}`;
     previousAtom = atom;
   }
 
@@ -126,10 +129,6 @@ const loosenRuleAtom = (
   atom: RuleAtom,
   options: InternalProfanityRuleLooseOptions,
 ): string => {
-  if (isOptionalSuffixAtom(atom)) {
-    return loosenOptionalSuffix(atom, options);
-  }
-
   if (isRepeatedWordLikeAtom(atom)) {
     return `${atom.base}(?:${LOOSE_SEPARATOR}${atom.base})*`;
   }
@@ -148,13 +147,25 @@ const loosenRuleAtom = (
 const loosenOptionalSuffix = (
   atom: RuleAtom,
   options: InternalProfanityRuleLooseOptions,
+  leadingSeparator: string,
 ): string => {
   const classSource = atom.base.match(/^\(\?:(\[[^\]]+\])\+\)$/u)?.[1];
-  // Turn optional suffix character classes into sequences that can consume
-  // split suffix letters while staying within the current token.
-  return classSource === undefined
-    ? loosenGroup(atom, options)
-    : `(?:${classSource}(?:${IN_TOKEN_SEPARATOR}${classSource})*)?`;
+
+  if (classSource !== undefined) {
+    // Open-ended suffixes may split only through separators that remain
+    // inside a token; prose delimiters must end the match.
+    return `(?:${leadingSeparator}${classSource}(?:${IN_TOKEN_SEPARATOR}${classSource})*)?`;
+  }
+
+  // Finite reviewed suffixes may use safe in-token obfuscation separators, but
+  // the separator remains inside the optional branch and excludes prose
+  // delimiters such as commas, quotes, and en/em dashes.
+  const requiredGroup = loosenGroup(
+    { base: atom.base, source: atom.base },
+    options,
+  );
+
+  return `(?:${leadingSeparator}${requiredGroup})?`;
 };
 
 const separatorBeforeWordLikeAtom = (atom: RuleAtom): string =>

@@ -11,6 +11,7 @@ import {
   separatedPatterns,
   splitPattern,
   splitPatternLiteral,
+  token,
   transliteratedAdjectiveTailParts,
 } from "./authoring.js";
 
@@ -902,6 +903,46 @@ const OBOSRAT_SPLIT_SOURCE = regexGroup([
   )}`,
 ]);
 
+const GOVNO_DERIVATIVES = regexGroup([
+  String.raw`говнючк(?:а|и|е|у|ой|ами?|ах)`,
+  String.raw`говно(?:ед|код)${cyrillicSuffix}`,
+  String.raw`дерьмоед${cyrillicSuffix}`,
+  String.raw`дерьмец${cyrillicSuffix}`,
+  String.raw`срач(?:ник|ка)?${cyrillicSuffix}`,
+]);
+const GOVNIST_TAIL = regexGroup([
+  String.raw`ый`,
+  String.raw`ая`,
+  String.raw`ое`,
+  String.raw`ые`,
+  String.raw`ого`,
+  String.raw`ому`,
+  String.raw`ую`,
+  String.raw`ой`,
+  String.raw`ом`,
+  String.raw`ым`,
+  String.raw`ыми`,
+  String.raw`ых`,
+]);
+const OBOSSYV_FORMS = String.raw`обоссыв(?:аться|аюсь|аешься|ается|аемся|аетесь|аются|ался|алась|ались|айся)`;
+const OBOSS_FORMS = String.raw`обосс(?:ать|ался|алась|ались|анный|анная|анное|анные|анного|анному|анную|анной|анном|анным|анными|анных)`;
+const SRAT_EXTENDED_FORMS = regexGroup([
+  String.raw`(?:на|про|пере|у)ср(?:ать(?:ся)?|ался|алась|ались)`,
+  String.raw`(?:вы|по|за)ср(?:аться|ался|алась|ались)`,
+]);
+const SSAT_FORMS = String.raw`(?:на|за|об)?сс(?:ать|у|ышь|ыт|ым|ыте|ут|ал(?:а|и|о)?)`;
+const PERDET_FORMS = regexGroup([
+  String.raw`перд(?:еть|ун${cyrillicSuffix}|[её]ж${cyrillicSuffix})`,
+  String.raw`п[её]рн(?:уть|ул(?:а|и|о)?)`,
+]);
+const BZDET_FORMS = String.raw`бзд(?:еть|ун${cyrillicSuffix}|ишь|ит|ят|ел(?:а|и|о)?)`;
+const SCATOLOGY_INSULTS = regexGroup([
+  String.raw`срак(?:а|и|е|у|ой|ами?|ах)`,
+  String.raw`ссыкло${cyrillicSuffix}`,
+  String.raw`ссыкун${cyrillicSuffix}`,
+  String.raw`ссыкух${cyrillicSuffix}`,
+]);
+
 export default russianFamilyDictionary([
   russianRule({
     id: "ru.vulgar.govno.family",
@@ -1046,6 +1087,69 @@ export default russianFamilyDictionary([
     category: "VULGAR",
     severity: "low",
     source: String.raw`(?<!\p{L})${OBOSRAT_TRANSLIT_SOURCE}(?!\p{L})`,
+    match: "strict",
+  }),
+  russianRule({
+    id: "ru.vulgar.govno.derivatives",
+    category: "VULGAR",
+    severity: "low",
+    source: token(GOVNO_DERIVATIVES),
+    match: "strict",
+  }),
+  russianRule({
+    id: "ru.vulgar.govnist.family",
+    category: "VULGAR",
+    severity: "low",
+    source: token(String.raw`говнист${GOVNIST_TAIL}`),
+    match: "strict",
+  }),
+  russianRule({
+    id: "ru.vulgar.obossyv.family",
+    category: "VULGAR",
+    severity: "low",
+    source: token(OBOSSYV_FORMS),
+    match: "strict",
+  }),
+  russianRule({
+    id: "ru.vulgar.oboss.family",
+    category: "VULGAR",
+    severity: "low",
+    source: token(OBOSS_FORMS),
+    match: "strict",
+  }),
+  russianRule({
+    id: "ru.vulgar.srat.extended",
+    category: "VULGAR",
+    severity: "low",
+    source: token(SRAT_EXTENDED_FORMS),
+    match: "strict",
+  }),
+  russianRule({
+    id: "ru.vulgar.ssat.family",
+    category: "VULGAR",
+    severity: "low",
+    source: token(SSAT_FORMS),
+    match: "strict",
+  }),
+  russianRule({
+    id: "ru.vulgar.perdet.family",
+    category: "VULGAR",
+    severity: "low",
+    source: token(PERDET_FORMS),
+    match: "strict",
+  }),
+  russianRule({
+    id: "ru.vulgar.bzdet.family",
+    category: "VULGAR",
+    severity: "low",
+    source: token(BZDET_FORMS),
+    match: "strict",
+  }),
+  russianRule({
+    id: "ru.insult.scatology.family",
+    category: "STRONG_INSULT",
+    severity: "low",
+    source: token(SCATOLOGY_INSULTS),
     match: "strict",
   }),
 ]);

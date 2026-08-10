@@ -12,6 +12,7 @@ import {
   separatedPattern,
   separatedPatterns,
   splitPattern,
+  token,
   transliteratedAdjectiveTailParts,
 } from "./authoring.js";
 
@@ -276,6 +277,22 @@ const ZALUPA_SPLIT_GUARDED_SOURCE = neutralContextGuardedSource(
   ZALUPA_NEUTRAL_TAIL,
 );
 
+const ZALUPAT_TAIL = regexGroup([
+  String.raw`ться`,
+  String.raw`юсь`,
+  String.raw`ешься`,
+  String.raw`ется`,
+  String.raw`емся`,
+  String.raw`етесь`,
+  String.raw`ются`,
+  String.raw`лся`,
+  String.raw`лась`,
+  String.raw`лось`,
+  String.raw`лись`,
+  String.raw`йся`,
+  String.raw`йтесь`,
+]);
+
 export default russianFamilyDictionary([
   russianRule({
     id: "ru.obscene.zalupa.family",
@@ -299,5 +316,12 @@ export default russianFamilyDictionary([
     source: ZALUPA_SPLIT_GUARDED_SOURCE,
     match: "loose",
     loose: {},
+  }),
+  russianRule({
+    id: "ru.obscene.zalupat.family",
+    category: "OBSCENE_MAT",
+    severity: "high",
+    source: token(String.raw`залупа${ZALUPAT_TAIL}`),
+    match: "strict",
   }),
 ]);

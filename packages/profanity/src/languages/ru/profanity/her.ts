@@ -427,6 +427,13 @@ const HER_TRANSLIT_SPLIT_SOURCE = regexGroup([
   ),
 ]);
 
+const HREN_FORMS = regexGroup([
+  String.raw`нахрен`,
+  String.raw`похрен`,
+  String.raw`хреново`,
+  String.raw`охрен(?:еть|ею|еешь|еет|еем|еете|еют|ел(?:а|и|о)?|ей|ейте)`,
+]);
+
 const HERSON_CONTEXT_PREFIX = String.raw`(?:на|по|о)(?:\s+|\s*[._/@:,\-–—]+\s*)`;
 const HERSON_CONTEXT_TAILS = [
   String.raw`сон`,
@@ -570,5 +577,12 @@ export default russianFamilyDictionary([
     source: String.raw`(?<!\p{L})${HER_TRANSLIT_SPLIT_SOURCE}(?!\p{L})`,
     match: "loose",
     loose: {},
+  }),
+  russianRule({
+    id: "ru.euphemism.hren.family",
+    category: "EUPHEMISM",
+    severity: "low",
+    source: token(HREN_FORMS),
+    match: "strict",
   }),
 ]);

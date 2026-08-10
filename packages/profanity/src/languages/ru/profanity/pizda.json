@@ -133,6 +133,15 @@
       "match": {
         "loose": {}
       }
+    },
+    {
+      "id": "ru.obscene.pizd.prefixed.family",
+      "category": "OBSCENE_MAT",
+      "severity": "high",
+      "source": "(?<!\\p{L})(?:вы|от|до|на|пере|при|под|с|рас)пизд(?:ить|еться|еть|нут(?:ый|ая|ое|ые|ого|ому|ую|ой|ом|ым|ыми|ых))(?!\\p{L})",
+      "match": {
+        "strict": {}
+      }
     }
   ]
 }
