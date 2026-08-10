@@ -132,6 +132,11 @@ For example, `example.unknown/path` is left unchanged by the default filter,
 while `https://example.unknown/path` is masked because it has an explicit
 scheme.
 
+A non-empty custom `tlds` list replaces the defaults after normalization and
+deduplication. If every configured entry normalizes to an empty value, the
+filter retains the default snapshot instead of silently disabling bare-domain
+detection.
+
 Lookalike skeleton targets are derived only from ASCII TLD entries. Unicode
 input may fold toward a listed ASCII TLD, while an ASCII suffix cannot become
 valid solely because it resembles a listed Unicode TLD. Normalized Unicode TLD
@@ -140,7 +145,9 @@ spellings remain directly valid through the same source list.
 Completed labels are normalized from their original source code points as one
 NFKC value before raw or skeleton lookup. This keeps canonical decompositions,
 compatibility forms, adjacent-domain trimming, configured TLDs, and implicit
-low-level custom TLD lookups on the same normalization path.
+low-level custom TLD lookups on the same normalization path. Label and hostname
+limits are measured in Unicode code points so supplementary-plane letters use
+the same limits as BMP letters.
 
 The filter masks:
 

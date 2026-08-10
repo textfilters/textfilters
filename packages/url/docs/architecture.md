@@ -18,7 +18,7 @@ The default `filter` export is a shared instance with the default TLD list. `url
 `UrlFilterConfig` supports:
 
 - `maskChar`: the replacement character passed through core mask normalization;
-- `tlds`: a custom bare-domain TLD allowlist. A non-empty custom list replaces the default list.
+- `tlds`: a custom bare-domain TLD allowlist. A non-empty normalized custom list replaces the default list; normalized-empty input retains the defaults.
 - `allowedDomains`: case-insensitive exact hostnames excluded from filter and scanner results after parsing.
 - `ambiguousSpacedDots`: whether a bare two-label candidate with a literal dot followed by whitespace and no URL-tail evidence is preserved as prose or blocked as a defanged domain. The default is `preserve`.
 
@@ -53,25 +53,44 @@ graph TD
   index --> scanner["scanner.ts"]
   index --> tlds["tlds.ts"]
   scanner --> allowed["allowed-domains.ts"]
+  scanner --> chars["chars.ts"]
+  scanner --> contracts
   scanner --> meta["meta.ts"]
   scanner --> ranges["ranges.ts"]
   scanner --> tlds
   ranges --> allowed
+  ranges --> chars
+  ranges --> contracts
+  ranges --> dots["dots.ts"]
   ranges --> scheme["scheme.ts"]
   ranges --> domain["domain.ts"]
   ranges --> explicit["explicit-authority.ts"]
+  ranges --> meta
+  allowed --> chars
+  allowed --> meta
   explicit --> host["explicit-host.ts"]
   explicit --> tail["authority-tail.ts"]
   explicit --> path["path.ts"]
-  host --> domain
-  host --> dots["dots.ts"]
+  explicit --> domain
+  explicit --> meta
+  host --> chars
+  host --> dots
+  host --> meta
+  tail --> chars
   tail --> dots
-  domain --> dots["dots.ts"]
+  tail --> meta
+  domain --> chars
+  domain --> dots
+  domain --> meta
   domain --> path
-  scheme --> chars["chars.ts"]
+  scheme --> chars
+  scheme --> meta
   dots --> chars
+  dots --> meta
   meta --> chars
   path --> chars
+  path --> dots
+  path --> meta
 ```
 
 ## File Responsibilities
@@ -92,7 +111,7 @@ graph TD
 | `src/explicit-host.ts`      | Localhost, port, IPv6, userinfo, underscore, IDN, emoji, and unknown-TLD host parsing.                     | Trailing prose and path-tail recovery.     |
 | `src/authority-tail.ts`     | Authority boundary trimming, glued prose detection, and spaced/defanged continuation checks.               | Host validity or bare-domain TLD policy.   |
 | `src/path.ts`               | Path, query, fragment continuation and trailing prose trimming.                                            | Scheme or TLD parsing.                     |
-| `src/ranges.ts`             | Internal range collection facade and range merging.                                                        | Public API exports.                        |
+| `src/ranges.ts`             | Bare-domain candidate policy, allowed-domain arbitration, internal range collection, and range merging.    | Public API exports or parser primitives.   |
 
 ## Matching Strategy
 
@@ -120,11 +139,13 @@ Every completed label is finalized from its original source code points through
 one whole-string NFKC normalization before raw and skeleton lookup. The label
 parser and adjacent-domain trimming share that finalization rule, so canonical
 decompositions, combining marks, and multi-character compatibility expansions
-cannot diverge between paths. Custom TLD entries are normalized before raw-set
-lookup; directional skeleton targets are then derived only from normalized
-ASCII entries. The precomputed default lookups and scanner-owned custom lookups
-are passed as prepared pairs, while low-level helpers prepare an implicit
-skeleton lookup from their custom raw set.
+cannot diverge between paths. Label and hostname limits use Unicode code-point
+counts across bare, explicit, and allowed-domain paths. Custom TLD entries are
+normalized before exact listed-TLD lookup; directional ASCII targets are then
+derived only from normalized ASCII entries. The scanner prepares one immutable
+match policy containing those lookups, the exact-host allowlist, and the spaced
+dot policy. Low-level compatibility wrappers build the same policy from their
+positional arguments.
 
 A bare two-label candidate with a literal single-character dot followed by
 whitespace and no URL-tail evidence is intentionally policy-controlled because
@@ -196,13 +217,13 @@ Masking is idempotent because ranges are collected from the original text before
 
 | Change                                  | Primary files                                           |
 | --------------------------------------- | ------------------------------------------------------- |
-| Add a new TLD behavior                  | `src/tlds.ts` + public API tests                        |
+| Add a new TLD behavior                  | `src/tlds.ts` + `tests/tlds.spec.ts`                    |
 | Change defanged dot behavior            | `src/dots.ts` + public API tests                        |
 | Change hxxp/scheme parsing              | `src/scheme.ts` + public API tests                      |
 | Change explicit host handling           | `src/explicit-host.ts` + public API tests               |
 | Change authority/prose boundaries       | `src/authority-tail.ts` + public API tests              |
 | Change path/query/fragment tails        | `src/path.ts` + public API tests                        |
-| Change source normalization/lookalikes  | `src/meta.ts` or `src/chars.ts` + public API tests      |
+| Change source normalization/lookalikes  | `src/meta.ts` or `src/chars.ts` + `tests/tlds.spec.ts`  |
 | Change scanner wrapping or prefiltering | `src/scanner.ts` + scanner tests                        |
 | Change allowed-domain behavior          | `src/allowed-domains.ts` + public API tests             |
 | Change ambiguous spaced-dot policy      | `src/contracts.ts` + `src/ranges.ts` + public API tests |

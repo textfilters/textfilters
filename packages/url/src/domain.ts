@@ -12,9 +12,9 @@ import {
   parseDot,
 } from "./dots.js";
 import {
+  countCodePoints,
   type DomainMatch,
   type Label,
-  type LabelText,
   type TextMeta,
   toSkeletonFromNormalized,
 } from "./meta.js";
@@ -24,7 +24,7 @@ const MAX_DOMAIN_TEXT_LENGTH = 253;
 const MAX_DOMAIN_LABELS = 127;
 const ASCII_ONLY_RE = /^[\x00-\x7f]*$/u;
 
-const finalizeLabelText = (source: string): LabelText => {
+const finalizeLabelText = (source: string) => {
   if (ASCII_ONLY_RE.test(source)) {
     const raw = source.toLowerCase();
     return { raw, skeleton: raw };
@@ -167,7 +167,7 @@ export const parseLabel = (
   const normalized = requiresWholeLabelNormalization
     ? finalizeLabelText(sourceText)
     : { raw: sourceText, skeleton: sourceText };
-  if (!normalized.raw || normalized.raw.length > 63) return null;
+  if (!normalized.raw || countCodePoints(normalized.raw) > 63) return null;
   return {
     start: first,
     end: last + 1,
@@ -179,8 +179,8 @@ export const parseLabel = (
 const isValidTld = (
   tldRaw: string,
   tldSkeleton: string,
-  tldSet: ReadonlySet<string>,
-  tldSkeletonSet: ReadonlySet<string>,
+  listedTlds: ReadonlySet<string>,
+  asciiTldTargets: ReadonlySet<string>,
   { allowPunycodeLike = true }: { readonly allowPunycodeLike?: boolean } = {},
 ): boolean => {
   if (!tldRaw) return false;
@@ -190,14 +190,14 @@ const isValidTld = (
   ) {
     return true;
   }
-  return tldSet.has(tldRaw) || tldSkeletonSet.has(tldSkeleton);
+  return listedTlds.has(tldRaw) || asciiTldTargets.has(tldSkeleton);
 };
 
 const trimTldTrailingProse = (
   meta: TextMeta,
   label: Label,
-  tldSet: ReadonlySet<string>,
-  tldSkeletonSet: ReadonlySet<string>,
+  listedTlds: ReadonlySet<string>,
+  asciiTldTargets: ReadonlySet<string>,
 ): Label | null => {
   let sourceText = "";
   let last = -1;
@@ -218,8 +218,8 @@ const trimTldTrailingProse = (
         isValidTld(
           normalized.raw,
           normalized.skeleton,
-          tldSet,
-          tldSkeletonSet,
+          listedTlds,
+          asciiTldTargets,
           { allowPunycodeLike: symbol !== "-" },
         )
       ) {
@@ -264,8 +264,8 @@ const hasWhitespaceInLabelSeparatorRun = (
 export const parseDomain = (
   meta: TextMeta,
   start: number,
-  tldSet: ReadonlySet<string>,
-  tldSkeletonSet: ReadonlySet<string>,
+  listedTlds: ReadonlySet<string>,
+  asciiTldTargets: ReadonlySet<string>,
   {
     allowUnknownTld = false,
     joinSingleCharacterWhitespaceRuns = true,
@@ -283,6 +283,7 @@ export const parseDomain = (
 
   const labels: Label[] = [first];
   let pos = first.pos;
+  let domainTextLength = countCodePoints(first.raw);
   // Preserve a valid host when an unrelated whitespace-wrapped dot makes the
   // later candidate invalid.
   let completedBeforeProseSeparator: DomainMatch | null = null;
@@ -293,13 +294,13 @@ export const parseDomain = (
       const trimmedTld = trimTldTrailingProse(
         meta,
         currentLabel,
-        tldSet,
-        tldSkeletonSet,
+        listedTlds,
+        asciiTldTargets,
       );
       if (
         trimmedTld &&
         hasWhitespaceInLabelSeparatorRun(meta, trimmedTld.pos) &&
-        parseDomain(meta, trimmedTld.pos, tldSet, tldSkeletonSet, {
+        parseDomain(meta, trimmedTld.pos, listedTlds, asciiTldTargets, {
           joinSingleCharacterWhitespaceRuns: false,
           splitAdjacentDomains: false,
         })
@@ -320,7 +321,12 @@ export const parseDomain = (
     if (
       !allowUnknownTld &&
       labels.length >= 2 &&
-      isValidTld(currentTld.raw, currentTld.skeleton, tldSet, tldSkeletonSet) &&
+      isValidTld(
+        currentTld.raw,
+        currentTld.skeleton,
+        listedTlds,
+        asciiTldTargets,
+      ) &&
       (isWhitespaceWrappedDot(meta, dot) || isRightSpacedDotSymbol(meta, dot))
     ) {
       completedBeforeProseSeparator = {
@@ -345,7 +351,12 @@ export const parseDomain = (
       afterDot < meta.codePoints.length &&
       meta.whitespace[afterDot] &&
       (allowUnknownTld ||
-        isValidTld(currentTld.raw, currentTld.skeleton, tldSet, tldSkeletonSet))
+        isValidTld(
+          currentTld.raw,
+          currentTld.skeleton,
+          listedTlds,
+          asciiTldTargets,
+        ))
     ) {
       // `example.com. next` is sentence punctuation after a valid TLD, not a
       // third label that should make the whole candidate fail.
@@ -356,10 +367,7 @@ export const parseDomain = (
     });
     if (!next) break;
     labels.push(next);
-    const domainTextLength =
-      labels.reduce((length, label) => length + label.raw.length, 0) +
-      labels.length -
-      1;
+    domainTextLength += countCodePoints(next.raw) + 1;
     if (
       labels.length > MAX_DOMAIN_LABELS ||
       domainTextLength > MAX_DOMAIN_TEXT_LENGTH
@@ -374,9 +382,14 @@ export const parseDomain = (
   let tld = labels[labels.length - 1];
   if (
     !allowUnknownTld &&
-    !isValidTld(tld.raw, tld.skeleton, tldSet, tldSkeletonSet)
+    !isValidTld(tld.raw, tld.skeleton, listedTlds, asciiTldTargets)
   ) {
-    const trimmedTld = trimTldTrailingProse(meta, tld, tldSet, tldSkeletonSet);
+    const trimmedTld = trimTldTrailingProse(
+      meta,
+      tld,
+      listedTlds,
+      asciiTldTargets,
+    );
     if (!trimmedTld) return completedBeforeProseSeparator;
     labels[labels.length - 1] = trimmedTld;
     tld = trimmedTld;

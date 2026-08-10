@@ -1,7 +1,7 @@
 import { lowerNfkc, stripZeroWidth } from "@textfilters/core";
 
 import { DOT_CHAR_SET } from "./chars.js";
-import type { DomainMatch, TextMeta } from "./meta.js";
+import { countCodePoints, type DomainMatch, type TextMeta } from "./meta.js";
 
 export const EMPTY_ALLOWED_DOMAINS: ReadonlySet<string> = new Set();
 
@@ -21,13 +21,13 @@ const normalizeDomainLiteral = (value: unknown): string | null => {
   if (
     !domain ||
     labels.length < 2 ||
-    Array.from(domain).length > 253 ||
+    countCodePoints(domain) > 253 ||
     /[\s/:@?#\\[\]]/u.test(domain) ||
     isIpv4Address ||
     labels.some(
       (label) =>
         label.length === 0 ||
-        Array.from(label).length > 63 ||
+        countCodePoints(label) > 63 ||
         label.startsWith("-") ||
         label.endsWith("-") ||
         !/^[\p{L}\p{N}\p{M}\p{S}_-]+$/u.test(label),

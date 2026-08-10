@@ -1,6 +1,6 @@
 import { mergeCodePointRanges } from "@textfilters/core";
 
-import { EMPTY_ALLOWED_DOMAINS, isAllowedDomain } from "./allowed-domains.js";
+import { isAllowedDomain } from "./allowed-domains.js";
 import { COMBINING_MARK_RE, isSentenceDotSymbol } from "./chars.js";
 import type { AmbiguousSpacedDotPolicy } from "./contracts.js";
 import {
@@ -13,6 +13,7 @@ import {
 import { parseDomain } from "./domain.js";
 import { parseExplicitUrlTarget } from "./explicit-authority.js";
 import {
+  countCodePoints,
   type CodePointRange,
   type DomainMatch,
   type TextMeta,
@@ -20,6 +21,13 @@ import {
 import { parseSchemePrefix } from "./scheme.js";
 
 export type UrlRangeSink = (range: CodePointRange) => boolean | void;
+
+export interface UrlMatchPolicy {
+  readonly listedTlds: ReadonlySet<string>;
+  readonly asciiTldTargets: ReadonlySet<string>;
+  readonly allowedDomains: ReadonlySet<string>;
+  readonly ambiguousSpacedDots: AmbiguousSpacedDotPolicy;
+}
 
 const SENTENCE_CLOSER_RE = /[\p{Pe}\p{Pf}]/u;
 
@@ -95,7 +103,7 @@ const maybeExpandBareSplitPrefix = (
   const firstDot = parseDot(meta, domain.labels[0]?.pos ?? domain.start);
   const hasDefangedFirstDot =
     firstDot !== null && firstDot.end > firstDot.start + 1;
-  const firstLabelLength = domain.labels[0]?.raw.length ?? 0;
+  const firstLabelLength = countCodePoints(domain.labels[0]?.raw ?? "");
   const hasSplitLabelEvidence =
     (prefixLength === 3 && firstLabelLength >= 3 && firstLabelLength <= 4) ||
     (prefixLength <= 3 &&
@@ -105,7 +113,7 @@ const maybeExpandBareSplitPrefix = (
   // Only expand a preceding word when it looks like a deliberately split first
   // host label; otherwise normal prose before a URL would be masked.
   if (!hasSplitLabelEvidence) return domain.start;
-  if (prefixLength + (domain.labels[0]?.raw.length ?? 0) > 63) {
+  if (prefixLength + firstLabelLength > 63) {
     return domain.start;
   }
   if (
@@ -225,8 +233,8 @@ const isAmbiguousRightSpacedDomain = (
 const preferCompletedDomainBeforeSpacedSeparator = (
   meta: TextMeta,
   domain: DomainMatch,
-  tldSet: ReadonlySet<string>,
-  tldSkeletonSet: ReadonlySet<string>,
+  listedTlds: ReadonlySet<string>,
+  asciiTldTargets: ReadonlySet<string>,
 ): DomainMatch => {
   const finalLabel = domain.labels[domain.labels.length - 1];
   if (!finalLabel || domain.end !== finalLabel.end) return domain;
@@ -241,8 +249,8 @@ const preferCompletedDomainBeforeSpacedSeparator = (
         nextLabel.skeleton === label.skeleton) ||
       (!label.raw.startsWith("xn--") &&
         !label.skeleton.startsWith("xn--") &&
-        !tldSet.has(label.raw) &&
-        !tldSkeletonSet.has(label.skeleton))
+        !listedTlds.has(label.raw) &&
+        !asciiTldTargets.has(label.skeleton))
     ) {
       continue;
     }
@@ -269,8 +277,8 @@ const preferCompletedDomainBeforeSpacedSeparator = (
 const maybePreferBareDomainAfterSentence = (
   meta: TextMeta,
   domain: DomainMatch,
-  tldSet: ReadonlySet<string>,
-  tldSkeletonSet: ReadonlySet<string>,
+  listedTlds: ReadonlySet<string>,
+  asciiTldTargets: ReadonlySet<string>,
   ambiguousSpacedDots: AmbiguousSpacedDotPolicy,
 ): DomainMatch | null => {
   if (isStandaloneRepeatedListProse(meta, domain)) return null;
@@ -284,8 +292,8 @@ const maybePreferBareDomainAfterSentence = (
   const completedDomain = preferCompletedDomainBeforeSpacedSeparator(
     meta,
     domain,
-    tldSet,
-    tldSkeletonSet,
+    listedTlds,
+    asciiTldTargets,
   );
   if (completedDomain !== domain) {
     return ambiguousSpacedDots === "preserve" &&
@@ -325,7 +333,7 @@ const maybePreferBareDomainAfterSentence = (
     }
     if (afterDot >= next.start || !meta.whitespace[afterDot]) continue;
 
-    const suffix = parseDomain(meta, next.start, tldSet, tldSkeletonSet);
+    const suffix = parseDomain(meta, next.start, listedTlds, asciiTldTargets);
     if (suffix && suffix.end === domain.end) {
       return isStandaloneRepeatedListProse(meta, suffix) ? null : suffix;
     }
@@ -337,8 +345,8 @@ const maybePreferBareDomainAfterSentence = (
 const parseGluedBareDomain = (
   meta: TextMeta,
   start: number,
-  tldSet: ReadonlySet<string>,
-  tldSkeletonSet: ReadonlySet<string>,
+  listedTlds: ReadonlySet<string>,
+  asciiTldTargets: ReadonlySet<string>,
 ): DomainMatch | null => {
   let cursor = start;
   let hasSeparator = false;
@@ -351,38 +359,116 @@ const parseGluedBareDomain = (
     cursor++;
   }
   if (!hasSeparator || !meta.alphaNum[cursor]) return null;
-  return parseDomain(meta, cursor, tldSet, tldSkeletonSet);
+  return parseDomain(meta, cursor, listedTlds, asciiTldTargets);
+};
+
+interface BareDomainCandidate {
+  readonly domain: DomainMatch;
+  readonly start: number;
+  readonly isAllowed: boolean;
+}
+
+interface BareDomainSelection {
+  readonly parsedDomain: DomainMatch;
+  readonly candidate: BareDomainCandidate | null;
+}
+
+const selectBareDomainCandidate = (
+  meta: TextMeta,
+  start: number,
+  consumedRanges: readonly CodePointRange[],
+  policy: UrlMatchPolicy,
+): BareDomainSelection | null => {
+  const { listedTlds, asciiTldTargets, allowedDomains, ambiguousSpacedDots } =
+    policy;
+  const parsedDomain = parseDomain(meta, start, listedTlds, asciiTldTargets);
+  if (!parsedDomain) return null;
+
+  const preferredDomain = maybePreferBareDomainAfterSentence(
+    meta,
+    parsedDomain,
+    listedTlds,
+    asciiTldTargets,
+    ambiguousSpacedDots,
+  );
+  if (!preferredDomain) return { parsedDomain, candidate: null };
+
+  const parsedStart = maybeExpandBareSplitPrefix(
+    meta,
+    parsedDomain,
+    consumedRanges,
+  );
+  const parsedDomainIsAllowed =
+    allowedDomains.size > 0 &&
+    isAllowedDomain(meta, parsedDomain, allowedDomains, parsedStart);
+  const preferredStart = maybeExpandBareSplitPrefix(
+    meta,
+    preferredDomain,
+    consumedRanges,
+  );
+  const preferredDomainIsAllowed =
+    preferredDomain === parsedDomain
+      ? parsedDomainIsAllowed
+      : allowedDomains.size > 0 &&
+        isAllowedDomain(meta, preferredDomain, allowedDomains, preferredStart);
+  const preferredFinalLabel =
+    preferredDomain.labels[preferredDomain.labels.length - 1];
+  const preferredSeparator =
+    preferredDomain !== parsedDomain && preferredFinalLabel
+      ? parseDot(meta, preferredFinalLabel.pos)
+      : null;
+  const preferredEndsBeforeListBullet =
+    preferredSeparator !== null &&
+    isWhitespaceWrappedListBullet(meta, preferredSeparator);
+  const allowedSuffixWouldBroadenTrust =
+    allowedDomains.size > 0 &&
+    preferredDomain !== parsedDomain &&
+    !preferredEndsBeforeListBullet &&
+    !parsedDomainIsAllowed &&
+    preferredDomainIsAllowed;
+  const preferredFirstLabelStart = preferredDomain.labels[0]?.start;
+  const preserveAllowedSingleLabelSubdomain =
+    parsedDomainIsAllowed &&
+    preferredDomain !== parsedDomain &&
+    parsedDomain.labels[1]?.start === preferredFirstLabelStart;
+  const preserveAllowedCompletedDomain =
+    parsedDomainIsAllowed &&
+    preferredDomain !== parsedDomain &&
+    parsedDomain.start === preferredDomain.start;
+  const useParsedDomain =
+    allowedSuffixWouldBroadenTrust ||
+    preserveAllowedSingleLabelSubdomain ||
+    preserveAllowedCompletedDomain;
+
+  return {
+    parsedDomain,
+    candidate: {
+      domain: useParsedDomain ? parsedDomain : preferredDomain,
+      start: useParsedDomain ? parsedStart : preferredStart,
+      isAllowed: useParsedDomain
+        ? parsedDomainIsAllowed
+        : preferredDomainIsAllowed,
+    },
+  };
 };
 
 export const collectRanges = (
   meta: TextMeta,
-  tldSet: ReadonlySet<string>,
-  tldSkeletonSet: ReadonlySet<string>,
-  allowedDomainSet: ReadonlySet<string> = EMPTY_ALLOWED_DOMAINS,
-  ambiguousSpacedDots: AmbiguousSpacedDotPolicy = "preserve",
+  policy: UrlMatchPolicy,
 ): readonly CodePointRange[] => {
   const ranges: CodePointRange[] = [];
-  collectRangeMatches(
-    meta,
-    tldSet,
-    tldSkeletonSet,
-    allowedDomainSet,
-    ambiguousSpacedDots,
-    (range) => {
-      ranges.push(range);
-    },
-  );
+  collectRangeMatches(meta, policy, (range) => {
+    ranges.push(range);
+  });
   return mergeCodePointRanges(ranges);
 };
 
 export const collectRangeMatches = (
   meta: TextMeta,
-  tldSet: ReadonlySet<string>,
-  tldSkeletonSet: ReadonlySet<string>,
-  allowedDomainSet: ReadonlySet<string>,
-  ambiguousSpacedDots: AmbiguousSpacedDotPolicy,
+  policy: UrlMatchPolicy,
   sink: UrlRangeSink,
 ): boolean => {
+  const { listedTlds, asciiTldTargets, allowedDomains } = policy;
   const consumedRanges: CodePointRange[] = [];
   for (let i = 0; i < meta.codePoints.length; i++) {
     const scheme = canStartScheme(meta, i) ? parseSchemePrefix(meta, i) : null;
@@ -390,12 +476,12 @@ export const collectRangeMatches = (
       const explicitTarget = parseExplicitUrlTarget(
         meta,
         scheme.pos,
-        tldSet,
-        tldSkeletonSet,
+        listedTlds,
+        asciiTldTargets,
       );
       const fallbackDomain = explicitTarget
         ? null
-        : parseDomain(meta, scheme.pos, tldSet, tldSkeletonSet, {
+        : parseDomain(meta, scheme.pos, listedTlds, asciiTldTargets, {
             allowUnknownTld: true,
           });
       const target = explicitTarget ?? fallbackDomain;
@@ -406,19 +492,19 @@ export const collectRangeMatches = (
           const domain = explicitTarget?.domain ?? fallbackDomain;
           const domainIsAllowed =
             domain !== null &&
-            allowedDomainSet.size > 0 &&
+            allowedDomains.size > 0 &&
             isAllowedDomain(
               meta,
               domain,
-              allowedDomainSet,
+              allowedDomains,
               explicitTarget?.domainStart ?? domain.start,
             );
           const gluedDomain = domainIsAllowed
-            ? parseGluedBareDomain(meta, end, tldSet, tldSkeletonSet)
+            ? parseGluedBareDomain(meta, end, listedTlds, asciiTldTargets)
             : null;
           const gluedDomainIsAllowed =
             gluedDomain !== null &&
-            isAllowedDomain(meta, gluedDomain, allowedDomainSet);
+            isAllowedDomain(meta, gluedDomain, allowedDomains);
           const protectedEnd = gluedDomainIsAllowed ? gluedDomain.end : end;
           if (!domainIsAllowed || protectedEnd > end) {
             if (sink([start, protectedEnd]) === false) return false;
@@ -438,77 +524,20 @@ export const collectRangeMatches = (
     if (!meta.alphaNum[i] || !hasBareStartBoundary(meta, i, consumedRanges)) {
       continue;
     }
-    const parsedDomain = parseDomain(meta, i, tldSet, tldSkeletonSet);
-    if (!parsedDomain) continue;
-    const preferredDomain = maybePreferBareDomainAfterSentence(
+    const selection = selectBareDomainCandidate(
       meta,
-      parsedDomain,
-      tldSet,
-      tldSkeletonSet,
-      ambiguousSpacedDots,
+      i,
+      consumedRanges,
+      policy,
     );
-    if (!preferredDomain) {
-      i = Math.max(i, parsedDomain.end - 1);
+    if (!selection) continue;
+    if (!selection.candidate) {
+      i = Math.max(i, selection.parsedDomain.end - 1);
       continue;
     }
-    const parsedStart = maybeExpandBareSplitPrefix(
-      meta,
-      parsedDomain,
-      consumedRanges,
-    );
-    const parsedDomainIsAllowed =
-      allowedDomainSet.size > 0 &&
-      isAllowedDomain(meta, parsedDomain, allowedDomainSet, parsedStart);
-    const preferredStart = maybeExpandBareSplitPrefix(
-      meta,
-      preferredDomain,
-      consumedRanges,
-    );
-    const preferredDomainIsAllowed =
-      preferredDomain === parsedDomain
-        ? parsedDomainIsAllowed
-        : allowedDomainSet.size > 0 &&
-          isAllowedDomain(
-            meta,
-            preferredDomain,
-            allowedDomainSet,
-            preferredStart,
-          );
-    const preferredFinalLabel =
-      preferredDomain.labels[preferredDomain.labels.length - 1];
-    const preferredSeparator =
-      preferredDomain !== parsedDomain && preferredFinalLabel
-        ? parseDot(meta, preferredFinalLabel.pos)
-        : null;
-    const preferredEndsBeforeListBullet =
-      preferredSeparator !== null &&
-      isWhitespaceWrappedListBullet(meta, preferredSeparator);
-    const allowedSuffixWouldBroadenTrust =
-      allowedDomainSet.size > 0 &&
-      preferredDomain !== parsedDomain &&
-      !preferredEndsBeforeListBullet &&
-      !parsedDomainIsAllowed &&
-      preferredDomainIsAllowed;
-    const preferredFirstLabelStart = preferredDomain.labels[0]?.start;
-    const preserveAllowedSingleLabelSubdomain =
-      parsedDomainIsAllowed &&
-      preferredDomain !== parsedDomain &&
-      parsedDomain.labels[1]?.start === preferredFirstLabelStart;
-    const preserveAllowedCompletedDomain =
-      parsedDomainIsAllowed &&
-      preferredDomain !== parsedDomain &&
-      parsedDomain.start === preferredDomain.start;
-    const useParsedDomain =
-      allowedSuffixWouldBroadenTrust ||
-      preserveAllowedSingleLabelSubdomain ||
-      preserveAllowedCompletedDomain;
-    const domain = useParsedDomain ? parsedDomain : preferredDomain;
-    const start = useParsedDomain ? parsedStart : preferredStart;
-    const domainIsAllowed = useParsedDomain
-      ? parsedDomainIsAllowed
-      : preferredDomainIsAllowed;
+    const { domain, start, isAllowed } = selection.candidate;
     if (!hasBareBoundary(meta, start, domain.end, consumedRanges)) continue;
-    if (!domainIsAllowed) {
+    if (!isAllowed) {
       if (sink([start, domain.end]) === false) return false;
     }
     consumedRanges.push([start, domain.end]);

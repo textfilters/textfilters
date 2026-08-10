@@ -25,8 +25,8 @@ export interface ExplicitUrlTargetMatch extends Match {
 export const parseExplicitUrlTarget = (
   meta: TextMeta,
   start: number,
-  tldSet: ReadonlySet<string>,
-  tldSkeletonSet: ReadonlySet<string>,
+  listedTlds: ReadonlySet<string>,
+  asciiTldTargets: ReadonlySet<string>,
 ): ExplicitUrlTargetMatch | null => {
   let pos = start;
   let skippedAuthorityWhitespace = false;
@@ -90,7 +90,7 @@ export const parseExplicitUrlTarget = (
   let parsedDomain: DomainMatch | null = null;
   let hostEnd = parseBracketedIpv6Host(meta, hostStart, authorityEnd);
   if (hostEnd < 0) {
-    const domain = parseDomain(meta, hostStart, tldSet, tldSkeletonSet, {
+    const domain = parseDomain(meta, hostStart, listedTlds, asciiTldTargets, {
       allowUnknownTld: true,
     });
     parsedDomain = domain;
@@ -150,8 +150,8 @@ export const parseExplicitUrlTarget = (
           parseDomain(
             meta,
             spacedHostContinuation.start,
-            tldSet,
-            tldSkeletonSet,
+            listedTlds,
+            asciiTldTargets,
             { allowUnknownTld: true },
           );
         return {

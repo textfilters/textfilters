@@ -1,6 +1,11 @@
 import { AUTHORITY_TRAILING_CHARS } from "./chars.js";
 import { parseDot } from "./dots.js";
-import type { DomainMatch, Label, TextMeta } from "./meta.js";
+import {
+  countCodePoints,
+  type DomainMatch,
+  type Label,
+  type TextMeta,
+} from "./meta.js";
 
 interface ExplicitHostLabel extends Label {
   readonly hasNonAsciiSymbol: boolean;
@@ -166,7 +171,7 @@ export const parseExplicitHostLabel = (
     break;
   }
 
-  if (first < 0 || raw.length === 0 || raw.length > 63) return null;
+  if (first < 0 || raw.length === 0 || countCodePoints(raw) > 63) return null;
   return { start: first, end: last + 1, pos, raw, skeleton, hasNonAsciiSymbol };
 };
 

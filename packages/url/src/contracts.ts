@@ -11,6 +11,8 @@ export interface UrlFilterConfig {
   readonly ambiguousSpacedDots?: AmbiguousSpacedDotPolicy;
 }
 
+export type UrlScannerConfig = Omit<UrlFilterConfig, "maskChar">;
+
 export const URL_FILTER_NAME = "url";
 
 export interface UrlFilter {

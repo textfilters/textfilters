@@ -34,16 +34,17 @@ export interface Label extends Match {
   readonly skeleton: string;
 }
 
-export interface LabelText {
-  readonly raw: string;
-  readonly skeleton: string;
-}
-
 export interface DomainMatch extends Match {
   readonly labels: readonly Label[];
 }
 
 export type CodePointRange = TextCodePointRange;
+
+export const countCodePoints = (value: string): number => {
+  let length = 0;
+  for (const _codePoint of value) length++;
+  return length;
+};
 
 export const toRawChar = (ch: string): string =>
   Array.from(lowerNfkc(ch))[0] ?? "";

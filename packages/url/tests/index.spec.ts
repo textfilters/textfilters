@@ -415,6 +415,13 @@ describe("compatibility behavior", () => {
     expect(f.censor("freeaccount.biz")).toBe("freeaccount.biz");
   });
 
+  it("falls back to default TLDs when custom entries normalize empty", () => {
+    const f = createUrlFilter({ tlds: ["", "   "] });
+    expect(f.censor("visit example.com now")).toBe(
+      `visit ${mask("example.com")} now`,
+    );
+  });
+
   it("normalizes custom uppercase TLDs and preserves path punctuation behavior", () => {
     const f = createUrlFilter({ tlds: ["INTERNAL"] });
     expect(f.censor("go EXAMPLE.INTERNAL now")).toBe(

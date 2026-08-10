@@ -19,13 +19,13 @@ export {
   type UrlRangeScanResult,
   type UrlScanHints,
   type UrlScanInput,
+  type UrlScannerConfig,
 } from "./contracts.js";
 export {
   checkUrlRanges,
   createUrlScanner,
   scanUrlRangeMatches,
   scanUrlRanges,
-  type UrlScannerConfig,
 } from "./scanner.js";
 
 export function createUrlFilter(config: UrlFilterConfig = {}): UrlFilter {

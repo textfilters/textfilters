@@ -141,5 +141,5 @@ export const normalizeTlds = (
     seen.add(tld);
     out.push(tld);
   }
-  return out;
+  return out.length > 0 ? out : DEFAULT_TLDS;
 };
