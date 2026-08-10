@@ -105,10 +105,10 @@ graph TD
 | `src/tlds.ts`               | Versioned default IANA TLD data, TLD normalization, and derived lookup compilation.                        | Host parsing or URL range collection.      |
 | `src/allowed-domains.ts`    | Exact allowed-domain normalization and parsed-host comparison.                                             | Network loading, caching, or suffix trust. |
 | `src/chars.ts`              | Shared character sets, punctuation policy, lookalike map, and static parser character arrays.              | Parser control flow.                       |
-| `src/meta.ts`               | Source metadata, raw and skeleton views, and low-level consume helpers.                                    | URL-specific matching policy.              |
+| `src/meta.ts`               | Source metadata, raw and skeleton views, shared hostname limits, and low-level consume helpers.            | URL-specific matching policy.              |
 | `src/scheme.ts`             | Real, split, hxxp, and defanged scheme parsing.                                                            | Host or path parsing.                      |
 | `src/dots.ts`               | Real, Unicode, bracketed, word, and Russian defanged dot parsing.                                          | TLD validation.                            |
-| `src/domain.ts`             | Bare domain labels, separators, TLD validation, and domain path tails.                                     | Explicit authority-only host rules.        |
+| `src/domain.ts`             | Bare domain labels, separators, TLD validation, candidate boundary evidence, and domain path tails.        | Explicit authority-only host rules.        |
 | `src/explicit-authority.ts` | Explicit-scheme authority orchestration and final range construction.                                      | Low-level host or tail parsing.            |
 | `src/explicit-host.ts`      | Localhost, port, IPv6, userinfo, underscore, IDN, emoji, and unknown-TLD host parsing.                     | Trailing prose and path-tail recovery.     |
 | `src/authority-tail.ts`     | Authority boundary trimming, glued prose detection, and spaced/defanged continuation checks.               | Host validity or bare-domain TLD policy.   |
@@ -122,6 +122,10 @@ arrays. `raw` text is NFKC-normalized and lowercased through
 `@textfilters/core`. `skeleton` additionally folds a versioned set of
 single-code-point Unicode letter confusables toward ASCII so obfuscated hosts
 and schemes can be compared against ASCII rules.
+
+Scanner integrations reuse the caller's prepared `codePoints` view when
+building metadata. Direct text helpers create the same view lazily after the
+candidate prefilter succeeds.
 
 Ranges always point back to the original code point indexes. This keeps masking length-preserving and avoids recalculating offsets after normalization.
 
@@ -158,6 +162,11 @@ policy-controlled because its suffix is identical to sentence punctuation.
 `block` treats it as a defanged domain. Explicit schemes, paths, queries,
 fragments, ports, non-literal dot markers, and other stronger URL evidence are
 unaffected by this policy.
+
+Bare-domain parsing returns the complete parsed candidate together with any
+domain selected by an internal sentence or completed-host boundary. Range
+collection then applies prose policy and allowed-domain arbitration once,
+without reparsing the selected suffix.
 
 Explicit authorities are parsed after a scheme and can use broader host syntax than bare domains. That path accepts localhost, ports, IPv6 bracket hosts, userinfo, underscores, IDN and emoji labels, and unknown TLDs.
 
@@ -220,18 +229,18 @@ Masking is idempotent because ranges are collected from the original text before
 
 ## Change Guide
 
-| Change                                  | Primary files                                           |
-| --------------------------------------- | ------------------------------------------------------- |
-| Add a new TLD behavior                  | `src/tlds.ts` + `tests/tlds.spec.ts`                    |
-| Change defanged dot behavior            | `src/dots.ts` + public API tests                        |
-| Change hxxp/scheme parsing              | `src/scheme.ts` + public API tests                      |
-| Change explicit host handling           | `src/explicit-host.ts` + public API tests               |
-| Change authority/prose boundaries       | `src/authority-tail.ts` + public API tests              |
-| Change path/query/fragment tails        | `src/path.ts` + public API tests                        |
-| Change source normalization/lookalikes  | `src/meta.ts` or `src/chars.ts` + `tests/tlds.spec.ts`  |
-| Change scanner wrapping or prefiltering | `src/scanner.ts` + scanner tests                        |
-| Change allowed-domain behavior          | `src/allowed-domains.ts` + public API tests             |
-| Change ambiguous spaced-dot policy      | `src/contracts.ts` + `src/ranges.ts` + public API tests |
+| Change                                  | Primary files                                                                                          |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| Add a new TLD behavior                  | `src/tlds.ts` + `tests/tlds.spec.ts`                                                                   |
+| Change defanged dot behavior            | `src/dots.ts` + public API tests                                                                       |
+| Change hxxp/scheme parsing              | `src/scheme.ts` + public API tests                                                                     |
+| Change explicit host handling           | `src/explicit-host.ts` + public API tests                                                              |
+| Change authority/prose boundaries       | `src/authority-tail.ts` + public API tests                                                             |
+| Change path/query/fragment tails        | `src/path.ts` + public API tests                                                                       |
+| Change source normalization/lookalikes  | `src/meta.ts` or `src/chars.ts` + `tests/tlds.spec.ts`                                                 |
+| Change scanner wrapping or prefiltering | `src/scanner.ts` + scanner tests                                                                       |
+| Change allowed-domain behavior          | `src/allowed-domains.ts` + public API tests                                                            |
+| Change ambiguous spaced-dot policy      | `src/contracts.ts`, `src/chars.ts`, `src/dots.ts`, `src/domain.ts`, `src/ranges.ts` + public API tests |
 
 ## Safety Rules
 

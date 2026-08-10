@@ -94,6 +94,23 @@ describe("URL scanner", () => {
     });
   });
 
+  it("keeps prepared astral code point ranges aligned across scanner paths", () => {
+    const scanner = createUrlScanner();
+    const text = "😀 visit example.com now";
+    const input = { text, codePoints: Array.from(text) };
+    const expected: readonly Range[] = [[8, 19]];
+    const seen: Range[] = [];
+
+    expect(scanner.check(input)).toBe(true);
+    expect(scanner.scan(input)).toEqual({ ranges: expected });
+    expect(
+      scanner.scan(input, (match) => {
+        seen.push(match.range);
+      }),
+    ).toBe(true);
+    expect(seen).toEqual(expected);
+  });
+
   it("keeps the public censor wrapper aligned with scanner ranges", () => {
     const text = "go https://example.com/path now";
     const scanner = createUrlScanner();

@@ -56,6 +56,21 @@ const hintedInput = (text) => ({
     hasColon: text.includes(":"),
   },
 });
+// Prepare scanner inputs outside timed loops so steady-state rows measure the
+// scanner rather than repeated input construction.
+const scannerInputs = {
+  shortClean: input(SHORT_CLEAN),
+  longClean: input(LONG_CLEAN),
+  directUrl: input(DIRECT_URL),
+  bareDomain: input(BARE_DOMAIN),
+  allowlistHit: input(ALLOWLISTED_URL),
+  allowlistMiss: input(ALLOWLIST_MISS),
+  lateMatch: input(LATE_MATCH),
+};
+const hintedScannerInputs = {
+  shortClean: hintedInput(SHORT_CLEAN),
+  longClean: hintedInput(LONG_CLEAN),
+};
 
 printResults([
   bench("createUrlFilter()", () => createUrlFilter(), SETUP_ITERATIONS),
@@ -70,23 +85,23 @@ printResults([
     () => createUrlScanner({ allowedDomains: ALLOWED_DOMAINS }),
     SETUP_ITERATIONS,
   ),
-  bench("check short clean", () => scanner.check(input(SHORT_CLEAN))),
+  bench("check short clean", () => scanner.check(scannerInputs.shortClean)),
   bench("check hinted short clean", () =>
-    scanner.check(hintedInput(SHORT_CLEAN)),
+    scanner.check(hintedScannerInputs.shortClean),
   ),
-  bench("check long clean", () => scanner.check(input(LONG_CLEAN))),
+  bench("check long clean", () => scanner.check(scannerInputs.longClean)),
   bench("check hinted long clean", () =>
-    scanner.check(hintedInput(LONG_CLEAN)),
+    scanner.check(hintedScannerInputs.longClean),
   ),
-  bench("check direct URL", () => scanner.check(input(DIRECT_URL))),
-  bench("check bare domain", () => scanner.check(input(BARE_DOMAIN))),
+  bench("check direct URL", () => scanner.check(scannerInputs.directUrl)),
+  bench("check bare domain", () => scanner.check(scannerInputs.bareDomain)),
   bench("check allowlist hit", () =>
-    allowlistScanner.check(input(ALLOWLISTED_URL)),
+    allowlistScanner.check(scannerInputs.allowlistHit),
   ),
   bench("check allowlist miss", () =>
-    allowlistScanner.check(input(ALLOWLIST_MISS)),
+    allowlistScanner.check(scannerInputs.allowlistMiss),
   ),
-  bench("check late-match URL", () => scanner.check(input(LATE_MATCH))),
+  bench("check late-match URL", () => scanner.check(scannerInputs.lateMatch)),
   bench("censor short clean", () => filter.censor(SHORT_CLEAN)),
   bench("censor long clean", () => filter.censor(LONG_CLEAN)),
   bench("censor direct URL", () => filter.censor(DIRECT_URL)),

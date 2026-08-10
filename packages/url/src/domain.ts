@@ -415,3 +415,132 @@ export const parseDomain = (
 
   return { start: first.start, end, pos, labels };
 };
+
+const hasOnlyIgnorableFormatting = (
+  meta: TextMeta,
+  start: number,
+  end: number,
+): boolean => {
+  for (let cursor = start; cursor < end; cursor++) {
+    if (!isIgnorableFormatting(meta, cursor)) return false;
+  }
+  return true;
+};
+
+export const hasAmbiguousRightSpacedSuffix = (
+  meta: TextMeta,
+  domain: DomainMatch,
+): boolean => {
+  const previous = domain.labels.at(-2);
+  const tld = domain.labels.at(-1);
+  if (!previous || !tld || domain.end !== tld.end) return false;
+
+  const dot = parseDot(meta, previous.pos);
+  return (
+    dot !== null &&
+    hasOnlyIgnorableFormatting(meta, previous.end, dot.start) &&
+    isRightSpacedSentenceDot(meta, dot, tld.start)
+  );
+};
+
+const preferCompletedDomainBeforeSpacedSeparator = (
+  meta: TextMeta,
+  domain: DomainMatch,
+  listedTlds: ReadonlySet<string>,
+  asciiTldTargets: ReadonlySet<string>,
+): DomainMatch => {
+  const finalLabel = domain.labels.at(-1);
+  if (!finalLabel || domain.end !== finalLabel.end) return domain;
+
+  for (let index = 1; index < domain.labels.length - 1; index++) {
+    const label = domain.labels[index];
+    const nextLabel = domain.labels[index + 1];
+    if (
+      !label ||
+      (nextLabel !== undefined &&
+        nextLabel.raw === label.raw &&
+        nextLabel.skeleton === label.skeleton) ||
+      (!label.raw.startsWith("xn--") &&
+        !label.skeleton.startsWith("xn--") &&
+        !listedTlds.has(label.raw) &&
+        !asciiTldTargets.has(label.skeleton))
+    ) {
+      continue;
+    }
+
+    const dot = parseDot(meta, label.pos);
+    if (
+      !dot ||
+      (!isWhitespaceWrappedDot(meta, dot) && !isRightSpacedDotSymbol(meta, dot))
+    ) {
+      continue;
+    }
+
+    return {
+      start: domain.start,
+      end: label.end,
+      pos: label.pos,
+      labels: domain.labels.slice(0, index + 1),
+    };
+  }
+
+  return domain;
+};
+
+const preferDomainAfterSentence = (
+  meta: TextMeta,
+  domain: DomainMatch,
+): DomainMatch => {
+  for (let index = domain.labels.length - 2; index >= 1; index--) {
+    const previous = domain.labels[index - 1];
+    const next = domain.labels[index];
+    if (!previous || !next) continue;
+
+    const dot = parseDot(meta, previous.pos);
+    if (
+      !dot ||
+      !hasOnlyIgnorableFormatting(meta, previous.end, dot.start) ||
+      !isRightSpacedSentenceDot(meta, dot, next.start)
+    ) {
+      continue;
+    }
+
+    return {
+      start: next.start,
+      end: domain.end,
+      pos: domain.pos,
+      labels: domain.labels.slice(index),
+    };
+  }
+
+  return domain;
+};
+
+interface BareDomainCandidates {
+  readonly parsedDomain: DomainMatch;
+  readonly boundaryDomain: DomainMatch;
+}
+
+export const parseBareDomainCandidates = (
+  meta: TextMeta,
+  start: number,
+  listedTlds: ReadonlySet<string>,
+  asciiTldTargets: ReadonlySet<string>,
+): BareDomainCandidates | null => {
+  const parsedDomain = parseDomain(meta, start, listedTlds, asciiTldTargets);
+  if (!parsedDomain) return null;
+
+  const completedDomain = preferCompletedDomainBeforeSpacedSeparator(
+    meta,
+    parsedDomain,
+    listedTlds,
+    asciiTldTargets,
+  );
+  return {
+    parsedDomain,
+    boundaryDomain:
+      completedDomain === parsedDomain
+        ? preferDomainAfterSentence(meta, parsedDomain)
+        : completedDomain,
+  };
+};

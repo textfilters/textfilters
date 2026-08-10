@@ -87,7 +87,7 @@ export function createUrlScanner(
   function scan(input: UrlScanInput, sink?: UrlRangeMatchSink) {
     if (sink === undefined) {
       return {
-        ranges: scanUrlRangesWithPolicy(input.text, policy),
+        ranges: scanUrlInputRangesWithPolicy(input, policy),
       };
     }
 
@@ -133,6 +133,15 @@ const scanUrlRangesWithPolicy = (
   return collectRanges(meta, policy);
 };
 
+const scanUrlInputRangesWithPolicy = (
+  input: UrlScanInput,
+  policy: UrlMatchPolicy,
+): readonly TextCodePointRange[] => {
+  const meta = createUrlInputMeta(input);
+  if (!meta) return [];
+  return collectRanges(meta, policy);
+};
+
 export function checkUrlRanges(
   input: UrlScanInput,
   listedTlds: ReadonlySet<string> = DEFAULT_TLD_LOOKUPS.listedTlds,
@@ -155,9 +164,8 @@ const checkUrlRangesWithPolicy = (
   input: UrlScanInput,
   policy: UrlMatchPolicy,
 ): boolean => {
-  if (!hasUrlCandidateInput(input)) return false;
-
-  const meta = createMeta(input.text);
+  const meta = createUrlInputMeta(input);
+  if (!meta) return false;
   let found = false;
   collectRangeMatches(meta, policy, () => {
     found = true;
@@ -191,11 +199,13 @@ const scanUrlRangeMatchesWithPolicy = (
   sink: UrlRangeMatchSink,
   policy: UrlMatchPolicy,
 ): boolean => {
-  if (!hasUrlCandidateInput(input)) return true;
-
-  const meta = createMeta(input.text);
+  const meta = createUrlInputMeta(input);
+  if (!meta) return true;
   return collectRangeMatches(meta, policy, (range) => sink({ range }));
 };
+
+const createUrlInputMeta = (input: UrlScanInput) =>
+  hasUrlCandidateInput(input) ? createMeta(input.text, input.codePoints) : null;
 
 function hasUrlCandidateInput(input: UrlScanInput): boolean {
   if (!input.text) return false;
@@ -206,10 +216,9 @@ function hasUrlCandidateInput(input: UrlScanInput): boolean {
     hints.hasDot === false &&
     hints.hasSlash === false &&
     hints.hasColon === false &&
-    hints.hasNonAscii === false &&
-    !hasUrlWordCandidate(input.text)
+    hints.hasNonAscii === false
   ) {
-    return false;
+    return hasAsciiUrlWordCandidate(input.text);
   }
 
   return hasUrlCandidate(input.text);
@@ -235,14 +244,12 @@ function hasUrlCandidate(source: string): boolean {
   );
 }
 
-function hasUrlWordCandidate(source: string): boolean {
-  const normalized = stripZeroWidth(lowerNfkc(source));
-  const skeleton = toCandidateSkeleton(normalized);
+function hasAsciiUrlWordCandidate(source: string): boolean {
+  const normalized = source.toLowerCase();
   return (
     normalized.includes("http") ||
     normalized.includes("hxxp") ||
-    DOT_WORDS_SKELETON.some((word) => hasSplitWordCandidate(skeleton, word)) ||
-    DOT_WORDS_RAW.some((word) => hasSplitWordCandidate(normalized, word))
+    DOT_WORDS_SKELETON.some((word) => hasSplitWordCandidate(normalized, word))
   );
 }
 

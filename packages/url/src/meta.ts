@@ -68,8 +68,10 @@ export const toSkeletonChars = (value: string): string[] =>
 
 // TextMeta stores parallel per-code-point views so later parsers can reason in
 // stable code-point offsets while still preserving UTF-16 lengths when masking.
-export const createMeta = (source: string): TextMeta => {
-  const codePoints = Array.from(source);
+export const createMeta = (
+  source: string,
+  codePoints: readonly string[] = Array.from(source),
+): TextMeta => {
   const raw: string[] = new Array(codePoints.length);
   const skeleton: string[] = new Array(codePoints.length);
   const symbol: string[] = new Array(codePoints.length);

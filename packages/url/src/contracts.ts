@@ -29,6 +29,7 @@ export interface UrlScanHints {
 
 export interface UrlScanInput {
   readonly text: string;
+  /** The reusable `Array.from(text)` code-point view prepared by the caller. */
   readonly codePoints: readonly string[];
   readonly hints?: UrlScanHints;
 }

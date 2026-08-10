@@ -5,13 +5,14 @@ import { COMBINING_MARK_RE } from "./chars.js";
 import type { AmbiguousSpacedDotPolicy } from "./contracts.js";
 import {
   isIgnorableFormatting,
-  isRightSpacedDotSymbol,
-  isRightSpacedSentenceDot,
-  isWhitespaceWrappedDot,
   isWhitespaceWrappedListSeparator,
   parseDot,
 } from "./dots.js";
-import { parseDomain } from "./domain.js";
+import {
+  hasAmbiguousRightSpacedSuffix,
+  parseBareDomainCandidates,
+  parseDomain,
+} from "./domain.js";
 import { parseExplicitUrlTarget } from "./explicit-authority.js";
 import {
   countCodePoints,
@@ -157,17 +158,6 @@ const isListSpacing = (meta: TextMeta, start: number, end: number): boolean => {
   return true;
 };
 
-const hasOnlyIgnorableFormatting = (
-  meta: TextMeta,
-  start: number,
-  end: number,
-): boolean => {
-  for (let cursor = start; cursor < end; cursor++) {
-    if (!isIgnorableFormatting(meta, cursor)) return false;
-  }
-  return true;
-};
-
 const isStandaloneRepeatedListProse = (
   meta: TextMeta,
   domain: DomainMatch,
@@ -208,25 +198,6 @@ const isStandaloneRepeatedListProse = (
   return true;
 };
 
-const hasAmbiguousRightSpacedSuffix = (
-  meta: TextMeta,
-  domain: DomainMatch,
-): boolean => {
-  const previous = domain.labels.at(-2);
-  const tld = domain.labels.at(-1);
-  if (!previous || !tld || domain.end !== tld.end) return false;
-
-  const dot = parseDot(meta, previous.pos);
-  if (
-    !dot ||
-    !hasOnlyIgnorableFormatting(meta, previous.end, dot.start) ||
-    !isRightSpacedSentenceDot(meta, dot, tld.start)
-  ) {
-    return false;
-  }
-  return true;
-};
-
 const shouldPreserveBareDomainAsProse = (
   meta: TextMeta,
   domain: DomainMatch,
@@ -235,104 +206,6 @@ const shouldPreserveBareDomainAsProse = (
   isStandaloneRepeatedListProse(meta, domain) ||
   (ambiguousSpacedDots === "preserve" &&
     hasAmbiguousRightSpacedSuffix(meta, domain));
-
-const preferCompletedDomainBeforeSpacedSeparator = (
-  meta: TextMeta,
-  domain: DomainMatch,
-  listedTlds: ReadonlySet<string>,
-  asciiTldTargets: ReadonlySet<string>,
-): DomainMatch => {
-  const finalLabel = domain.labels[domain.labels.length - 1];
-  if (!finalLabel || domain.end !== finalLabel.end) return domain;
-
-  for (let index = 1; index < domain.labels.length - 1; index++) {
-    const label = domain.labels[index];
-    const nextLabel = domain.labels[index + 1];
-    if (
-      !label ||
-      (nextLabel !== undefined &&
-        nextLabel.raw === label.raw &&
-        nextLabel.skeleton === label.skeleton) ||
-      (!label.raw.startsWith("xn--") &&
-        !label.skeleton.startsWith("xn--") &&
-        !listedTlds.has(label.raw) &&
-        !asciiTldTargets.has(label.skeleton))
-    ) {
-      continue;
-    }
-
-    const dot = parseDot(meta, label.pos);
-    if (
-      !dot ||
-      (!isWhitespaceWrappedDot(meta, dot) && !isRightSpacedDotSymbol(meta, dot))
-    ) {
-      continue;
-    }
-
-    return {
-      start: domain.start,
-      end: label.end,
-      pos: label.pos,
-      labels: domain.labels.slice(0, index + 1),
-    };
-  }
-
-  return domain;
-};
-
-const maybePreferBareDomainAfterSentence = (
-  meta: TextMeta,
-  domain: DomainMatch,
-  listedTlds: ReadonlySet<string>,
-  asciiTldTargets: ReadonlySet<string>,
-  ambiguousSpacedDots: AmbiguousSpacedDotPolicy,
-): DomainMatch | null => {
-  if (shouldPreserveBareDomainAsProse(meta, domain, ambiguousSpacedDots)) {
-    return null;
-  }
-
-  const completedDomain = preferCompletedDomainBeforeSpacedSeparator(
-    meta,
-    domain,
-    listedTlds,
-    asciiTldTargets,
-  );
-  if (completedDomain !== domain) {
-    return shouldPreserveBareDomainAsProse(
-      meta,
-      completedDomain,
-      ambiguousSpacedDots,
-    )
-      ? null
-      : completedDomain;
-  }
-
-  // A sentence-ending literal dot can otherwise turn the preceding prose and
-  // the following standalone host into one multi-label domain.
-  for (let index = domain.labels.length - 2; index >= 1; index--) {
-    const previous = domain.labels[index - 1];
-    const next = domain.labels[index];
-    if (!previous || !next) continue;
-
-    const dot = parseDot(meta, previous.pos);
-    if (
-      !dot ||
-      !hasOnlyIgnorableFormatting(meta, previous.end, dot.start) ||
-      !isRightSpacedSentenceDot(meta, dot, next.start)
-    ) {
-      continue;
-    }
-
-    const suffix = parseDomain(meta, next.start, listedTlds, asciiTldTargets);
-    if (suffix && suffix.end === domain.end) {
-      return shouldPreserveBareDomainAsProse(meta, suffix, ambiguousSpacedDots)
-        ? null
-        : suffix;
-    }
-  }
-
-  return domain;
-};
 
 const parseGluedBareDomain = (
   meta: TextMeta,
@@ -373,17 +246,25 @@ const selectBareDomainCandidate = (
 ): BareDomainSelection | null => {
   const { listedTlds, asciiTldTargets, allowedDomains, ambiguousSpacedDots } =
     policy;
-  const parsedDomain = parseDomain(meta, start, listedTlds, asciiTldTargets);
-  if (!parsedDomain) return null;
-
-  const preferredDomain = maybePreferBareDomainAfterSentence(
+  const parsed = parseBareDomainCandidates(
     meta,
-    parsedDomain,
+    start,
     listedTlds,
     asciiTldTargets,
-    ambiguousSpacedDots,
   );
-  if (!preferredDomain) return { parsedDomain, candidate: null };
+  if (!parsed) return null;
+  const { parsedDomain, boundaryDomain } = parsed;
+  if (
+    shouldPreserveBareDomainAsProse(meta, parsedDomain, ambiguousSpacedDots) ||
+    (boundaryDomain !== parsedDomain &&
+      shouldPreserveBareDomainAsProse(
+        meta,
+        boundaryDomain,
+        ambiguousSpacedDots,
+      ))
+  ) {
+    return { parsedDomain, candidate: null };
+  }
 
   const parsedStart = maybeExpandBareSplitPrefix(
     meta,
@@ -393,40 +274,40 @@ const selectBareDomainCandidate = (
   const parsedDomainIsAllowed =
     allowedDomains.size > 0 &&
     isAllowedDomain(meta, parsedDomain, allowedDomains, parsedStart);
-  const preferredStart = maybeExpandBareSplitPrefix(
+  const boundaryStart = maybeExpandBareSplitPrefix(
     meta,
-    preferredDomain,
+    boundaryDomain,
     consumedRanges,
   );
-  const preferredDomainIsAllowed =
-    preferredDomain === parsedDomain
+  const boundaryDomainIsAllowed =
+    boundaryDomain === parsedDomain
       ? parsedDomainIsAllowed
       : allowedDomains.size > 0 &&
-        isAllowedDomain(meta, preferredDomain, allowedDomains, preferredStart);
-  const preferredFinalLabel =
-    preferredDomain.labels[preferredDomain.labels.length - 1];
-  const preferredSeparator =
-    preferredDomain !== parsedDomain && preferredFinalLabel
-      ? parseDot(meta, preferredFinalLabel.pos)
+        isAllowedDomain(meta, boundaryDomain, allowedDomains, boundaryStart);
+  const boundaryFinalLabel =
+    boundaryDomain.labels[boundaryDomain.labels.length - 1];
+  const boundarySeparator =
+    boundaryDomain !== parsedDomain && boundaryFinalLabel
+      ? parseDot(meta, boundaryFinalLabel.pos)
       : null;
-  const preferredEndsBeforeListSeparator =
-    preferredSeparator !== null &&
-    isWhitespaceWrappedListSeparator(meta, preferredSeparator);
+  const boundaryEndsBeforeListSeparator =
+    boundarySeparator !== null &&
+    isWhitespaceWrappedListSeparator(meta, boundarySeparator);
   const allowedSuffixWouldBroadenTrust =
     allowedDomains.size > 0 &&
-    preferredDomain !== parsedDomain &&
-    !preferredEndsBeforeListSeparator &&
+    boundaryDomain !== parsedDomain &&
+    !boundaryEndsBeforeListSeparator &&
     !parsedDomainIsAllowed &&
-    preferredDomainIsAllowed;
-  const preferredFirstLabelStart = preferredDomain.labels[0]?.start;
+    boundaryDomainIsAllowed;
+  const boundaryFirstLabelStart = boundaryDomain.labels[0]?.start;
   const preserveAllowedSingleLabelSubdomain =
     parsedDomainIsAllowed &&
-    preferredDomain !== parsedDomain &&
-    parsedDomain.labels[1]?.start === preferredFirstLabelStart;
+    boundaryDomain !== parsedDomain &&
+    parsedDomain.labels[1]?.start === boundaryFirstLabelStart;
   const preserveAllowedCompletedDomain =
     parsedDomainIsAllowed &&
-    preferredDomain !== parsedDomain &&
-    parsedDomain.start === preferredDomain.start;
+    boundaryDomain !== parsedDomain &&
+    parsedDomain.start === boundaryDomain.start;
   const useParsedDomain =
     allowedSuffixWouldBroadenTrust ||
     preserveAllowedSingleLabelSubdomain ||
@@ -435,11 +316,11 @@ const selectBareDomainCandidate = (
   return {
     parsedDomain,
     candidate: {
-      domain: useParsedDomain ? parsedDomain : preferredDomain,
-      start: useParsedDomain ? parsedStart : preferredStart,
+      domain: useParsedDomain ? parsedDomain : boundaryDomain,
+      start: useParsedDomain ? parsedStart : boundaryStart,
       isAllowed: useParsedDomain
         ? parsedDomainIsAllowed
-        : preferredDomainIsAllowed,
+        : boundaryDomainIsAllowed,
     },
   };
 };
