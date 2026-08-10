@@ -1,5 +1,12 @@
+import { lowerNfkc, stripZeroWidth } from "@textfilters/core";
 import { describe, expect, it } from "vitest";
 
+import {
+  DOT_CHAR_SET,
+  LETTER_OR_DIGIT_RE,
+  LOOKALIKE_TO_ASCII,
+  WHITESPACE_RE,
+} from "../src/chars.js";
 import {
   checkUrlRanges,
   createUrlFilter,
@@ -11,6 +18,7 @@ import {
   type UrlRangeScanResult,
   type UrlScanHints,
 } from "../src/index.js";
+import { createMeta } from "../src/meta.js";
 import { mask } from "./helpers.js";
 
 type Range = readonly [number, number];
@@ -64,6 +72,50 @@ const expectScannerFixture = ({
 };
 
 describe("URL scanner", () => {
+  it("keeps the ASCII metadata fast path equivalent to generic normalization", () => {
+    const codePoints = Array.from({ length: 128 }, (_, code) =>
+      String.fromCharCode(code),
+    );
+    const meta = createMeta(codePoints.join(""), codePoints);
+
+    for (let index = 0; index < codePoints.length; index++) {
+      const source = codePoints[index] ?? "";
+      const raw = Array.from(lowerNfkc(source))[0] ?? "";
+      const skeleton = LOOKALIKE_TO_ASCII.get(raw) ?? raw;
+      const symbol = DOT_CHAR_SET.has(raw) ? "." : raw === "\\" ? "/" : raw;
+      const zeroWidth = source !== "" && stripZeroWidth(source) === "";
+      const whitespace = WHITESPACE_RE.test(source);
+      const alphaNum = LETTER_OR_DIGIT_RE.test(raw);
+
+      expect({
+        raw: meta.raw[index],
+        skeleton: meta.skeleton[index],
+        symbol: meta.symbol[index],
+        zeroWidth: meta.zeroWidth[index],
+        whitespace: meta.whitespace[index],
+        alphaNum: meta.alphaNum[index],
+        separator: meta.separator[index],
+        labelJoinSeparator: meta.labelJoinSeparator[index],
+      }).toEqual({
+        raw,
+        skeleton,
+        symbol,
+        zeroWidth,
+        whitespace,
+        alphaNum,
+        separator: zeroWidth || !alphaNum,
+        labelJoinSeparator:
+          zeroWidth ||
+          (!alphaNum &&
+            symbol !== "." &&
+            symbol !== "/" &&
+            symbol !== ":" &&
+            symbol !== "?" &&
+            symbol !== "#"),
+      });
+    }
+  });
+
   it("keeps scanner contracts compatible with shared range shapes", () => {
     const scanner: UrlRangeScanner = createUrlScanner();
     const hints: UrlScanHints = {
@@ -261,6 +313,9 @@ describe("URL scanner", () => {
       ["Fine\u200b. Be careful.", "Fine\u200b. Be"],
       ["Fine\ufe0f. Be careful.", "Fine\ufe0f. Be"],
       ["Fine\u{e0100}. Be careful.", "Fine\u{e0100}. Be"],
+      ["Fine.\u200b Be careful.", "Fine.\u200b Be"],
+      ["Fine.\ufe0f Be careful.", "Fine.\ufe0f Be"],
+      ["Fine.\u{e0100} Be careful.", "Fine.\u{e0100} Be"],
       ["这是 示例。 中国 很好", "示例。 中国"],
       ["Step 1. One thing remains.", "Step 1. One"],
       ["State-of-the-art. Design matters.", "State-of-the-art. Design"],

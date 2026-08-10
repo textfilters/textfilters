@@ -3,6 +3,7 @@ import { createUrlFilter, createUrlScanner } from "../dist/index.js";
 
 const ITERATIONS = 1_000;
 const SETUP_ITERATIONS = 100;
+const SAMPLES = 5;
 
 const SHORT_CLEAN = "Hello world";
 const LONG_CLEAN = "The quick brown fox jumps over the lazy dog. ".repeat(50);
@@ -15,13 +16,27 @@ const ALLOWED_DOMAINS = ["trusted.example"];
 const LATE_MATCH =
   "Lorem ipsum dolor sit amet, consectetur adipiscing elit. ".repeat(40) +
   "Check https://spam.example.com/promo now!";
+const STRICT_SPACED_DOT = "Review evil. Com now. ".repeat(50);
+const CANDIDATE_SHAPED_MISS =
+  "Review placeholder.invalid before release. ".repeat(50);
+const UNICODE_LATE_MATCH =
+  "Café résumé without a link. ".repeat(40) + "example.рф";
+
+const median = (values) => {
+  const sorted = [...values].sort((left, right) => left - right);
+  return sorted[Math.floor(sorted.length / 2)];
+};
 
 function bench(label, fn, iterations = ITERATIONS) {
   for (let i = 0; i < Math.min(100, iterations); i++) fn();
 
-  const start = performance.now();
-  for (let i = 0; i < iterations; i++) fn();
-  const totalMs = performance.now() - start;
+  const samples = [];
+  for (let sample = 0; sample < SAMPLES; sample++) {
+    const start = performance.now();
+    for (let i = 0; i < iterations; i++) fn();
+    samples.push(performance.now() - start);
+  }
+  const totalMs = median(samples);
   const avgMs = totalMs / iterations;
   const opsPerSec = Math.round(1000 / avgMs);
 
@@ -29,7 +44,7 @@ function bench(label, fn, iterations = ITERATIONS) {
 }
 
 function printResults(results) {
-  console.log("\nurl benchmark");
+  console.log(`\nurl benchmark (median of ${SAMPLES} timed samples)`);
   console.log(
     `${"label".padEnd(40)} ${"iter".padStart(7)} ${"total ms".padStart(10)} ${"avg ms".padStart(10)} ${"ops/sec".padStart(10)}`,
   );
@@ -43,8 +58,10 @@ function printResults(results) {
 
 const filter = createUrlFilter();
 const scanner = createUrlScanner();
+const strictScanner = createUrlScanner({ ambiguousSpacedDots: "block" });
 const allowlistFilter = createUrlFilter({ allowedDomains: ALLOWED_DOMAINS });
 const allowlistScanner = createUrlScanner({ allowedDomains: ALLOWED_DOMAINS });
+const strictFilter = createUrlFilter({ ambiguousSpacedDots: "block" });
 const input = (text) => ({ text, codePoints: Array.from(text) });
 const hintedInput = (text) => ({
   text,
@@ -66,6 +83,9 @@ const scannerInputs = {
   allowlistHit: input(ALLOWLISTED_URL),
   allowlistMiss: input(ALLOWLIST_MISS),
   lateMatch: input(LATE_MATCH),
+  strictSpacedDot: input(STRICT_SPACED_DOT),
+  candidateShapedMiss: input(CANDIDATE_SHAPED_MISS),
+  unicodeLateMatch: input(UNICODE_LATE_MATCH),
 };
 const hintedScannerInputs = {
   shortClean: hintedInput(SHORT_CLEAN),
@@ -102,6 +122,15 @@ printResults([
     allowlistScanner.check(scannerInputs.allowlistMiss),
   ),
   bench("check late-match URL", () => scanner.check(scannerInputs.lateMatch)),
+  bench("check strict spaced-dot prose", () =>
+    strictScanner.check(scannerInputs.strictSpacedDot),
+  ),
+  bench("check candidate-shaped miss", () =>
+    scanner.check(scannerInputs.candidateShapedMiss),
+  ),
+  bench("check Unicode late match", () =>
+    scanner.check(scannerInputs.unicodeLateMatch),
+  ),
   bench("censor short clean", () => filter.censor(SHORT_CLEAN)),
   bench("censor long clean", () => filter.censor(LONG_CLEAN)),
   bench("censor direct URL", () => filter.censor(DIRECT_URL)),
@@ -110,6 +139,13 @@ printResults([
   bench("censor allowlist hit", () => allowlistFilter.censor(ALLOWLISTED_URL)),
   bench("censor allowlist miss", () => allowlistFilter.censor(ALLOWLIST_MISS)),
   bench("censor late-match URL", () => filter.censor(LATE_MATCH)),
+  bench("censor strict spaced-dot prose", () =>
+    strictFilter.censor(STRICT_SPACED_DOT),
+  ),
+  bench("censor candidate-shaped miss", () =>
+    filter.censor(CANDIDATE_SHAPED_MISS),
+  ),
+  bench("censor Unicode late match", () => filter.censor(UNICODE_LATE_MATCH)),
 ]);
 
 console.log("\nbenchmark complete\n");

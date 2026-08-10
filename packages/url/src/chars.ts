@@ -4,6 +4,14 @@ export const LETTER_OR_DIGIT_RE = /[\p{L}\p{N}]/u;
 export const COMBINING_MARK_RE = /\p{M}/u;
 export const WHITESPACE_RE = /\s/u;
 
+export const isAsciiLetterOrDigitCode = (code: number): boolean =>
+  (code >= 0x30 && code <= 0x39) ||
+  (code >= 0x41 && code <= 0x5a) ||
+  (code >= 0x61 && code <= 0x7a);
+
+export const isAsciiWhitespaceCode = (code: number): boolean =>
+  (code >= 0x09 && code <= 0x0d) || code === 0x20;
+
 // Use the NFKC-normalized raw view so compatibility full stops such as U+FE52
 // and U+2024 behave like their ASCII or ideographic sentence punctuation while
 // middle-dot characters remain obfuscated domain separators.

@@ -257,7 +257,9 @@ export const trimGluedProseFromAuthority = (
   start: number,
   end: number,
 ): number => {
+  let hasColonBeforeCursor = false;
   for (let cursor = start; cursor + 1 < end; cursor++) {
+    hasColonBeforeCursor ||= meta.raw[cursor] === ":";
     const next = nextNonZeroWidth(meta, cursor + 1, end);
     if (
       meta.zeroWidth[cursor] &&
@@ -305,7 +307,7 @@ export const trimGluedProseFromAuthority = (
         (meta.symbol[previous] === "]" ||
           (meta.raw[previous] !== undefined &&
             /^[0-9]$/u.test(meta.raw[previous]) &&
-            meta.raw.slice(start, previous + 1).includes(":")))
+            hasColonBeforeCursor))
       ) {
         return cursor;
       }

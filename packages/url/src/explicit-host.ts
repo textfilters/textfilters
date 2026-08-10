@@ -139,27 +139,29 @@ export const parseExplicitHostLabel = (
   let hasNonAsciiSymbol = false;
 
   while (pos < authorityEnd) {
-    if (meta.alphaNum[pos] || isExplicitIdnSymbol(meta, pos)) {
+    const isIdnSymbol = isExplicitIdnSymbol(meta, pos);
+    if (meta.alphaNum[pos] || isIdnSymbol) {
       if (first < 0) first = pos;
       last = pos;
       raw += meta.raw[pos];
       skeleton += meta.skeleton[pos];
-      hasNonAsciiSymbol ||= isExplicitIdnSymbol(meta, pos);
+      hasNonAsciiSymbol ||= isIdnSymbol;
       pos++;
       continue;
     }
 
     const gapStart = pos;
     let gapRaw = "";
+    let gapHasZeroWidth = false;
     while (
       pos < authorityEnd &&
       meta.labelJoinSeparator[pos] &&
       !meta.whitespace[pos]
     ) {
+      gapHasZeroWidth ||= meta.zeroWidth[pos];
       gapRaw += meta.raw[pos];
       pos++;
     }
-    const gapHasZeroWidth = meta.zeroWidth.slice(gapStart, pos).some(Boolean);
     if (
       first >= 0 &&
       (gapHasZeroWidth || /^[-_]+$/u.test(gapRaw)) &&

@@ -6,6 +6,8 @@ import {
 
 import {
   DOT_CHAR_SET,
+  isAsciiLetterOrDigitCode,
+  isAsciiWhitespaceCode,
   LETTER_OR_DIGIT_RE,
   LOOKALIKE_TO_ASCII,
   WHITESPACE_RE,
@@ -83,16 +85,34 @@ export const createMeta = (
 
   for (let i = 0; i < codePoints.length; i++) {
     const ch = codePoints[i];
-    const rawChar = toRawChar(ch);
-    const skeletonChar = LOOKALIKE_TO_ASCII.get(rawChar) ?? rawChar;
-    const symbolChar = DOT_CHAR_SET.has(rawChar)
-      ? "."
-      : rawChar === "\\"
-        ? "/"
-        : rawChar;
-    const isZeroWidth = ch !== "" && stripZeroWidth(ch) === "";
-    const isWhitespace = WHITESPACE_RE.test(ch);
-    const isAlphaNum = LETTER_OR_DIGIT_RE.test(rawChar);
+    const code = ch.length === 1 ? ch.charCodeAt(0) : -1;
+    let rawChar: string;
+    let skeletonChar: string;
+    let symbolChar: string;
+    let isZeroWidth: boolean;
+    let isWhitespace: boolean;
+    let isAlphaNum: boolean;
+
+    if (code >= 0 && code <= 0x7f) {
+      rawChar =
+        code >= 0x41 && code <= 0x5a ? String.fromCharCode(code + 0x20) : ch;
+      skeletonChar = rawChar;
+      symbolChar = rawChar === "\\" ? "/" : rawChar;
+      isZeroWidth = false;
+      isWhitespace = isAsciiWhitespaceCode(code);
+      isAlphaNum = isAsciiLetterOrDigitCode(code);
+    } else {
+      rawChar = toRawChar(ch);
+      skeletonChar = LOOKALIKE_TO_ASCII.get(rawChar) ?? rawChar;
+      symbolChar = DOT_CHAR_SET.has(rawChar)
+        ? "."
+        : rawChar === "\\"
+          ? "/"
+          : rawChar;
+      isZeroWidth = ch !== "" && stripZeroWidth(ch) === "";
+      isWhitespace = WHITESPACE_RE.test(ch);
+      isAlphaNum = LETTER_OR_DIGIT_RE.test(rawChar);
+    }
 
     raw[i] = rawChar;
     skeleton[i] = skeletonChar;

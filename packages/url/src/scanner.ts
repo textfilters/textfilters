@@ -9,7 +9,11 @@ import {
   DOT_LITERALS,
   DOT_WORDS_RAW,
   DOT_WORDS_SKELETON,
+  isAsciiLetterOrDigitCode,
+  isAsciiWhitespaceCode,
+  isSentenceDotSymbol,
   LETTER_OR_DIGIT_RE,
+  WHITESPACE_RE,
 } from "./chars.js";
 import {
   URL_FILTER_NAME,
@@ -37,6 +41,7 @@ import {
 } from "./tlds.js";
 
 const ASCII_ONLY_RE = /^[\x00-\x7f]*$/u;
+const VARIATION_SELECTOR_RE = /^[\u{fe00}-\u{fe0f}\u{e0100}-\u{e01ef}]$/u;
 
 const toCandidateSkeleton = (normalized: string): string =>
   ASCII_ONLY_RE.test(normalized)
@@ -127,7 +132,9 @@ const scanUrlRangesWithPolicy = (
   policy: UrlMatchPolicy,
 ): readonly TextCodePointRange[] => {
   const source = String(text ?? "");
-  if (!source || !hasUrlCandidate(source)) return [];
+  if (!source || !hasUrlCandidate(source, policy.ambiguousSpacedDots)) {
+    return [];
+  }
 
   const meta = createMeta(source);
   return collectRanges(meta, policy);
@@ -137,7 +144,7 @@ const scanUrlInputRangesWithPolicy = (
   input: UrlScanInput,
   policy: UrlMatchPolicy,
 ): readonly TextCodePointRange[] => {
-  const meta = createUrlInputMeta(input);
+  const meta = createUrlInputMeta(input, policy.ambiguousSpacedDots);
   if (!meta) return [];
   return collectRanges(meta, policy);
 };
@@ -164,7 +171,7 @@ const checkUrlRangesWithPolicy = (
   input: UrlScanInput,
   policy: UrlMatchPolicy,
 ): boolean => {
-  const meta = createUrlInputMeta(input);
+  const meta = createUrlInputMeta(input, policy.ambiguousSpacedDots);
   if (!meta) return false;
   let found = false;
   collectRangeMatches(meta, policy, () => {
@@ -199,15 +206,23 @@ const scanUrlRangeMatchesWithPolicy = (
   sink: UrlRangeMatchSink,
   policy: UrlMatchPolicy,
 ): boolean => {
-  const meta = createUrlInputMeta(input);
+  const meta = createUrlInputMeta(input, policy.ambiguousSpacedDots);
   if (!meta) return true;
   return collectRangeMatches(meta, policy, (range) => sink({ range }));
 };
 
-const createUrlInputMeta = (input: UrlScanInput) =>
-  hasUrlCandidateInput(input) ? createMeta(input.text, input.codePoints) : null;
+const createUrlInputMeta = (
+  input: UrlScanInput,
+  ambiguousSpacedDots: AmbiguousSpacedDotPolicy,
+) =>
+  hasUrlCandidateInput(input, ambiguousSpacedDots)
+    ? createMeta(input.text, input.codePoints)
+    : null;
 
-function hasUrlCandidateInput(input: UrlScanInput): boolean {
+function hasUrlCandidateInput(
+  input: UrlScanInput,
+  ambiguousSpacedDots: AmbiguousSpacedDotPolicy,
+): boolean {
   if (!input.text) return false;
 
   const hints = input.hints;
@@ -221,14 +236,18 @@ function hasUrlCandidateInput(input: UrlScanInput): boolean {
     return hasAsciiUrlWordCandidate(input.text);
   }
 
-  return hasUrlCandidate(input.text);
+  return hasUrlCandidate(input.text, ambiguousSpacedDots);
 }
 
-function hasUrlCandidate(source: string): boolean {
-  const normalized = stripZeroWidth(lowerNfkc(source));
-  const skeleton = toCandidateSkeleton(normalized);
-  return (
-    hasLikelyDomainDot(normalized) ||
+function hasUrlCandidate(
+  source: string,
+  ambiguousSpacedDots: AmbiguousSpacedDotPolicy,
+): boolean {
+  const isAscii = ASCII_ONLY_RE.test(source);
+  const normalized = isAscii
+    ? source.toLowerCase()
+    : stripZeroWidth(lowerNfkc(source));
+  if (
     normalized.includes(":") ||
     normalized.includes("/") ||
     normalized.includes("\\") ||
@@ -237,10 +256,18 @@ function hasUrlCandidate(source: string): boolean {
     DOT_LITERALS.some((literal) => normalized.includes(literal)) ||
     /\bdot\b/.test(normalized) ||
     /\bd0t\b/.test(normalized) ||
-    DOT_WORDS_SKELETON.some((word) => hasSplitWordCandidate(skeleton, word)) ||
     DOT_WORDS_RAW.some((word) => hasSplitWordCandidate(normalized, word)) ||
     normalized.includes("http") ||
     normalized.includes("hxxp")
+  ) {
+    return true;
+  }
+  if (hasLikelyDomainDot(normalized, ambiguousSpacedDots, isAscii)) {
+    return true;
+  }
+  const skeleton = isAscii ? normalized : toCandidateSkeleton(normalized);
+  return DOT_WORDS_SKELETON.some((word) =>
+    hasSplitWordCandidate(skeleton, word),
   );
 }
 
@@ -253,7 +280,42 @@ function hasAsciiUrlWordCandidate(source: string): boolean {
   );
 }
 
-function hasLikelyDomainDot(value: string): boolean {
+function hasLikelyDomainDot(
+  value: string,
+  ambiguousSpacedDots: AmbiguousSpacedDotPolicy,
+  isAscii: boolean,
+): boolean {
+  if (isAscii) {
+    for (let i = 1; i < value.length - 1; i++) {
+      if (value.charCodeAt(i) !== 0x2e) continue;
+
+      let left = i - 1;
+      while (left >= 0 && !isAsciiLetterOrDigitCode(value.charCodeAt(left))) {
+        left--;
+      }
+      if (left < 0) continue;
+
+      let right = i + 1;
+      while (
+        right < value.length &&
+        !isAsciiLetterOrDigitCode(value.charCodeAt(right))
+      ) {
+        right++;
+      }
+      if (right >= value.length) continue;
+
+      if (
+        ambiguousSpacedDots === "preserve" &&
+        left + 1 === i &&
+        isAsciiWhitespaceCode(value.charCodeAt(i + 1))
+      ) {
+        continue;
+      }
+      return true;
+    }
+    return false;
+  }
+
   const chars = Array.from(value);
   for (let i = 1; i < chars.length - 1; i++) {
     if (!DOT_CHAR_SET.has(chars[i])) continue;
@@ -269,14 +331,37 @@ function hasLikelyDomainDot(value: string): boolean {
     if (right >= chars.length) continue;
 
     if (
-      LETTER_OR_DIGIT_RE.test(chars[left]) &&
-      LETTER_OR_DIGIT_RE.test(chars[right])
+      ambiguousSpacedDots === "preserve" &&
+      isSentenceDotSymbol(chars[i]) &&
+      hasOnlyVariationSelectors(chars, left + 1, i) &&
+      startsWithWhitespaceAfterVariationSelectors(chars, i + 1)
     ) {
-      return true;
+      continue;
     }
+    return true;
   }
 
   return false;
+}
+
+function hasOnlyVariationSelectors(
+  chars: readonly string[],
+  start: number,
+  end: number,
+): boolean {
+  for (let i = start; i < end; i++) {
+    if (!VARIATION_SELECTOR_RE.test(chars[i] ?? "")) return false;
+  }
+  return true;
+}
+
+function startsWithWhitespaceAfterVariationSelectors(
+  chars: readonly string[],
+  start: number,
+): boolean {
+  let pos = start;
+  while (VARIATION_SELECTOR_RE.test(chars[pos] ?? "")) pos++;
+  return WHITESPACE_RE.test(chars[pos] ?? "");
 }
 
 function hasSplitWordCandidate(value: string, word: string): boolean {

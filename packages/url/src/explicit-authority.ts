@@ -81,8 +81,14 @@ export const parseExplicitUrlTarget = (
       meta.whitespace[scannedAuthorityEnd]);
 
   let hostStart = pos;
+  let hostHasDot = false;
   for (let cursor = pos; cursor < authorityEnd; cursor++) {
-    if (meta.symbol[cursor] === "@") hostStart = cursor + 1;
+    if (meta.symbol[cursor] === "@") {
+      hostStart = cursor + 1;
+      hostHasDot = false;
+    } else if (meta.symbol[cursor] === ".") {
+      hostHasDot = true;
+    }
   }
   if (hostStart >= authorityEnd) return null;
 
@@ -189,7 +195,7 @@ export const parseExplicitUrlTarget = (
     hostEnd === authorityEnd &&
     !hasFollowingPathTail &&
     meta.symbol[hostStart] !== "[" &&
-    !meta.symbol.slice(hostStart, authorityEnd).includes(".")
+    !hostHasDot
   ) {
     return null;
   }

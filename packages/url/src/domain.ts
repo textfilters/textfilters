@@ -99,7 +99,6 @@ export const parseLabel = (
         }
         pos++;
       }
-      const gapRaw = meta.raw.slice(gapStart, pos).join("");
       const hasOnlyHostnameJoinSymbols = /^[-_]+$/u.test(visibleGapRaw);
       if (!gapHasWhitespace && /^-+$/u.test(visibleGapRaw)) {
         sourceText += visibleGapRaw;
@@ -140,8 +139,8 @@ export const parseLabel = (
       if (
         !gapHasWhitespace &&
         !gapHasZeroWidth &&
-        gapRaw &&
-        !/^-+$/u.test(gapRaw) &&
+        visibleGapRaw &&
+        !/^-+$/u.test(visibleGapRaw) &&
         pos < meta.codePoints.length &&
         meta.alphaNum[pos]
       ) {

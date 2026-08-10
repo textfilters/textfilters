@@ -214,6 +214,13 @@ domains are skipped while the parser cursor still advances past the complete
 URL. Remaining ranges are merged and deduplicated before being passed to core
 masking.
 
+The prefilter applies the configured spaced-dot policy before allocating parser
+metadata. In `preserve` mode, an attached sentence dot followed by whitespace
+does not make ordinary prose a domain candidate by itself; strict `block` mode
+keeps that candidate. Stronger URL evidence and later unspaced domain dots
+still enter the parser. ASCII code points use direct normalization and
+classification while non-ASCII input retains the full Unicode path.
+
 The public `createUrlScanner()` wrapper returns code point ranges in a shape
 that can be used by the shared core range scanner contract. It also exposes
 `check(input)` for boolean checks and `scan(input, sink)` for allocation-aware
