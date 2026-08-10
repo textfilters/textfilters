@@ -231,6 +231,9 @@ describe("URL scanner", () => {
   it("applies an explicit policy to ambiguous spaced-dot candidates", () => {
     const cases = [
       ["Fine. Be careful.", "Fine. Be"],
+      ["Fine\u200b. Be careful.", "Fine\u200b. Be"],
+      ["Fine\ufe0f. Be careful.", "Fine\ufe0f. Be"],
+      ["Fine\u{e0100}. Be careful.", "Fine\u{e0100}. Be"],
       ["这是 示例。 中国 很好", "示例。 中国"],
       ["Step 1. One thing remains.", "Step 1. One"],
       ["State-of-the-art. Design matters.", "State-of-the-art. Design"],
@@ -265,6 +268,29 @@ describe("URL scanner", () => {
       text: strongEvidence,
       ranges: [[start, start + Array.from(candidate).length]],
     });
+
+    const adjacentDomainText = "foo. com evil.org";
+    const adjacentDomain = "evil.org";
+    const adjacentDomainStart = Array.from(
+      adjacentDomainText.slice(0, adjacentDomainText.indexOf(adjacentDomain)),
+    ).length;
+    expectScannerFixture({
+      text: adjacentDomainText,
+      ranges: [
+        [
+          adjacentDomainStart,
+          adjacentDomainStart + Array.from(adjacentDomain).length,
+        ],
+      ],
+    });
+    expectScannerFixture({
+      text: adjacentDomainText,
+      ranges: [],
+      allowedDomains: [adjacentDomain],
+    });
+
+    const spacedBeforeDot = "Fine . Be careful.";
+    expectScannerFixture({ text: spacedBeforeDot, ranges: [[0, 9]] });
   });
 
   it("normalizes invalid spaced-dot policies consistently", () => {
@@ -564,6 +590,7 @@ describe("URL scanner", () => {
       ranges: [],
       allowedDomains: ["example.com"],
     });
+    expectScannerFixture({ text: "art · art evil.org", ranges: [[10, 18]] });
   });
 
   it("detects biz domains through every scanner path", () => {

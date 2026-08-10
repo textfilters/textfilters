@@ -160,6 +160,17 @@ const isListSpacing = (meta: TextMeta, start: number, end: number): boolean => {
   return true;
 };
 
+const hasOnlyIgnorableFormatting = (
+  meta: TextMeta,
+  start: number,
+  end: number,
+): boolean => {
+  for (let cursor = start; cursor < end; cursor++) {
+    if (!isIgnorableFormatting(meta, cursor)) return false;
+  }
+  return true;
+};
+
 const isStandaloneRepeatedListProse = (
   meta: TextMeta,
   domain: DomainMatch,
@@ -211,7 +222,7 @@ const isAmbiguousRightSpacedDomain = (
   const dot = parseDot(meta, previous.pos);
   if (
     !dot ||
-    dot.start !== previous.end ||
+    !hasOnlyIgnorableFormatting(meta, previous.end, dot.start) ||
     dot.end !== dot.start + 1 ||
     !isSentenceDotSymbol(meta.raw[dot.start] ?? "")
   ) {
@@ -531,6 +542,12 @@ export const collectRangeMatches = (
     );
     if (!selection) continue;
     if (!selection.candidate) {
+      // Preserved prose still owns its span so split-label recovery cannot
+      // absorb it into a later domain.
+      consumedRanges.push([
+        selection.parsedDomain.start,
+        selection.parsedDomain.end,
+      ]);
       i = Math.max(i, selection.parsedDomain.end - 1);
       continue;
     }
