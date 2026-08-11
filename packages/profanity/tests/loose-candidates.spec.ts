@@ -8,6 +8,7 @@ import {
   buildLooseCandidateIndex,
   collectInputScanFacts,
   createInputScanFactCollector,
+  looseCandidateIndexDiagnostics,
   looseCandidateIndexStats,
   looseCandidatePatterns,
   loosePatternCandidates,
@@ -127,12 +128,64 @@ describe("loose candidate index", () => {
     expect(mixedSymbol.scanSignatures).toBeUndefined();
     expect(stats).toMatchObject({
       patternCount: 3,
-      signatureIndexedPatternCount: 1,
-      globalScanPatternCount: 2,
+      candidateIndexedPatternCount: 1,
+      globalScanFallbackPatternCount: 2,
       signatureCount: 1,
     });
     expect(stats.automatonNodeCount).toBeGreaterThan(1);
     expect(stats.trackedByteLength).toBeGreaterThan(0);
+  });
+
+  it("reports the matcher strategy and exact global fallback reason", () => {
+    const [indexed, missing] = compilePatternDefinitions(
+      [
+        { ruleId: "test.indexed", source: String.raw`b[^\p{L}\p{N}]*a` },
+        { ruleId: "test.missing", source: String.raw`\p{L}+` },
+      ],
+      false,
+    );
+    const unsupported = {
+      ...indexed!,
+      ruleId: "test.unsupported",
+      scanSignatures: ["abcd"],
+    };
+    const repeated = {
+      ...indexed!,
+      ruleId: "test.repeated",
+      scanSignatures: ["bba"],
+    };
+    const index = buildLooseCandidateIndex([
+      indexed!,
+      missing!,
+      unsupported,
+      repeated,
+    ]);
+
+    expect(looseCandidateIndexDiagnostics(index)).toEqual([
+      {
+        patternId: 0,
+        ruleId: "test.indexed",
+        strategy: "candidate-indexed",
+      },
+      {
+        patternId: 1,
+        ruleId: "test.missing",
+        strategy: "global-scan-fallback",
+        reason: "missing-safe-leading-signature",
+      },
+      {
+        patternId: 2,
+        ruleId: "test.unsupported",
+        strategy: "global-scan-fallback",
+        reason: "unsupported-signature-length",
+      },
+      {
+        patternId: 3,
+        ruleId: "test.repeated",
+        strategy: "global-scan-fallback",
+        reason: "adjacent-repeated-signature-character",
+      },
+    ]);
   });
 
   it("preserves Unicode case-fold matches in signature indexing", () => {

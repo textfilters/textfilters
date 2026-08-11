@@ -63,6 +63,13 @@ separators, zero-width characters, repeated letters, fullwidth ASCII, combining
 marks, and reviewed homoglyph forms when the expected false-positive surface is
 bounded.
 
+Every TypeScript rule created through `russianRule` must declare its matcher
+mode. A strict-only rule declares `match: "strict"` and has no loose options. A
+loose or strict-and-loose rule must also make its repetition decision explicit:
+use `loose: {}` for separator-only matching, or `loose: { stretch: true }` only
+when repeated-letter matching is intended and covered by regression cases.
+Matcher mode and stretching must not be inherited from helper defaults.
+
 Use loose transliteration only for reviewed spellings. Transliteration rules
 must account for same-length homoglyph folding before matching, for example
 Latin letters that normalize into Cyrillic lookalikes. Bare transliterations
@@ -99,6 +106,21 @@ The helper is internal. It must not be documented as a public API, exported from
 the package entrypoint, or used to create generated matcher JSON. The assembled
 dictionary must continue to validate as a `ProfanityLanguageDictionary`, and
 `order.json` remains the explicit Russian dictionary source-order file.
+
+## Matcher Cost Budget
+
+Run `npm run report:matcher-cost --workspace @textfilters/profanity` to inspect
+the Russian matcher structure. The report includes strict, loose, stretching,
+candidate-indexed loose, and global-scan fallback counts. Every fallback entry
+also names its rule and explains why a safe leading signature could not use the
+candidate index.
+
+The reviewed structural budget is stored in
+[the Russian matcher cost baseline](../tests/fixtures/russian-matcher-cost-baseline.json).
+Update it only for an intentional matcher-cost change, review the rule-level
+diff, and compare the package benchmark against `origin/main` on the same
+machine. The structural budget is deterministic; wall-clock timings remain
+supporting evidence rather than a CI threshold.
 
 See [Russian rule ordering model](russian-rule-ordering-model.md) for the
 current ordering audit and compatibility constraints.

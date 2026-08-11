@@ -1,0 +1,129 @@
+{
+  "strictRuleCount": 131,
+  "looseRuleCount": 152,
+  "stretchingRuleCount": 68,
+  "candidateIndexedLooseRuleCount": 122,
+  "globalScanFallbackLooseRuleCount": 30,
+  "globalScanFallbacks": [
+    {
+      "ruleId": "ru.euphemism.her.prefixed",
+      "reason": "missing-safe-leading-signature"
+    },
+    {
+      "ruleId": "ru.euphemism.her.translit.split.loose",
+      "reason": "missing-safe-leading-signature"
+    },
+    {
+      "ruleId": "ru.insult.eb.translit",
+      "reason": "missing-safe-leading-signature"
+    },
+    {
+      "ruleId": "ru.insult.eb.translit.token.loose",
+      "reason": "missing-safe-leading-signature"
+    },
+    {
+      "ruleId": "ru.insult.huyesos.translit",
+      "reason": "missing-safe-leading-signature"
+    },
+    {
+      "ruleId": "ru.insult.mudak.obfuscated.loose",
+      "reason": "missing-safe-leading-signature"
+    },
+    {
+      "ruleId": "ru.insult.pidor.split.digit.loose",
+      "reason": "missing-safe-leading-signature"
+    },
+    {
+      "ruleId": "ru.insult.suka.translit",
+      "reason": "missing-safe-leading-signature"
+    },
+    {
+      "ruleId": "ru.obscene.blea",
+      "reason": "missing-safe-leading-signature"
+    },
+    {
+      "ruleId": "ru.obscene.bleat.family",
+      "reason": "missing-safe-leading-signature"
+    },
+    {
+      "ruleId": "ru.obscene.blya",
+      "reason": "missing-safe-leading-signature"
+    },
+    {
+      "ruleId": "ru.obscene.blyad.digit.split.loose",
+      "reason": "missing-safe-leading-signature"
+    },
+    {
+      "ruleId": "ru.obscene.blyad.loose",
+      "reason": "missing-safe-leading-signature"
+    },
+    {
+      "ruleId": "ru.obscene.blyad.short.loose",
+      "reason": "missing-safe-leading-signature"
+    },
+    {
+      "ruleId": "ru.obscene.eb.translit",
+      "reason": "missing-safe-leading-signature"
+    },
+    {
+      "ruleId": "ru.obscene.eb.translit.token.loose",
+      "reason": "missing-safe-leading-signature"
+    },
+    {
+      "ruleId": "ru.obscene.eb.verb.digit.split.loose",
+      "reason": "missing-safe-leading-signature"
+    },
+    {
+      "ruleId": "ru.obscene.eb.verb.six.loose",
+      "reason": "missing-safe-leading-signature"
+    },
+    {
+      "ruleId": "ru.obscene.eb.verb.sv",
+      "reason": "missing-safe-leading-signature"
+    },
+    {
+      "ruleId": "ru.obscene.eb.verb.sv.ot.six.loose",
+      "reason": "missing-safe-leading-signature"
+    },
+    {
+      "ruleId": "ru.obscene.ebet.translit.loose",
+      "reason": "adjacent-repeated-signature-character"
+    },
+    {
+      "ruleId": "ru.obscene.huy.translit",
+      "reason": "missing-safe-leading-signature"
+    },
+    {
+      "ruleId": "ru.obscene.pizd.translit",
+      "reason": "missing-safe-leading-signature"
+    },
+    {
+      "ruleId": "ru.obscene.pizda.bang.loose",
+      "reason": "missing-safe-leading-signature"
+    },
+    {
+      "ruleId": "ru.obscene.pizda.one.loose",
+      "reason": "missing-safe-leading-signature"
+    },
+    {
+      "ruleId": "ru.obscene.pizdec.loose",
+      "reason": "missing-safe-leading-signature"
+    },
+    {
+      "ruleId": "ru.vulgar.ahue.split.loose",
+      "reason": "missing-safe-leading-signature"
+    },
+    {
+      "ruleId": "ru.vulgar.huy.translit",
+      "reason": "missing-safe-leading-signature"
+    },
+    {
+      "ruleId": "ru.vulgar.huyach.prefixed.loose",
+      "reason": "missing-safe-leading-signature"
+    },
+    {
+      "ruleId": "ru.vulgar.ohue.prefixed.split.loose",
+      "reason": "adjacent-repeated-signature-character"
+    }
+  ]
+}

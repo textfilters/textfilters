@@ -56,7 +56,8 @@
     "pack:dry-run": "npm pack --dry-run",
     "check": "npm run lint && npm test && npm run smoke:dist && npm run pack:dry-run",
     "benchmark:profanity": "npm run build && node scripts/benchmark-profanity.mjs",
-    "benchmark:strict-lookup": "npm run build && node scripts/benchmark-strict-lookup.mjs"
+    "benchmark:strict-lookup": "npm run build && node scripts/benchmark-strict-lookup.mjs",
+    "report:matcher-cost": "npm run build && node scripts/report-russian-matcher-cost.mjs"
   },
   "dependencies": {
     "@textfilters/core": "^0.4.1"
