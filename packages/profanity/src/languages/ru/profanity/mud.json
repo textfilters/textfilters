@@ -60,6 +60,24 @@
         "strict": {},
         "loose": {}
       }
+    },
+    {
+      "id": "ru.insult.mudak.obfuscated.loose",
+      "category": "STRONG_INSULT",
+      "severity": "medium",
+      "source": "(?<!\\p{L})(?:м(?:у*u[уu]*|у{2,})а*д[ао0@]+к|муд@+к)(?:[а-яё]+)?(?!\\p{L})",
+      "match": {
+        "loose": {}
+      }
+    },
+    {
+      "id": "ru.insult.mudach.family",
+      "category": "STRONG_INSULT",
+      "severity": "medium",
+      "source": "(?<!\\p{L})(?:мудачк(?:а|и|е|у|ой|ами?|ах)|мудачь(?:[её]|я|ю|[её]м)|(?:мудачок|мудачин|мудачеств)(?:[а-яё]+)?)(?!\\p{L})",
+      "match": {
+        "strict": {}
+      }
     }
   ]
 }

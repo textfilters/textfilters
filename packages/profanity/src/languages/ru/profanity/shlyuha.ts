@@ -9,6 +9,7 @@ import {
   splitPattern,
   splitPatternWithOptionalTails,
   splitPatternWithTails,
+  token,
 } from "./authoring.js";
 
 const SHLYUHA_LAUGH_SEPARATORS = [
@@ -286,6 +287,14 @@ const SHALAVA_CYRILLIC_SPLIT_SOURCE = shlyuhaSplitWithOptionalTails(
   SHALAVA_CYRILLIC_SPLIT_TAILS,
 );
 
+const SHLYUHA_DERIVATIVES = regexGroup([
+  String.raw`шлюшечк(?:а|и|е|у|ой|ами?|ах)`,
+  String.raw`шлюшечек`,
+  String.raw`шлюх[её]нок${cyrillicSuffix}`,
+  String.raw`шалавк(?:а|и|е|у|ой|ами?|ах)`,
+  String.raw`шалавист${cyrillicSuffix}`,
+]);
+
 export default russianFamilyDictionary([
   russianRule({
     id: "ru.insult.shlyuha.family",
@@ -343,5 +352,12 @@ export default russianFamilyDictionary([
     source: String.raw`(?<!\p{L})${SHLYUHA_SPLIT_SOURCE}(?!\p{L})`,
     match: "loose",
     loose: {},
+  }),
+  russianRule({
+    id: "ru.insult.shlyuha.derivatives",
+    category: "STRONG_INSULT",
+    severity: "high",
+    source: token(SHLYUHA_DERIVATIVES),
+    match: "strict",
   }),
 ]);

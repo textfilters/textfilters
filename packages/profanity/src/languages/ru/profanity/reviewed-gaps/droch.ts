@@ -75,6 +75,14 @@ const DROCH_FORMS = [
   String.raw`надроченном`,
   String.raw`надроченными`,
   String.raw`надроченных`,
+  String.raw`дрочка`,
+  String.raw`дрочение`,
+  String.raw`дрочильня`,
+  String.raw`дрочерша`,
+  String.raw`задрочить`,
+  String.raw`передрочить`,
+  String.raw`выдрочить`,
+  String.raw`раздрочить`,
 ] as const;
 
 export default russianFamilyDictionary([

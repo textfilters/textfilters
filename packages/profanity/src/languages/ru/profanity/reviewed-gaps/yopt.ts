@@ -9,6 +9,8 @@ const YOPT_FORMS = [
   String.raw`[её]пт`,
   String.raw`[её]пта`,
   String.raw`[её]птваю`,
+  String.raw`[её]птить`,
+  String.raw`[её]птвою`,
 ] as const;
 
 export default russianFamilyDictionary([

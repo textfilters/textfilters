@@ -136,6 +136,15 @@
       "match": {
         "loose": {}
       }
+    },
+    {
+      "id": "ru.insult.pidor.derivatives",
+      "category": "STRONG_INSULT",
+      "severity": "high",
+      "source": "(?<!\\p{L})пидерас(?:[а-яё]+)?(?!\\p{L})",
+      "match": {
+        "strict": {}
+      }
     }
   ]
 }

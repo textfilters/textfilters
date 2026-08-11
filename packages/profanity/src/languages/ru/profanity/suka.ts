@@ -251,6 +251,10 @@ const SUKA_TRANSLIT_GUARDED_SOURCE = neutralContextGuardedSource(
 // insert whitespace inside initial-style text such as "S. Uka".
 const SUKA_TRANSLIT_GLOBAL_SOURCE = String.raw`(?=(${SUKA_TRANSLIT_GUARDED_SOURCE}))\1`;
 
+const SUCHON_FORMS = regexGroup([
+  String.raw`суч[оеё]н(?:ок|к(?:а|у|ом|е|и|ов|ам|ами|ах)|ыш${cyrillicSuffix})`,
+]);
+
 export default russianFamilyDictionary([
   russianRule({
     id: "ru.insult.suka.family",
@@ -278,5 +282,12 @@ export default russianFamilyDictionary([
     severity: "medium",
     source: token(String.raw`с(?:у|y)к(?:ара|ачка|учка|ин|ой|а|и|у)`),
     match: "loose",
+  }),
+  russianRule({
+    id: "ru.insult.suchon.family",
+    category: "STRONG_INSULT",
+    severity: "medium",
+    source: token(SUCHON_FORMS),
+    match: "strict",
   }),
 ]);
