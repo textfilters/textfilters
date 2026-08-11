@@ -130,9 +130,11 @@ serialized matcher output.
 - `strict: {}` means the source should match as a strict normalized token or
   phrase according to the package's strict matching rules.
 - `loose: {}` means the source can match across supported separators according
-  to the package's loose matching rules.
+  to the package's loose matching rules. It is an explicit separator-only
+  choice and does not enable repeated-letter matching.
 - `loose: { "stretch": true }` additionally allows repeated word-like atoms in
-  the controlled internal rule compiler.
+  the controlled internal rule compiler. Stretching is always opt-in and must
+  not be inferred from the presence of a loose view.
 - `loose: { "hyphenTail": true }` marks a maintained dictionary rule whose
   hyphenated compound tail should be trimmed unless the tail is itself profane.
   Use it only for reviewed source rules with explicit false-positive locks.

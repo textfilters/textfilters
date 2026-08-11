@@ -7,20 +7,22 @@ import type {
 } from "../../profanity.js";
 import type { ProfanityCategory, ProfanitySeverity } from "../../../types.js";
 
-type RussianRuleMatch = "strict" | "loose" | "strict-loose";
-
-interface RussianRuleOptions {
+interface RussianRuleBaseOptions {
   readonly id: string;
   readonly category: ProfanityCategory;
   readonly severity: ProfanitySeverity;
   readonly source: ProfanityLanguageRuleSource;
-  readonly match?: RussianRuleMatch;
-  readonly loose?: ProfanityLanguageLooseMatchOptions;
 }
 
-const DEFAULT_LOOSE_MATCH = {
-  stretch: true,
-} as const satisfies ProfanityLanguageLooseMatchOptions;
+type RussianRuleOptions =
+  | (RussianRuleBaseOptions & {
+      readonly match: "strict";
+      readonly loose?: never;
+    })
+  | (RussianRuleBaseOptions & {
+      readonly match: "loose" | "strict-loose";
+      readonly loose: ProfanityLanguageLooseMatchOptions;
+    });
 
 export const cyrillicSuffix = String.raw`(?:[а-яё]+)?`;
 
@@ -81,32 +83,26 @@ export const russianProfileDictionary = (
   };
 };
 
-export const russianRule = ({
-  id,
-  category,
-  severity,
-  source,
-  match = "strict-loose",
-  loose = DEFAULT_LOOSE_MATCH,
-}: RussianRuleOptions): ProfanityLanguageRuleDefinition => ({
-  id,
-  category,
-  severity,
-  source,
-  match: russianRuleMatch(match, loose),
+export const russianRule = (
+  options: RussianRuleOptions,
+): ProfanityLanguageRuleDefinition => ({
+  id: options.id,
+  category: options.category,
+  severity: options.severity,
+  source: options.source,
+  match: russianRuleMatch(options),
 });
 
 const russianRuleMatch = (
-  match: RussianRuleMatch,
-  loose: ProfanityLanguageLooseMatchOptions,
+  options: RussianRuleOptions,
 ): ProfanityLanguageRuleMatch => {
-  switch (match) {
+  switch (options.match) {
     case "strict":
       return { strict: {} };
     case "loose":
-      return { loose };
+      return { loose: options.loose };
     case "strict-loose":
-      return { strict: {}, loose };
+      return { strict: {}, loose: options.loose };
   }
 };
 

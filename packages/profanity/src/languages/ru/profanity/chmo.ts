@@ -202,6 +202,8 @@ export default russianFamilyDictionary([
     id: "ru.insult.chmo.base",
     category: "STRONG_INSULT",
     severity: "medium",
+    match: "strict-loose",
+    loose: { stretch: true },
     source: token(String.raw`чмо`),
   }),
   russianRule({

@@ -66,14 +66,32 @@ export interface LoosePatternCandidate {
 
 export interface LooseCandidateIndexStats {
   readonly patternCount: number;
-  readonly signatureIndexedPatternCount: number;
-  readonly globalScanPatternCount: number;
+  readonly candidateIndexedPatternCount: number;
+  readonly globalScanFallbackPatternCount: number;
   readonly signatureCount: number;
   readonly automatonNodeCount: number;
   readonly automatonTransitionCount: number;
   readonly automatonOutputCount: number;
   readonly trackedByteLength: number;
 }
+
+export type LooseGlobalScanFallbackReason =
+  | "missing-safe-leading-signature"
+  | "unsupported-signature-length"
+  | "adjacent-repeated-signature-character";
+
+export type LooseCandidateIndexDiagnostic =
+  | {
+      readonly patternId: number;
+      readonly ruleId?: string;
+      readonly strategy: "candidate-indexed";
+    }
+  | {
+      readonly patternId: number;
+      readonly ruleId?: string;
+      readonly strategy: "global-scan-fallback";
+      readonly reason: LooseGlobalScanFallbackReason;
+    };
 
 interface WordGroup {
   char: string;
@@ -337,7 +355,7 @@ export const looseCandidateIndexStats = (
     (count, node) => count + node.outputs.length,
     0,
   );
-  const signatureIndexedPatternCount = index.patterns.filter(({ id }) =>
+  const candidateIndexedPatternCount = index.patterns.filter(({ id }) =>
     hasBit(index.signaturePatternBits, id),
   ).length;
   const bitsetByteLength =
@@ -359,9 +377,9 @@ export const looseCandidateIndexStats = (
 
   return {
     patternCount: index.patterns.length,
-    signatureIndexedPatternCount,
-    globalScanPatternCount:
-      index.patterns.length - signatureIndexedPatternCount,
+    candidateIndexedPatternCount,
+    globalScanFallbackPatternCount:
+      index.patterns.length - candidateIndexedPatternCount,
     signatureCount: index.signatureAutomaton.signatureCount,
     automatonNodeCount: nodes.length,
     automatonTransitionCount: index.signatureAutomaton.transitionCount,
@@ -372,6 +390,21 @@ export const looseCandidateIndexStats = (
       index.signatureAutomaton.transitionTable.byteLength,
   };
 };
+
+export const looseCandidateIndexDiagnostics = (
+  index: LooseCandidateIndex,
+): LooseCandidateIndexDiagnostic[] =>
+  index.patterns.map(({ id, pattern }) => {
+    const reason = globalScanFallbackReason(pattern);
+    const identity = {
+      patternId: id,
+      ...(pattern.ruleId === undefined ? {} : { ruleId: pattern.ruleId }),
+    };
+
+    return reason === undefined
+      ? { ...identity, strategy: "candidate-indexed" }
+      : { ...identity, strategy: "global-scan-fallback", reason };
+  });
 
 const createLooseSignatureAutomaton = (
   patterns: readonly IndexedLoosePattern[],
@@ -551,23 +584,34 @@ const isSingleCodePoint = (value: string): boolean => {
   return code !== undefined && value.length === (code > 0xffff ? 2 : 1);
 };
 
-const hasIndexableSignatures = (pattern: CompiledPattern): boolean => {
+const globalScanFallbackReason = (
+  pattern: CompiledPattern,
+): LooseGlobalScanFallbackReason | undefined => {
   const signatures = pattern.scanSignatures;
-  return (
-    signatures !== undefined &&
-    signatures.length > 0 &&
-    signatures.every((signature) => {
-      const chars = Array.from(signature);
-      return (
-        (chars.length === 2 || chars.length === 3) &&
-        chars.every(
-          (char, index) =>
-            index === 0 || !sameScanChar(chars[index - 1]!, char),
-        )
-      );
-    })
-  );
+  if (signatures === undefined || signatures.length === 0) {
+    return "missing-safe-leading-signature";
+  }
+
+  for (const signature of signatures) {
+    const chars = Array.from(signature);
+    if (chars.length !== 2 && chars.length !== 3) {
+      return "unsupported-signature-length";
+    }
+
+    if (
+      chars.some(
+        (char, index) => index > 0 && sameScanChar(chars[index - 1]!, char),
+      )
+    ) {
+      return "adjacent-repeated-signature-character";
+    }
+  }
+
+  return undefined;
 };
+
+const hasIndexableSignatures = (pattern: CompiledPattern): boolean =>
+  globalScanFallbackReason(pattern) === undefined;
 
 const sortedUniqueNumbers = (values: readonly number[]): number[] =>
   [...new Set(values)].sort((left, right) => left - right);

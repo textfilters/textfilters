@@ -225,13 +225,13 @@ printResults([
   ),
 ]);
 
-console.log("\nloose signature index");
+console.log("\nloose candidate index");
 console.log(`patterns: ${looseCandidateStats.patternCount}`);
 console.log(
-  `signature indexed: ${looseCandidateStats.signatureIndexedPatternCount}`,
+  `candidate indexed: ${looseCandidateStats.candidateIndexedPatternCount}`,
 );
 console.log(
-  `global scan fallback: ${looseCandidateStats.globalScanPatternCount}`,
+  `global scan fallback: ${looseCandidateStats.globalScanFallbackPatternCount}`,
 );
 console.log(`signatures: ${looseCandidateStats.signatureCount}`);
 console.log(`automaton nodes: ${looseCandidateStats.automatonNodeCount}`);

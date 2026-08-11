@@ -948,6 +948,8 @@ export default russianFamilyDictionary([
     id: "ru.vulgar.govno.family",
     category: "VULGAR",
     severity: "low",
+    match: "strict-loose",
+    loose: { stretch: true },
     source: String.raw`(?:говн${regexGroup(GOVNO_FAMILY_TAILS)}|говен)`,
   }),
   russianRule({
@@ -969,6 +971,8 @@ export default russianFamilyDictionary([
     id: "ru.vulgar.dermo.family",
     category: "VULGAR",
     severity: "low",
+    match: "strict-loose",
+    loose: { stretch: true },
     source: String.raw`дерьм(?:ами|ам|ах|ом|о|а|у|е|ов${cyrillicSuffix})`,
   }),
   russianRule({

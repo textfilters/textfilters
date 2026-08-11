@@ -300,6 +300,8 @@ export default russianFamilyDictionary([
     id: "ru.insult.shlyuha.family",
     category: "STRONG_INSULT",
     severity: "high",
+    match: "strict-loose",
+    loose: { stretch: true },
     source: SHLYUHA_FAMILY_SOURCE,
   }),
   russianRule({
@@ -321,6 +323,8 @@ export default russianFamilyDictionary([
     id: "ru.insult.shlyushka.family",
     category: "STRONG_INSULT",
     severity: "high",
+    match: "strict-loose",
+    loose: { stretch: true },
     source: String.raw`(?:шлюшк(?:ами?|ах|ой|а|и|е|у)|шлюшек)`,
   }),
   russianRule({

@@ -93,6 +93,8 @@ export default russianFamilyDictionary([
     id: "ru.insult.gandon.family",
     category: "STRONG_INSULT",
     severity: "medium",
+    match: "strict-loose",
+    loose: { stretch: true },
     source: String.raw`г[ао]ндо(?:н|ш(?:а|и|е|у|ой))${cyrillicSuffix}`,
   }),
   russianRule({

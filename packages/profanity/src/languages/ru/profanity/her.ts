@@ -508,6 +508,8 @@ export default russianFamilyDictionary([
     id: "ru.euphemism.her.family",
     category: "EUPHEMISM",
     severity: "low",
+    match: "strict-loose",
+    loose: { stretch: true },
     source: String.raw`хер${regexGroup([
       String.raw`н${regexGroup(HERNYA_TAILS)}`,
       String.raw`овин${cyrillicSuffix}`,
@@ -518,6 +520,8 @@ export default russianFamilyDictionary([
     id: "ru.euphemism.her.prefixed",
     category: "EUPHEMISM",
     severity: "low",
+    match: "strict-loose",
+    loose: { stretch: true },
     source: String.raw`(?!${HERSON_CONTEXT})${HER_PREFIXED_SOURCE}`,
   }),
   russianRule({
