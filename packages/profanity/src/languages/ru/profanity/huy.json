@@ -140,7 +140,7 @@
       "id": "ru.obscene.huy.translit",
       "category": "OBSCENE_MAT",
       "severity": "high",
-      "source": "(?<!\\p{L})(?![hн]ui(?!\\p{L}))(?![hн]u(?:[yу][aа]?|i)\\s+(?:in[cс]|s[tт][oо][cс][kк]|f[oо]ng|ngu[yу][eе]n|[tт]r[aа]n))(?![kк][^\\p{L}\\p{N}]+[hн]ui(?!\\p{L}))(?![kк][^\\p{L}\\p{N}]+[hн]u[yу][aа]?\\s+(?:in[cс]|s[tт][oо][cс][kк]|f[oо]ng|ngu[yу][eе]n|[tт]r[aа]n))(?![hн]u[yу]['’`´]s\\s+s[aа]u[cс][eе])(?:[kк][hн]|[hн]|[xх])u(?:[yу]|i|j|[yу][aа]|i[aа]|[yу][eе]|[yу][oо]|[yу]u)(?!\\p{L})",
+      "source": "(?<!\\p{L})(?!(?<=(?<!\\p{L})ngu[yу][eе]n\\s+qu[aа]ng\\s+)[hн][^\\p{L}\\p{N}]*u[^\\p{L}\\p{N}]*[yу](?!\\p{L}))(?!(?<=(?<!\\p{L})qu[eе]\\s+)[hн][^\\p{L}\\p{N}]*u[^\\p{L}\\p{N}]*[yу][^\\p{L}\\p{N}]*[aа]\\s+[aа][hн][oо]r[aа](?!\\p{L}))(?!(?:[hн][^\\p{L}\\p{N}]*u[^\\p{L}\\p{N}]*[yу]\\s+l[eе]|[hн][^\\p{L}\\p{N}]*u[^\\p{L}\\p{N}]*i[^\\p{L}\\p{N}]*[aа]\\s+[bьв]ird)(?!\\p{L}))(?![hн]ui(?!\\p{L}))(?![hн]u(?:[yу][aа]?|i)\\s+(?:in[cс]|s[tт][oо][cс][kк]|f[oо]ng|ngu[yу][eе]n|[tт]r[aа]n))(?![kк][^\\p{L}\\p{N}]+[hн]ui(?!\\p{L}))(?![kк][^\\p{L}\\p{N}]+[hн]u[yу][aа]?\\s+(?:in[cс]|s[tт][oо][cс][kк]|f[oо]ng|ngu[yу][eе]n|[tт]r[aа]n))(?![hн]u[yу]['’`´]s\\s+s[aа]u[cс][eе])(?:[kк][hн]|[hн]|[xх])u(?:[yу]|i|j|[yу][aа]|i[aа]|[yу][eе]|[yу][oо]|[yу]u)(?!\\p{L})",
       "match": {
         "loose": {
           "stretch": true

@@ -484,9 +484,29 @@ describe("internal profanity rules", () => {
     expect(pattern.scanFirstChars).toEqual(
       expect.arrayContaining(["s", "S", "с", "С"]),
     );
+    expect(pattern.scanSignatures).toEqual(
+      expect.arrayContaining(["suk", "сuk"]),
+    );
     expect(patternMayStartIn(pattern, "suka")).toBe(true);
     expect(patternMayStartIn(pattern, "модуль")).toBe(false);
     expect(pattern.re.test("suka")).toBe(true);
+  });
+
+  it("preserves correlated signatures across wrapped alternatives", () => {
+    const rule = createBuiltInProfanityRules(
+      [String.raw`(?=((?<!\p{L})(?:соси|отсоси)(?!\p{L})))\1`],
+      "loose",
+    )[0]!;
+    const pattern = compileLooseInternalRulePatterns([rule])[0]!;
+
+    expect(pattern.scanSignatures).toEqual(["сос", "отс"]);
+    expect(pattern.scanSignatures).not.toContain("оос");
+    expect(
+      ["соси", "отсоси"].every((input) => {
+        pattern.re.lastIndex = 0;
+        return pattern.re.test(input);
+      }),
+    ).toBe(true);
   });
 
   it("derives scan-start guards across leading optional prefixes", () => {

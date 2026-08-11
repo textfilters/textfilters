@@ -1,6 +1,7 @@
 import {
   cyrillicAdjectiveTailParts,
   cyrillicSuffix,
+  globalMatchSource,
   joinedPatterns,
   optionalRegexGroup,
   prefixedPatternSequences,
@@ -68,6 +69,7 @@ const SRAT_LATIN_SPLIT_TAIL_PARTS = [
   [String.raw`i`],
 ] as const;
 const SRAT_LATIN_TRANSLIT_TAILS = joinedPatterns(SRAT_LATIN_SPLIT_TAIL_PARTS);
+const SRAT_LATIN_SPLIT_SRI_SOURCE = String.raw`${SRAT_LATIN_SPLIT_BASE}${SRAT_SPLIT_SEPARATOR}i`;
 const SRAT_SPLIT_SOURCE = regexGroup([
   String.raw`${SRAT_CYRILLIC_SPLIT_BASE}${SRAT_SPLIT_SEPARATOR}${regexGroup(
     separatedPatterns(SRAT_CYRILLIC_SPLIT_TAIL_PARTS, SRAT_SPLIT_SEPARATOR),
@@ -986,7 +988,7 @@ export default russianFamilyDictionary([
     id: "ru.vulgar.srat.split.loose",
     category: "VULGAR",
     severity: "low",
-    source: String.raw`(?<!\p{L})${SRAT_SPLIT_SOURCE}(?!\p{L})`,
+    source: String.raw`(?<!\p{L})(?!${SRAT_LATIN_SPLIT_SRI_SOURCE}\s+l[aа]n[kк][aа](?!\p{L}))${SRAT_SPLIT_SOURCE}(?!\p{L})`,
     match: "loose",
     loose: {},
   }),
@@ -1068,8 +1070,11 @@ export default russianFamilyDictionary([
     id: "ru.vulgar.srat.translit.bare",
     category: "VULGAR",
     severity: "low",
-    source: String.raw`(?<!\p{L})sr${regexGroup(SRAT_LATIN_TRANSLIT_TAILS)}(?!\p{L})`,
-    match: "strict",
+    source: globalMatchSource(
+      String.raw`(?<!\p{L})(?!sri\s+l[aа]n[kк][aа](?!\p{L}))sr${regexGroup(SRAT_LATIN_TRANSLIT_TAILS)}(?!\p{L})`,
+    ),
+    match: "loose",
+    loose: {},
   }),
   russianRule({
     id: "ru.vulgar.govno.translit.bare",

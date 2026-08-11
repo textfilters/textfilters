@@ -109,6 +109,10 @@ const russianRuleMatch = (
 export const token = (source: string): string =>
   String.raw`(?<!\p{L})${source}(?!\p{L})`;
 
+// Keep an authored source intact while running it in the global loose pass.
+export const globalMatchSource = (source: string): string =>
+  String.raw`(?=(${source}))\1`;
+
 export const regexAlternatives = (sources: readonly string[]): string =>
   sources.join("|");
 

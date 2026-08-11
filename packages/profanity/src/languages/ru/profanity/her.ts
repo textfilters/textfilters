@@ -1,6 +1,7 @@
 import {
   cyrillicAdjectiveTailParts,
   cyrillicSuffix,
+  globalMatchSource,
   joinedPatterns,
   optionalRegexGroup,
   prefixedPatternSequences,
@@ -290,6 +291,13 @@ const HER_TRANSLIT_TAILS = [
   String.raw`[oо]v${optionalRegexGroup(HEROV_TRANSLIT_TAILS)}`,
   ...HEREL_TRANSLIT_TAILS,
 ] as const;
+const HER_TRANSLIT_BASE = String.raw`[hн][eе]r`;
+const HER_TRANSLIT_SOURCES = [
+  HER_TRANSLIT_BASE,
+  String.raw`n[aа]${HER_TRANSLIT_BASE}`,
+  String.raw`[pр][oо]${HER_TRANSLIT_BASE}`,
+  String.raw`[oо]${HER_TRANSLIT_BASE}`,
+].map((base) => String.raw`${base}${regexGroup(HER_TRANSLIT_TAILS)}`);
 
 const HER_TRANSLIT_SPLIT_SEPARATOR = String.raw`[-._]+`;
 const herTranslitSplit = splitPattern(HER_TRANSLIT_SPLIT_SEPARATOR);
@@ -336,6 +344,7 @@ const HER_TRANSLIT_SPLIT_BASE = herTranslitSplit([
   String.raw`[eе]`,
   String.raw`r`,
 ]);
+const HERNE_TRANSLIT_SPLIT_SOURCE = String.raw`${HER_TRANSLIT_SPLIT_BASE}${HER_TRANSLIT_SPLIT_SEPARATOR}n${HER_TRANSLIT_SPLIT_SEPARATOR}[eе]`;
 const HERNYA_TRANSLIT_SPLIT_SOURCE =
   String.raw`${HER_TRANSLIT_SPLIT_BASE}${HER_TRANSLIT_SPLIT_SEPARATOR}` +
   String.raw`n${HER_TRANSLIT_SPLIT_SEPARATOR}${regexGroup(
@@ -571,14 +580,17 @@ export default russianFamilyDictionary([
     id: "ru.euphemism.her.translit",
     category: "EUPHEMISM",
     severity: "low",
-    source: String.raw`(?<!\p{L})(?:n[aа]|[pр][oо]|[oо])?[hн][eе]r${regexGroup(HER_TRANSLIT_TAILS)}(?!\p{L})`,
-    match: "strict",
+    source: globalMatchSource(
+      String.raw`(?<!\p{L})(?![hн][eе]rn[eе]\s+[tт][hн][eе]\s+[hн]un[tт][eе]r(?!\p{L}))${regexGroup(HER_TRANSLIT_SOURCES)}(?!\p{L})`,
+    ),
+    match: "loose",
+    loose: {},
   }),
   russianRule({
     id: "ru.euphemism.her.translit.split.loose",
     category: "EUPHEMISM",
     severity: "low",
-    source: String.raw`(?<!\p{L})${HER_TRANSLIT_SPLIT_SOURCE}(?!\p{L})`,
+    source: String.raw`(?<!\p{L})(?!${HERNE_TRANSLIT_SPLIT_SOURCE}\s+[tт][hн][eе]\s+[hн]un[tт][eе]r(?!\p{L}))${HER_TRANSLIT_SPLIT_SOURCE}(?!\p{L})`,
     match: "loose",
     loose: {},
   }),

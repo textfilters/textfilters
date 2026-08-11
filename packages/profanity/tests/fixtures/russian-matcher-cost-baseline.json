@@ -1,9 +1,9 @@
 {
-  "strictRuleCount": 131,
-  "looseRuleCount": 152,
+  "strictRuleCount": 123,
+  "looseRuleCount": 157,
   "stretchingRuleCount": 68,
-  "candidateIndexedLooseRuleCount": 122,
-  "globalScanFallbackLooseRuleCount": 30,
+  "candidateIndexedLooseRuleCount": 128,
+  "globalScanFallbackLooseRuleCount": 29,
   "globalScanFallbacks": [
     {
       "ruleId": "ru.euphemism.her.prefixed",
@@ -31,10 +31,6 @@
     },
     {
       "ruleId": "ru.insult.pidor.split.digit.loose",
-      "reason": "missing-safe-leading-signature"
-    },
-    {
-      "ruleId": "ru.insult.suka.translit",
       "reason": "missing-safe-leading-signature"
     },
     {

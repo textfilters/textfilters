@@ -20,15 +20,22 @@ export const scanGuardsForSource = (
   const existing = scanGuardCache.get(cacheKey);
   if (existing !== undefined) return existing;
 
-  const leadingSets = leadingSignatureSets(source);
+  const preservedSource = leadingLookaheadBackreferenceSource(
+    readRuleAtoms(source),
+  );
+  const scanSource = preservedSource ?? source;
+  const leadingSets = leadingSignatureSets(scanSource);
   const guards = {
-    scanFirstChars: firstRequiredChars(source),
+    scanFirstChars: firstRequiredChars(scanSource),
     scanSecondChars: secondRequiredChars(leadingSets),
     scanSignatures: includeSignatures
-      ? signaturesFromLeadingSets(leadingSets)
+      ? ((preservedSource === null
+          ? undefined
+          : signaturesFromLeadingAlternatives(scanSource)) ??
+        signaturesFromLeadingSets(leadingSets))
       : undefined,
     scanFirstCharRequiresNonLetterPrefix:
-      source.startsWith(NON_LETTER_PREFIX_ASSERTION) || undefined,
+      scanSource.startsWith(NON_LETTER_PREFIX_ASSERTION) || undefined,
   };
 
   if (scanGuardCache.size >= SCAN_GUARD_CACHE_LIMIT) {
@@ -153,10 +160,10 @@ const firstRequiredChars = (source: string): readonly string[] | undefined => {
   }
 
   const atoms = readRuleAtoms(source);
-  const lookaheadChars = leadingLookaheadBackreferenceFirstChars(atoms);
+  const lookaheadSource = leadingLookaheadBackreferenceSource(atoms);
 
-  if (lookaheadChars !== null && lookaheadChars.size > 0) {
-    return [...caseInsensitiveChars(lookaheadChars)];
+  if (lookaheadSource !== null) {
+    return firstRequiredChars(lookaheadSource);
   }
 
   let atomIndex = 0;
@@ -198,11 +205,12 @@ const leadingSignatureSets = (
   return null;
 };
 
-const leadingLookaheadBackreferenceFirstChars = (
+const leadingLookaheadBackreferenceSource = (
   atoms: ReturnType<typeof readRuleAtoms>,
-): Set<string> | null => {
+): string | null => {
   const [lookahead, backreference] = atoms;
   if (
+    atoms.length !== 2 ||
     lookahead === undefined ||
     backreference === undefined ||
     backreference.source !== String.raw`\1` ||
@@ -212,7 +220,7 @@ const leadingLookaheadBackreferenceFirstChars = (
     return null;
   }
 
-  return firstAtomChars(lookahead.base.slice("(?=".length, -1));
+  return lookahead.base.slice("(?=(".length, -2);
 };
 
 const firstCharsFromAtoms = (
@@ -384,6 +392,54 @@ const signaturesFromLeadingSets = (
   return signatures === null || signatures.length === 0
     ? undefined
     : signatures;
+};
+
+const signaturesFromLeadingAlternatives = (
+  source: string,
+): readonly string[] | undefined => {
+  const atoms = readRuleAtoms(source);
+  const groupIndex = atoms.findIndex(
+    (atom) => !isZeroWidthAssertion(atom.base),
+  );
+  const group = atoms[groupIndex];
+
+  if (
+    group === undefined ||
+    group.source !== group.base ||
+    (!isPlainCapturingGroup(group.base) && !group.base.startsWith("(?:"))
+  ) {
+    return undefined;
+  }
+
+  const bodyStart = group.base.startsWith("(?:") ? 3 : 1;
+  const alternatives = splitTopLevelAlternatives(
+    group.base.slice(bodyStart, -1),
+  );
+  if (alternatives.length < 2) return undefined;
+
+  const prefix = atoms
+    .slice(0, groupIndex)
+    .map((atom) => atom.source)
+    .join("");
+  const suffix = atoms
+    .slice(groupIndex + 1)
+    .map((atom) => atom.source)
+    .join("");
+  const signatures = new Set<string>();
+
+  for (const alternative of alternatives) {
+    const branchSignatures = signaturesFromLeadingSets(
+      leadingSignatureSets(`${prefix}${alternative}${suffix}`),
+    );
+    if (branchSignatures === undefined) return undefined;
+
+    for (const signature of branchSignatures) {
+      signatures.add(signature);
+      if (signatures.size > MAX_SIGNATURE_VARIANTS) return undefined;
+    }
+  }
+
+  return signatures.size === 0 ? undefined : [...signatures];
 };
 
 const isRequiredWordSeparatorAtom = ({

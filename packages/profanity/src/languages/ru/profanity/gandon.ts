@@ -87,21 +87,35 @@ const GANDON_SPLIT_GUARDED_SOURCE = neutralContextGuardedSource(
   GANDON_SPLIT_NEUTRAL_SOURCE,
   GANDON_NEUTRAL_TAIL,
 );
+const GANDON_LOOSE_SEPARATOR = String.raw`[^\p{L}\p{N}]*`;
+const GANDON_TRANSLIT_BARE_SOURCE = separatedPattern(
+  [String.raw`g`, String.raw`[aаoо]`, "n", "d", String.raw`[oо]`, "n"],
+  GANDON_LOOSE_SEPARATOR,
+);
+const GANDON_TRANSLIT_PERSON_GUARD = String.raw`(?!(?<=(?<!\p{L})[pр]i[eе]rr[eе]\s+)${GANDON_TRANSLIT_BARE_SOURCE}(?!\p{L}))`;
+const GANDON_CYRILLIC_BARE_SOURCE = separatedPattern(
+  ["г", String.raw`[ао]`, "н", "д", "о", "н"],
+  GANDON_LOOSE_SEPARATOR,
+);
+const GANDON_CYRILLIC_PERSON_GUARD = String.raw`(?!(?<=(?<!\p{L})пьер\s+)${GANDON_CYRILLIC_BARE_SOURCE}(?!\p{L}))`;
 
 export default russianFamilyDictionary([
   russianRule({
     id: "ru.insult.gandon.family",
     category: "STRONG_INSULT",
     severity: "medium",
-    match: "strict-loose",
+    source: String.raw`${GANDON_CYRILLIC_PERSON_GUARD}г[ао]ндо(?:н|ш(?:а|и|е|у|ой))${cyrillicSuffix}`,
+    match: "loose",
     loose: { stretch: true },
-    source: String.raw`г[ао]ндо(?:н|ш(?:а|и|е|у|ой))${cyrillicSuffix}`,
   }),
   russianRule({
     id: "ru.insult.gandon.translit",
     category: "STRONG_INSULT",
     severity: "medium",
-    source: neutralContextGuard(GANDON_TRANSLIT_SOURCE, GANDON_NEUTRAL_TAIL),
+    source: String.raw`${GANDON_TRANSLIT_PERSON_GUARD}${neutralContextGuard(
+      GANDON_TRANSLIT_SOURCE,
+      GANDON_NEUTRAL_TAIL,
+    )}`,
     match: "loose",
     loose: {},
   }),
@@ -109,7 +123,7 @@ export default russianFamilyDictionary([
     id: "ru.insult.gandon.split.loose",
     category: "STRONG_INSULT",
     severity: "medium",
-    source: GANDON_SPLIT_GUARDED_SOURCE,
+    source: String.raw`${GANDON_TRANSLIT_PERSON_GUARD}${GANDON_SPLIT_GUARDED_SOURCE}`,
     match: "loose",
     loose: {},
   }),

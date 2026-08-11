@@ -1,5 +1,6 @@
 import {
   cyrillicSuffix,
+  globalMatchSource,
   neutralContextGuardedSource,
   optionalRegexGroup,
   patternTailViews,
@@ -119,6 +120,20 @@ const SUCHIY_TRANSLIT_TAILS = patternTailViews(
 const SUKA_SPLIT_NEUTRAL_SEPARATOR = String.raw`[^\p{L}\p{N}]*`;
 const SUKA_SPLIT_NEUTRAL_BASE = separatedPattern(
   [String.raw`s`, String.raw`[uу]`, String.raw`[kк]`],
+  SUKA_SPLIT_NEUTRAL_SEPARATOR,
+);
+const SUKA_CONTEXT_SOURCE = String.raw`${SUKA_SPLIT_NEUTRAL_BASE}${SUKA_SPLIT_NEUTRAL_SEPARATOR}[aа]`;
+const SUKIN_CONTEXT_SOURCE = String.raw`${SUKA_SPLIT_NEUTRAL_BASE}${SUKA_SPLIT_NEUTRAL_SEPARATOR}i${SUKA_SPLIT_NEUTRAL_SEPARATOR}n`;
+const SUKU_CONTEXT_SOURCE = String.raw`${SUKA_SPLIT_NEUTRAL_BASE}${SUKA_SPLIT_NEUTRAL_SEPARATOR}[uу]`;
+const SUCHAR_CONTEXT_SOURCE = separatedPattern(
+  [
+    String.raw`s`,
+    String.raw`[uу]`,
+    String.raw`[cс]`,
+    String.raw`[hн]`,
+    String.raw`[aа]`,
+    String.raw`r`,
+  ],
   SUKA_SPLIT_NEUTRAL_SEPARATOR,
 );
 
@@ -242,14 +257,35 @@ const SUCHKA_FAMILY_SOURCE = String.raw`суч${regexGroup([
   String.raw`ар(?:ой|а|ы|е|у)?${cyrillicSuffix}`,
 ])}`;
 
+const CYRILLIC_LOOSE_SEPARATOR = String.raw`[^\p{L}\p{N}]*`;
+const separatedCyrillicLiteral = (source: string): string =>
+  Array.from(source).join(CYRILLIC_LOOSE_SEPARATOR);
+const SUKA_LOOSE_SOURCE = separatedCyrillicLiteral("сука");
+const SUCHKA_LOOSE_SOURCE = separatedCyrillicLiteral("сучка");
+const SUCHKI_LOOSE_SOURCE = separatedCyrillicLiteral("сучки");
+const SUKA_CONTEXT_GUARD =
+  String.raw`(?!(?<=(?<!\p{L})щенная\s+)${SUKA_LOOSE_SOURCE}(?!\p{L}))` +
+  String.raw`(?!${SUKA_LOOSE_SOURCE}\s+породы\s+лабрадор(?!\p{L}))`;
+const SUCHKA_CONTEXT_GUARD =
+  String.raw`(?!(?<=(?<!\p{L})без\s+)${SUCHKA_LOOSE_SOURCE}\s+и\s+задоринки(?!\p{L}))` +
+  String.raw`(?!${SUCHKI_LOOSE_SOURCE}\s+на\s+доске(?!\p{L}))`;
+
 const SUKA_TRANSLIT_GUARDED_SOURCE = neutralContextGuardedSource(
   regexGroup([SUKA_TRANSLIT_SOURCE, SUKA_TRANSLIT_SPLIT_SOURCE]),
   SUKA_SPLIT_NEUTRAL_SOURCE,
   SUKA_NEUTRAL_TAIL,
 );
+const SUKA_TRANSLIT_EXACT_CONTEXT_GUARD =
+  String.raw`(?!(?<=(?<!\p{L})s[aа][yу][aа]\s+)${SUKA_CONTEXT_SOURCE}\s+[kк][oо][pр]i(?!\p{L}))` +
+  String.raw`(?!(?<=(?<!\p{L})[aа]l[eе][xх]\s+)${SUKIN_CONTEXT_SOURCE}(?!\p{L}))` +
+  String.raw`(?!${SUKIN_CONTEXT_SOURCE}\s+[aа]us[tт]r[aа]li[aа](?!\p{L}))` +
+  String.raw`(?!(?<=(?<!\p{L})j[aа]n\s+)${SUCHAR_CONTEXT_SOURCE}(?!\p{L}))` +
+  String.raw`(?!${SUKU_CONTEXT_SOURCE}\s+[pр][eе][oо][pр]l[eе](?!\p{L}))`;
 // Keep the context guard in the global pass without letting loose rewriting
 // insert whitespace inside initial-style text such as "S. Uka".
-const SUKA_TRANSLIT_GLOBAL_SOURCE = String.raw`(?=(${SUKA_TRANSLIT_GUARDED_SOURCE}))\1`;
+const SUKA_TRANSLIT_GLOBAL_SOURCE = globalMatchSource(
+  String.raw`${SUKA_TRANSLIT_EXACT_CONTEXT_GUARD}${SUKA_TRANSLIT_GUARDED_SOURCE}`,
+);
 
 const SUCHON_FORMS = regexGroup([
   String.raw`суч[оеё]н(?:ок|к(?:а|у|ом|е|и|ов|ам|ами|ах)|ыш${cyrillicSuffix})`,
@@ -260,17 +296,17 @@ export default russianFamilyDictionary([
     id: "ru.insult.suka.family",
     category: "STRONG_INSULT",
     severity: "medium",
-    match: "strict-loose",
+    source: String.raw`${SUKA_CONTEXT_GUARD}сук(?:ар(?:ами?|ой|а|ы|е|у)?|ин${cyrillicSuffix}|ами?|ах|ой|а|и|е|у)`,
+    match: "loose",
     loose: { stretch: true },
-    source: String.raw`сук(?:ар(?:ами?|ой|а|ы|е|у)?|ин${cyrillicSuffix}|ами?|ах|ой|а|и|е|у)`,
   }),
   russianRule({
     id: "ru.insult.suchka.family",
     category: "STRONG_INSULT",
     severity: "medium",
-    match: "strict-loose",
+    source: String.raw`${SUCHKA_CONTEXT_GUARD}${SUCHKA_FAMILY_SOURCE}`,
+    match: "loose",
     loose: { stretch: true },
-    source: SUCHKA_FAMILY_SOURCE,
   }),
   russianRule({
     id: "ru.insult.suka.translit",
@@ -284,7 +320,9 @@ export default russianFamilyDictionary([
     id: "ru.insult.suka.token.loose",
     category: "STRONG_INSULT",
     severity: "medium",
-    source: token(String.raw`с(?:у|y)к(?:ара|ачка|учка|ин|ой|а|и|у)`),
+    source: token(
+      String.raw`${SUKA_CONTEXT_GUARD}с(?:у|y)к(?:ара|ачка|учка|ин|ой|а|и|у)`,
+    ),
     match: "loose",
     loose: { stretch: true },
   }),
