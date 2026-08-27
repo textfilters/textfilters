@@ -1,6 +1,6 @@
 {
   "name": "@textfilters/profanity",
-  "version": "1.0.1",
+  "version": "2.0.0",
   "type": "module",
   "description": "Dictionary-agnostic TypeScript profanity runtime with reusable indexes, source ranges, obfuscation handling, and allow-range exclusions.",
   "license": "MIT",
@@ -48,7 +48,7 @@
     "benchmark:profanity": "npm run build --workspace @textfilters/core && node ../../scripts/build-profanity-dictionary.mjs && npm run build && node --expose-gc scripts/benchmark-profanity.mjs"
   },
   "dependencies": {
-    "@textfilters/core": "^0.4.1"
+    "@textfilters/core": "^0.5.0"
   },
   "engines": {
     "node": ">=24"
