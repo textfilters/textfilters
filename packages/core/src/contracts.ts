@@ -3,6 +3,27 @@ export interface TextCensor {
   censor(value: string): string;
 }
 
+export interface TextMatch {
+  readonly start: number;
+  readonly end: number;
+  readonly value: string;
+  readonly filter: string;
+  readonly data?: unknown;
+}
+
+export interface TextFilterResult {
+  readonly censored: string;
+  readonly matches: readonly TextMatch[];
+}
+
+export interface TextFilter {
+  readonly name: string;
+  check(text: string): boolean;
+  find(text: string): readonly TextMatch[];
+  censor(text: string, mask?: string): string;
+  process(text: string, mask?: string): TextFilterResult;
+}
+
 export interface TextGuardInput {
   readonly actorKey?: string;
   readonly text: string;

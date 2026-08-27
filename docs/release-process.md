@@ -1,8 +1,13 @@
 # Release Process
 
-Release Please runs in manifest mode for six independently versioned npm
+Release Please runs in manifest mode for eight independently versioned npm
 workspaces. The root configuration uses the `node-workspace` plugin and one
 aggregated release pull request.
+
+The workspace plugin propagates releases through the local dependency graph so
+published dependents receive compatible local dependency ranges. A package
+with no direct source change can therefore receive a dependency-only patch when
+a released local dependency moves outside its current range.
 
 ## Release Signals
 
@@ -37,10 +42,12 @@ Versions remain independent. Tags include a stable component prefix:
 
 ```text
 core-v0.4.1
-url-v0.3.1
+url-v0.4.0
 email-v0.3.2
-phone-v0.2.3
-profanity-v0.16.3
+phone-v0.2.4
+profanity-v2.0.0
+profanity-ru-v0.1.0
+profanity-en-v0.1.0
 spam-v0.3.3
 ```
 
@@ -54,7 +61,7 @@ After Release Please creates releases, the workflow:
 1. Installs the root lockfile.
 2. Runs the full root check.
 3. Reads the exact paths released by Release Please.
-4. Rejects duplicates and paths outside the six-package allowlist.
+4. Rejects duplicates and paths outside the eight-package allowlist.
 5. Publishes selected workspaces sequentially in dependency order, beginning
    with `@textfilters/core`.
 
@@ -77,6 +84,11 @@ After publication:
 - confirm package association with this monorepo, visibility, and Actions access
 - install the released package set in a clean project
 - verify exactly one `@textfilters/core` version resolves
-- run a runtime import smoke for all six packages
+- run a runtime import smoke for all eight packages
 
 Published package tags and package versions are immutable.
+
+The profanity redesign uses the package-specific `release-as` override for its
+one-time `2.0.0` transition. Remove that override after the `2.0.0` release is
+recorded in the manifest so later releases return to Conventional Commit
+versioning.

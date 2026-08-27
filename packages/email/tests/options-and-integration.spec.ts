@@ -9,6 +9,23 @@ import {
 } from "../src/index.js";
 
 describe("@textfilters/email options and integration", () => {
+  it("exposes the shared text filter methods with UTF-16 ranges", () => {
+    const text = "😀 user@example.com";
+    const [match] = filter.find(text);
+
+    expect(filter.check(text)).toBe(true);
+    expect(match).toEqual({
+      start: 3,
+      end: 19,
+      value: "user@example.com",
+      filter: EMAIL_FILTER_NAME,
+    });
+    expect(filter.process(text)).toEqual({
+      censored: `😀 ${"*".repeat(16)}`,
+      matches: [match],
+    });
+  });
+
   it("supports custom mask characters", () => {
     expect(
       createEmailFilter({ maskChar: "#" }).censor("user@example.com"),

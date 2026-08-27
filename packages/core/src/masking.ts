@@ -104,3 +104,34 @@ export function maskRanges(
 
   return result;
 }
+
+/**
+ * Masks UTF-16 source ranges while preserving the original string length.
+ */
+export function maskUtf16Ranges(
+  value: string,
+  ranges: readonly TextRange[],
+  maskChar?: unknown,
+): string {
+  const source = normalizeTextInput(value);
+  if (source.length === 0 || ranges.length === 0) return source;
+
+  const merged = mergeRanges(ranges);
+  if (merged.length === 0) return source;
+
+  const mask = normalizeLengthPreservingMaskChar(maskChar);
+  let offset = 0;
+  let result = "";
+
+  for (const [rawStart, rawEnd] of merged) {
+    const start = Math.max(offset, Math.min(source.length, rawStart));
+    const end = Math.max(start, Math.min(source.length, rawEnd));
+    if (end <= start) continue;
+
+    result += source.slice(offset, start);
+    result += mask.repeat(end - start);
+    offset = end;
+  }
+
+  return result + source.slice(offset);
+}

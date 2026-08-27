@@ -81,9 +81,44 @@ const hasRange = allocationAwareScanner.check(prepared);
 const sharedInput: ScanInput = prepared;
 ```
 
+### Common Text Filter Contract
+
+`createTextFilterFromScanner()` adapts an existing code point range scanner to
+the common `TextFilter` contract. `combineFilters()` runs each child against the
+same original input, orders the collected UTF-16 matches, merges overlapping
+ranges, and masks the source once.
+
+```ts
+import {
+  combineFilters,
+  createTextFilterFromScanner,
+  type TextRangeScanner,
+} from "@textfilters/core";
+
+const scanner: TextRangeScanner = ({ text }) =>
+  text.includes("secret") ? [[0, 6]] : [];
+const secretFilter = createTextFilterFromScanner("secret", scanner);
+const filter = combineFilters(secretFilter);
+
+filter.check("secret message");
+filter.find("secret message");
+filter.censor("secret message");
+filter.process("secret message");
+```
+
+`TextMatch.start` and `TextMatch.end` are UTF-16 offsets into the original
+JavaScript string. `process()` returns both the once-masked text and the same
+ordered matches exposed by `find()`.
+
+The common `TextFilter` methods accept strings only and reject non-string
+runtime values. Lower-level scanner, cache, and legacy pipeline helpers retain
+their documented input-normalization behavior.
+
 ## API
 
 - `createTextPipeline()`
+- `createTextFilterFromScanner(name, scanner, defaultMask?)`
+- `combineFilters(...filters)`
 - `createTextRangePipeline()`
 - `checkTextRanges(value, scanners)`
 - `createPreparedText(value)`
@@ -105,12 +140,16 @@ const sharedInput: ScanInput = prepared;
 - `mergeCodePointRanges(ranges)`
 - `maskRange(value, range, maskChar)`
 - `maskRanges(value, ranges, maskChar)`
+- `maskUtf16Ranges(value, ranges, maskChar)`
 - `maskCodePointRanges(codePoints, ranges, maskChar)`
 - `maskCodePointRangesPreservingLength(codePoints, ranges, maskChar)`
 - `censorCodePointRanges(codePoints, ranges, maskChar)`
 - `ScanInput`
 - `ScanHints`
 - `ScanResult`
+- `TextFilter`
+- `TextFilterResult`
+- `TextMatch`
 - `TextRange`
 
 ### Public Input Normalization
@@ -197,8 +236,8 @@ sharing one final masking step. The existing `createTextPipeline()` and
   censoring.
 - `@textfilters/email` for email detection and contact redaction.
 - `@textfilters/phone` for phone number detection and contact redaction.
-- `@textfilters/profanity` for Russian profanity filtering and taxonomy-backed
-  moderation.
+- `@textfilters/profanity` for dictionary-independent profanity filtering with
+  separately selected language data.
 - `@textfilters/spam` for actor-based anti-spam guard checks.
 
 ## Release

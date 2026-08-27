@@ -1,0 +1,14 @@
+@org/c-hmo-tools
+C HMO plan
+C-H-M-O plan
+C-H-M-O-plan
+C-HMO plan
+C. HMO plan
+C.H.M.O plan
+C_H_M_O plan
+c-h-m-o-d
+c-hmo-plan.example
+c.h.m.o.d
+chmod
+feature/c-hmo-profile
+https://example.com/C-HMO-plan

@@ -11,19 +11,25 @@
     "packages/email",
     "packages/phone",
     "packages/profanity",
+    "packages/profanity-ru",
+    "packages/profanity-en",
     "packages/spam"
   ],
   "scripts": {
     "benchmark": "node scripts/benchmark.mjs",
+    "build:profanity-dictionaries": "node scripts/build-profanity-dictionary.mjs",
     "build": "node scripts/run-workspace-script.mjs build",
-    "check": "npm run check:metadata && npm run check:release-paths && npm run check:workspaces",
+    "check": "npm run check:metadata && npm run check:release-paths && npm run test:profanity-builder && npm run check:workspaces && npm run test:profanity-integration && npm run smoke:tarballs",
     "check:metadata": "node scripts/check-monorepo-metadata.mjs",
     "check:release-paths": "node scripts/publish-released-workspaces.mjs --self-test",
     "check:workspaces": "node scripts/run-workspace-script.mjs check",
     "lint": "node scripts/run-workspace-script.mjs lint",
     "pack:dry-run": "node scripts/run-workspace-script.mjs pack:dry-run",
     "smoke:dist": "node scripts/run-workspace-script.mjs smoke:dist",
-    "test": "node scripts/run-workspace-script.mjs test"
+    "smoke:tarballs": "node scripts/smoke-tarball-consumer.mjs",
+    "test": "npm run test:profanity-builder && node scripts/run-workspace-script.mjs test && npm run test:profanity-integration",
+    "test:profanity-builder": "node scripts/test-profanity-builder.mjs",
+    "test:profanity-integration": "node scripts/test-profanity-integration.mjs"
   },
   "devDependencies": {
     "@types/node": "25.9.5",

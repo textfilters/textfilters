@@ -9,6 +9,8 @@ packages/
   email/
   phone/
   profanity/
+  profanity-ru/
+  profanity-en/
   spam/
 ```
 
@@ -21,14 +23,13 @@ Each runtime package exposes its root public contract through `src/index.ts`.
 That file contains or re-exports:
 
 - package factories such as `createUrlFilter()` or `createSpamFilter()`
-- backwards-compatible aliases where already public
 - shared default instances only for stateless or intentionally shared behavior
-- scanner factories when range pipeline integration is public
-- public options, results, metadata, and filter instance types
+- the common `TextFilter` methods for text-matching packages
+- public options, results, matches, and filter instance types
 - stable public constants
 
 Parsers, low-level range collectors, dictionary compilers, and normalization
-details stay internal unless a package documents a public contract for them.
+details stay internal.
 
 ## Preferred Source Layout
 
@@ -56,13 +57,14 @@ the additional boundary clarifies ownership or removes real duplication.
 
 ## Package Families
 
-URL, email, and phone are stateless text censors. Their root exports preserve
-the existing shared `filter`, isolated factory functions, scanner factories,
+URL, email, and phone are stateless text filters. Their root exports expose
+shared instances, isolated factory functions, the common `TextFilter` methods,
 options, and public types.
 
-Profanity is dictionary-backed and intentionally larger. Dictionary validation,
-matcher compilation, range collection, taxonomy, and language data remain
-separate internal areas while the current public entrypoints remain stable.
+Profanity is a dictionary-independent runtime with structural inputs and one
+compiled matcher implementation. The Russian and English language workspaces
+contain only versioned source data and generated `dist/index.js` and
+`dist/index.d.ts` outputs.
 
 Spam is a stateful guard. Actor state, configuration normalization, text
 normalization, and public contracts stay separate. Guard instances are not
@@ -103,8 +105,9 @@ workspace list in every script.
 
 ## Alignment Rules
 
-- Prefer additive public exports.
-- Do not remove or rename existing exports without an explicit breaking change.
+- Prefer additive public exports unless an issue explicitly scopes a breaking
+  contract replacement.
+- Do not retain compatibility layers for an explicitly breaking replacement.
 - Keep shared defaults stable.
 - Add isolated factory options instead of changing default behavior.
 - Keep package runtime ownership inside its workspace.

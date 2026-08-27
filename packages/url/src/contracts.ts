@@ -1,4 +1,4 @@
-import type { TextCodePointRange } from "@textfilters/core";
+import type { TextCodePointRange, TextFilter } from "@textfilters/core";
 
 // Keep public API types in a dependency-light module so the entrypoint can
 // re-export them without exposing parser internals.
@@ -15,9 +15,8 @@ export type UrlScannerConfig = Omit<UrlFilterConfig, "maskChar">;
 
 export const URL_FILTER_NAME = "url";
 
-export interface UrlFilter {
+export interface UrlFilter extends TextFilter {
   readonly name: typeof URL_FILTER_NAME;
-  censor(text: unknown): string;
 }
 
 export interface UrlScanHints {

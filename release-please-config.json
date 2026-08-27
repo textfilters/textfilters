@@ -8,9 +8,7 @@
   "separate-pull-requests": false,
   "group-pull-request-title-pattern": "chore: release ${branch}",
   "always-link-local": true,
-  "plugins": [
-    "node-workspace"
-  ],
+  "plugins": ["node-workspace"],
   "packages": {
     "packages/core": {
       "component": "core",
@@ -30,7 +28,18 @@
     },
     "packages/profanity": {
       "component": "profanity",
-      "package-name": "@textfilters/profanity"
+      "package-name": "@textfilters/profanity",
+      "release-as": "2.0.0"
+    },
+    "packages/profanity-ru": {
+      "component": "profanity-ru",
+      "package-name": "@textfilters/profanity-ru",
+      "bump-minor-pre-major": true
+    },
+    "packages/profanity-en": {
+      "component": "profanity-en",
+      "package-name": "@textfilters/profanity-en",
+      "bump-minor-pre-major": true
     },
     "packages/spam": {
       "component": "spam",

@@ -20,7 +20,7 @@ npm run build
 npm run benchmark
 ```
 
-The runner uses Node.js built-in modules and the built public exports of the six
+The runner uses Node.js built-in modules and the built public exports of the eight
 local workspaces. It does not import package internals.
 
 ## Running a Subset
@@ -49,24 +49,24 @@ Use `npm run benchmark -- --help` to print the suite list in the terminal.
 
 Each row contains four measurements:
 
-| Column | Meaning |
-|---|---|
-| `iter` | Iteration count |
+| Column     | Meaning                               |
+| ---------- | ------------------------------------- |
+| `iter`     | Iteration count                       |
 | `total ms` | Total elapsed time for all iterations |
-| `avg ms` | Average time per iteration |
-| `ops/sec` | Approximate operations per second |
+| `avg ms`   | Average time per iteration            |
+| `ops/sec`  | Approximate operations per second     |
 
 ## Coverage
 
 ### `core` pipeline
 
-| Case | Measures |
-|---|---|
-| create single-filter pipeline | Setup cost for a one-filter pipeline |
-| create multi-filter pipeline | Setup cost for a chained pipeline |
-| single filter · short/long clean | `censor()` overhead with no match |
-| single filter · short/long match | URL detection and masking cost |
-| multi filter · short/long | Chained censor overhead |
+| Case                             | Measures                             |
+| -------------------------------- | ------------------------------------ |
+| create single-filter pipeline    | Setup cost for a one-filter pipeline |
+| create multi-filter pipeline     | Setup cost for a chained pipeline    |
+| single filter · short/long clean | `censor()` overhead with no match    |
+| single filter · short/long match | URL detection and masking cost       |
+| multi filter · short/long        | Chained censor overhead              |
 
 ### `url`, `email`, and `phone`
 
@@ -80,44 +80,40 @@ Each censor runs these scenarios plus one custom `maskChar` case:
 
 ### `profanity`
 
-| Case | Measures |
-|---|---|
-| `compileProfanityDictionary()` | One-time dictionary compilation cost |
-| `createProfanityFilterFromDictionary()` | Filter creation from a raw dictionary |
-| `createProfanityFilterFromCompiledDictionary()` | Filter creation from a reused compiled dictionary |
-| `check()` short/long clean | No-match detection |
-| `check()` short/long match | Positive-match detection |
-| `censor()` short/long | Detection plus masking |
-| `analyze()` short/match/long | Full analysis result creation |
-| compiled reuse · `censor()` | Runtime censoring with a reused compiled dictionary |
+| Case                                  | Measures                                                 |
+| ------------------------------------- | -------------------------------------------------------- |
+| full RU, EN, and RU+EN construction   | One-time structural dictionary indexing cost             |
+| retained RU+EN filters                | Approximate same-process heap growth per reusable filter |
+| `check()` short/long clean            | No-match detection                                       |
+| `check()` early/late match            | Early-exit and late-match detection                      |
+| phrase and obfuscated inputs          | Multi-token and normalized matching paths                |
+| `find()`, `censor()`, and `process()` | Source ranges, masking, and combined result creation     |
+
+The dedicated package benchmark runs with the complete maintained Russian and
+English dictionaries. Memory output is an approximate local comparison, not a
+portable allocation claim.
 
 ### `spam`
 
 The spam guard is stateful, so every benchmark case creates its own guard and
 uses explicit `nowMs` values instead of wall-clock time.
 
-| Case | Measures |
-|---|---|
-| `createSpamFilter()` | Guard creation cost |
-| check · allowed | Happy path through all checks |
-| check · tooFast block | Early exit on interval violation |
-| check · duplicate block | Duplicate detection within the duplicate window |
-| check · burst block | Burst threshold rejection |
-| many messages · same actor | Repeated checks and state growth for one actor |
-| many actors · maxActors pruning | Actor-map pruning under churn |
+| Case                            | Measures                                        |
+| ------------------------------- | ----------------------------------------------- |
+| `createSpamFilter()`            | Guard creation cost                             |
+| check · allowed                 | Happy path through all checks                   |
+| check · tooFast block           | Early exit on interval violation                |
+| check · duplicate block         | Duplicate detection within the duplicate window |
+| check · burst block             | Burst threshold rejection                       |
+| many messages · same actor      | Repeated checks and state growth for one actor  |
+| many actors · maxActors pruning | Actor-map pruning under churn                   |
 
 ### Combined Pipeline
 
-`url + email + phone + profanity` in three comparable paths when scanner exports
-are available:
-
-- `combined legacy sequential`: the existing `TextPipeline` that censors through
-  each package in registration order
-- `combined scanner ranges`: the range scanner pipeline that collects URL,
-  email, phone, and profanity ranges before applying one mask pass
-- `combined shared hints`: the shared-hints scanner set that measures `check()`,
-  `scan()`, and `censor()` separately when the installed packages expose the
-  allocation-aware scanner contract
+The combined suite measures one `combineFilters()` instance containing URL,
+email, phone, and full RU+EN profanity filters. Each child receives the same
+original input. `censor()` and `process()` merge all accepted UTF-16 ranges and
+apply one masking pass.
 
 Setup rows are printed separately from steady-state rows. The steady-state
 matrix covers:
@@ -130,20 +126,17 @@ matrix covers:
 - Cyrillic clean text
 - obfuscated profanity candidates
 
-The current workspaces expose the scanner contracts required by every combined
-benchmark path. The runner imports those contracts directly, so a missing
-scanner export fails validation instead of silently dropping benchmark rows.
+Every scenario records `check()`, `find()`, `censor()`, and `process()` so the
+boolean early-exit path stays distinct from full match collection and masking.
 
 ## Interpreting Results
 
 - Compare runs on the same machine before and after a change.
 - Treat a regression as meaningful only when it repeats across several runs.
 - `ops/sec` is derived from `avg ms`; prefer `avg ms` for precise comparisons.
-- For combined benchmark work, compare rows with the same input suffix, such as
-  `combined legacy sequential · censor · long clean` against
-  `combined scanner ranges · censor · long clean`.
-- Compare `combined shared hints · check` against `scan` and `censor` rows to
-  confirm boolean checks avoid unnecessary full-match work.
-- `profanity · compileProfanityDictionary()` is expected to be slower than
-  runtime calls because it is a setup operation. Reuse the compiled result with
-  `createProfanityFilterFromCompiledDictionary()` when measuring hot paths.
+- For combined benchmark work, compare rows with the same operation and input
+  suffix between the baseline and branch.
+- Compare combined `check()` with `find()`, `censor()`, and `process()` on the
+  same input to confirm boolean checks avoid unnecessary full-match work.
+- Profanity construction is a setup operation. Create selected filters once and
+  reuse them when measuring hot paths.

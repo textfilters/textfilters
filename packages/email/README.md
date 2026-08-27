@@ -39,6 +39,11 @@ const emailFilter = createEmailFilter({ maskChar: "#" });
 const safeText = emailFilter.censor("contact user@example.com");
 ```
 
+`createEmailFilter()` and the default `filter` expose the shared `TextFilter`
+methods: `check()`, `find()`, `censor()`, and `process()`. `find()` reports
+UTF-16 ranges into the original input, and `process()` returns those matches
+with the censored text.
+
 ```ts
 import { createEmailFilter } from "@textfilters/email";
 
@@ -118,8 +123,8 @@ censoring cases on the same machine.
 - `@textfilters/url` for URL detection, obfuscated links, and safe link
   censoring.
 - `@textfilters/phone` for phone number detection and contact redaction.
-- `@textfilters/profanity` for Russian profanity filtering and taxonomy-backed
-  moderation.
+- `@textfilters/profanity` for dictionary-independent profanity filtering with
+  separately selected language data.
 - `@textfilters/spam` for actor-based anti-spam guard checks.
 
 ## Release
