@@ -45,6 +45,11 @@ const phoneFilter = createPhoneFilter({ maskChar: "#" });
 const safeText = phoneFilter.censor("call 8 999 123 45 67");
 ```
 
+`createPhoneFilter()` and the default `filter` expose the shared `TextFilter`
+methods: `check()`, `find()`, `censor()`, and `process()`. `find()` reports
+UTF-16 ranges into the original input, and `process()` returns those matches
+with the censored text.
+
 ```ts
 import { createPhoneScanner } from "@textfilters/phone";
 
@@ -99,8 +104,8 @@ the same machine.
 - `@textfilters/url` for URL detection, obfuscated links, and safe link
   censoring.
 - `@textfilters/email` for email detection and contact redaction.
-- `@textfilters/profanity` for Russian profanity filtering and taxonomy-backed
-  moderation.
+- `@textfilters/profanity` for dictionary-independent profanity filtering with
+  separately selected language data.
 - `@textfilters/spam` for actor-based anti-spam guard checks.
 
 ## Release

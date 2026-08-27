@@ -6,6 +6,7 @@ import type {
   TextCensor,
   TextGuard,
   TextGuardResult,
+  TextFilter,
   TextRange,
 } from "../src/index.js";
 
@@ -65,6 +66,27 @@ describe("textfilters core contracts", () => {
       codePoints: ["a", "b", "c"],
       ranges: [[1, 3]],
       scanResults: [{ ranges: [[1, 3]] }],
+    });
+  });
+
+  it("exposes the shared text filter shape", () => {
+    const filter: TextFilter = {
+      name: "example",
+      check: (text) => text === "bad",
+      find: (text) =>
+        text === "bad"
+          ? [{ start: 0, end: 3, value: "bad", filter: "example" }]
+          : [],
+      censor: (text) => (text === "bad" ? "***" : text),
+      process(text) {
+        const matches = this.find(text);
+        return { censored: this.censor(text), matches };
+      },
+    };
+
+    expect(filter.process("bad")).toEqual({
+      censored: "***",
+      matches: [{ start: 0, end: 3, value: "bad", filter: "example" }],
     });
   });
 });

@@ -1,4 +1,4 @@
-import type { TextCodePointRange } from "@textfilters/core";
+import type { TextCodePointRange, TextFilter } from "@textfilters/core";
 
 export const EMAIL_FILTER_NAME = "email";
 
@@ -12,9 +12,8 @@ export interface EmailFilterOptions {
   readonly excludeDomains?: readonly string[];
 }
 
-export interface EmailFilter {
+export interface EmailFilter extends TextFilter {
   readonly name: typeof EMAIL_FILTER_NAME;
-  censor(text: unknown): string;
 }
 
 export interface EmailScanHints {

@@ -6,8 +6,10 @@ describe("textfilters core public entrypoint", () => {
     expect(Object.keys(core).sort()).toEqual([
       "censorCodePointRanges",
       "checkTextRanges",
+      "combineFilters",
       "createCachedTextProcessor",
       "createPreparedText",
+      "createTextFilterFromScanner",
       "createTextHints",
       "createTextPipeline",
       "createTextRangePipeline",
@@ -18,6 +20,7 @@ describe("textfilters core public entrypoint", () => {
       "maskCodePointRangesPreservingLength",
       "maskRange",
       "maskRanges",
+      "maskUtf16Ranges",
       "mergeCodePointRanges",
       "mergeRanges",
       "normalizeLengthPreservingMaskChar",

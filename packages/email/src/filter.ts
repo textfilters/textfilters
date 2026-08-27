@@ -1,4 +1,4 @@
-import { censorCodePointRanges, normalizeTextInput } from "@textfilters/core";
+import { createTextFilterFromScanner } from "@textfilters/core";
 
 import { createEmailScanner } from "./scanner.js";
 import {
@@ -11,18 +11,11 @@ export function createEmailFilter(
   options: EmailFilterOptions = {},
 ): EmailFilter {
   const scanner = createEmailScanner(options);
-  const maskChar = options.maskChar ?? "*";
-
-  return {
-    name: EMAIL_FILTER_NAME,
-    censor(text) {
-      const source = normalizeTextInput(text);
-      if (!source) return source;
-      const codePoints = Array.from(source);
-      const ranges = scanner.scan({ text: source, codePoints }).ranges;
-      return censorCodePointRanges(codePoints, ranges, maskChar);
-    },
-  };
+  return createTextFilterFromScanner(
+    EMAIL_FILTER_NAME,
+    scanner,
+    options.maskChar,
+  );
 }
 
 export function emailFilter(options?: EmailFilterOptions): EmailFilter {

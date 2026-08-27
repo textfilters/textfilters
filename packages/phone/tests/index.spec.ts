@@ -18,14 +18,27 @@ describe("textfilters phone package", () => {
     );
   });
 
-  it("normalizes empty and non-string public input through core", () => {
+  it("exposes the shared text filter methods with UTF-16 ranges", () => {
+    const text = "😀 +1 202 555 0187";
+    const [match] = filter.find(text);
+
+    expect(filter.check(text)).toBe(true);
+    expect(match).toEqual({
+      start: 3,
+      end: 18,
+      value: "+1 202 555 0187",
+      filter: PHONE_FILTER_NAME,
+    });
+    expect(filter.process(text)).toEqual({
+      censored: `😀 ${"*".repeat(15)}`,
+      matches: [match],
+    });
+  });
+
+  it("accepts empty text and rejects non-string TextFilter input", () => {
     expect(filter.censor("")).toBe("");
-    expect(filter.censor(null)).toBe("");
-    expect(filter.censor(undefined)).toBe("");
-    expect(filter.censor(12345)).toBe("12345");
-    expect(filter.censor({ toString: () => "+1 202 555 0187" })).toBe(
-      mask("+1 202 555 0187"),
-    );
+    const unsafe = filter as unknown as { censor(value: unknown): string };
+    expect(() => unsafe.censor(null)).toThrow("text must be a string");
   });
 
   it("censors common RU and international phone formats", () => {
@@ -557,11 +570,6 @@ describe("textfilters phone package", () => {
     expect(custom.censor("call 𐒧𐒩𐒩𐒩𐒡𐒢𐒣𐒤𐒥𐒦𐒧 now")).toBe(
       `call ${maskLength("𐒧𐒩𐒩𐒩𐒡𐒢𐒣𐒤𐒥𐒦𐒧", "#")} now`,
     );
-  });
-
-  it("keeps current null and undefined runtime behavior", () => {
-    expect(filter.censor(null as unknown as string)).toBe("");
-    expect(filter.censor(undefined as unknown as string)).toBe("");
   });
 
   it("skips parenthesis-only input without scanning for phones", () => {

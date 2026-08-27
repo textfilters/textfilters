@@ -18,14 +18,27 @@ describe("compatibility behavior", () => {
     );
   });
 
-  it("normalizes empty and non-string public input through core", () => {
+  it("exposes the shared text filter methods with UTF-16 ranges", () => {
+    const text = "😀 example.com";
+    const [match] = filter.find(text);
+
+    expect(filter.check(text)).toBe(true);
+    expect(match).toEqual({
+      start: 3,
+      end: 14,
+      value: "example.com",
+      filter: URL_FILTER_NAME,
+    });
+    expect(filter.process(text)).toEqual({
+      censored: `😀 ${mask("example.com")}`,
+      matches: [match],
+    });
+  });
+
+  it("accepts empty text and rejects non-string TextFilter input", () => {
     expect(filter.censor("")).toBe("");
-    expect(filter.censor(null)).toBe("");
-    expect(filter.censor(undefined)).toBe("");
-    expect(filter.censor(12345)).toBe("12345");
-    expect(filter.censor({ toString: () => "https://example.com" })).toBe(
-      mask("https://example.com"),
-    );
+    const unsafe = filter as unknown as { censor(value: unknown): string };
+    expect(() => unsafe.censor(null)).toThrow("text must be a string");
   });
 
   it("censors explicit scheme URLs and keeps surrounding text", () => {

@@ -1,0 +1,6 @@
+cockatoo
+cocktail
+cocktail.example
+cocktail@example.com
+cocktail_user
+https://cock.example

@@ -10,7 +10,18 @@ const REPO_ROOT = path.resolve(
 );
 const REPOSITORY_URL = "https://github.com/textfilters/textfilters.git";
 const ISSUES_URL = "https://github.com/textfilters/textfilters/issues";
-const WORKSPACES = ["core", "url", "email", "phone", "profanity", "spam"];
+const WORKSPACES = [
+  "core",
+  "url",
+  "email",
+  "phone",
+  "profanity",
+  "profanity-ru",
+  "profanity-en",
+  "spam",
+];
+const CORE_CONSUMERS = ["url", "email", "phone", "profanity", "spam"];
+const LANGUAGE_PACKAGES = ["profanity-ru", "profanity-en"];
 const ROOT_TOOLING = ["@types/node", "prettier", "typescript", "vitest"];
 
 const rootPackage = await readJson("package.json");
@@ -24,6 +35,11 @@ expectEqual(
   WORKSPACES.map((name) => `packages/${name}`),
 );
 expectEqual("root private", rootPackage.private, true);
+expectEqual(
+  "root dictionary build script",
+  rootPackage.scripts?.["build:profanity-dictionaries"],
+  "node scripts/build-profanity-dictionary.mjs",
+);
 for (const dependency of ROOT_TOOLING) {
   if (!rootPackage.devDependencies?.[dependency]) {
     failures.push(`Root devDependencies are missing ${dependency}.`);
@@ -98,7 +114,7 @@ for (const name of WORKSPACES) {
 }
 
 const coreVersion = packageJsonByName.get("core").version;
-for (const name of WORKSPACES.slice(1)) {
+for (const name of CORE_CONSUMERS) {
   expectEqual(
     `${name} core range`,
     packageJsonByName.get(name).dependencies?.["@textfilters/core"],
@@ -106,7 +122,36 @@ for (const name of WORKSPACES.slice(1)) {
   );
 }
 
+for (const name of LANGUAGE_PACKAGES) {
+  const workspacePath = `packages/${name}`;
+  expectEqual(
+    `${name} pre-major release policy`,
+    releaseConfig.packages?.[workspacePath]?.["bump-minor-pre-major"],
+    true,
+  );
+}
+
 expectEqual("Release Please plugin", releaseConfig.plugins, ["node-workspace"]);
+expectEqual(
+  "Release Please local dependency policy",
+  releaseConfig["always-link-local"],
+  true,
+);
+expectEqual(
+  "pre-2.0 profanity release override",
+  validateProfanityReleaseAs("1.0.1", "2.0.0"),
+  undefined,
+);
+expectEqual(
+  "released profanity override cleanup",
+  validateProfanityReleaseAs("2.0.0", undefined),
+  undefined,
+);
+const profanityReleaseAsFailure = validateProfanityReleaseAs(
+  releaseManifest["packages/profanity"],
+  releaseConfig.packages?.["packages/profanity"]?.["release-as"],
+);
+if (profanityReleaseAsFailure) failures.push(profanityReleaseAsFailure);
 expectEqual(
   "Release Please aggregate PR mode",
   releaseConfig["separate-pull-requests"],
@@ -153,4 +198,12 @@ function expectEqual(label, actual, expected) {
       `${label}: expected ${JSON.stringify(expected)}, received ${JSON.stringify(actual)}.`,
     );
   }
+}
+
+function validateProfanityReleaseAs(manifestVersion, releaseAs) {
+  if (Number.parseInt(manifestVersion, 10) >= 2 || releaseAs === "2.0.0") {
+    return undefined;
+  }
+
+  return `profanity next release: expected "2.0.0", received ${JSON.stringify(releaseAs)}.`;
 }

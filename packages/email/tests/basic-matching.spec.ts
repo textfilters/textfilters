@@ -3,14 +3,10 @@ import { describe, expect, it } from "vitest";
 import { filter } from "../src/index.js";
 
 describe("@textfilters/email basic matching", () => {
-  it("normalizes empty and non-string public input through core", () => {
+  it("accepts empty text and rejects non-string TextFilter input", () => {
     expect(filter.censor("")).toBe("");
-    expect(filter.censor(null)).toBe("");
-    expect(filter.censor(undefined)).toBe("");
-    expect(filter.censor(12345)).toBe("12345");
-    expect(filter.censor({ toString: () => "user@example.com" })).toBe(
-      "****************",
-    );
+    const unsafe = filter as unknown as { censor(value: unknown): string };
+    expect(() => unsafe.censor(null)).toThrow("text must be a string");
   });
 
   it("masks direct email addresses", () => {

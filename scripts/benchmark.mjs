@@ -9,24 +9,14 @@
  */
 
 import { performance } from "node:perf_hooks";
-import {
-  censorCodePointRanges,
-  checkTextRanges,
-  createTextPipeline,
-  createTextRangePipeline,
-  scanTextRanges,
-} from "@textfilters/core";
-import { createEmailFilter, createEmailScanner } from "@textfilters/email";
-import { createPhoneFilter, createPhoneScanner } from "@textfilters/phone";
-import {
-  compileProfanityDictionary,
-  createProfanityFilterFromCompiledDictionary,
-  createProfanityFilterFromDictionary,
-  createProfanityScanner,
-  russianProfanityDictionary,
-} from "@textfilters/profanity";
+import { combineFilters, createTextPipeline } from "@textfilters/core";
+import { createEmailFilter } from "@textfilters/email";
+import { createPhoneFilter } from "@textfilters/phone";
+import { createProfanityFilter } from "@textfilters/profanity";
+import englishDictionary from "@textfilters/profanity-en";
+import russianDictionary from "@textfilters/profanity-ru";
 import { createSpamFilter } from "@textfilters/spam";
-import { createUrlFilter, createUrlScanner } from "@textfilters/url";
+import { createUrlFilter } from "@textfilters/url";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -96,46 +86,13 @@ function runSuite(suite, suiteName, createResults) {
   printResults(suiteName, createResults());
 }
 
-function createCombinedPipeline(compiledDictionary) {
-  return createTextPipeline()
-    .use(createEmailFilter())
-    .use(createUrlFilter())
-    .use(createPhoneFilter())
-    .use(createProfanityFilterFromCompiledDictionary(compiledDictionary));
-}
-
-function createCombinedScanners(compiledDictionary) {
-  return [
-    createEmailScanner(),
-    createUrlScanner(),
-    createPhoneScanner(),
-    createProfanityScanner({
-      filter: createProfanityFilterFromCompiledDictionary(compiledDictionary),
-    }),
-  ];
-}
-
-function createCombinedScannerPipeline(compiledDictionary) {
-  return createCombinedScanners(compiledDictionary).reduce(
-    (pipeline, scanner) => pipeline.use(scanner),
-    createTextRangePipeline(),
+function createCombinedFilter() {
+  return combineFilters(
+    createEmailFilter(),
+    createUrlFilter(),
+    createPhoneFilter(),
+    createProfanityFilter(russianDictionary, englishDictionary),
   );
-}
-
-function createSharedHintsCombinedScanner(compiledDictionary) {
-  const scanners = createCombinedScanners(compiledDictionary);
-  return {
-    check(value) {
-      return checkTextRanges(value, scanners);
-    },
-    scan(value) {
-      return scanTextRanges(value, scanners);
-    },
-    censor(value) {
-      const result = scanTextRanges(value, scanners);
-      return censorCodePointRanges(result.codePoints, result.ranges);
-    },
-  };
 }
 
 function createCensorResults({
@@ -276,53 +233,63 @@ for (const suite of CENSOR_SUITES) {
 // ---------------------------------------------------------------------------
 
 runSuite("profanity", "profanity", () => {
-  const compiled = compileProfanityDictionary(russianProfanityDictionary);
-  const f = createProfanityFilterFromDictionary(russianProfanityDictionary);
-  const fCompiled = createProfanityFilterFromCompiledDictionary(compiled);
+  const createRussianFilter = () => createProfanityFilter(russianDictionary);
+  const createEnglishFilter = () => createProfanityFilter(englishDictionary);
+  const createFullFilter = () =>
+    createProfanityFilter(russianDictionary, englishDictionary);
+  const filter = createProfanityFilter(russianDictionary, englishDictionary);
 
   return [
     bench(
-      "profanity · compileProfanityDictionary()",
-      () => compileProfanityDictionary(russianProfanityDictionary),
+      "profanity · create full RU filter",
+      createRussianFilter,
       SETUP_ITERATIONS,
     ),
     bench(
-      "profanity · create from fresh dictionary",
-      () => createProfanityFilterFromDictionary(russianProfanityDictionary),
+      "profanity · create full EN filter",
+      createEnglishFilter,
       SETUP_ITERATIONS,
     ),
     bench(
-      "profanity · create from compiled dictionary",
-      () => createProfanityFilterFromCompiledDictionary(compiled),
+      "profanity · create full RU+EN filter",
+      createFullFilter,
       SETUP_ITERATIONS,
     ),
-    bench("profanity · check · short clean", () => f.check(SHORT_PROFANE)),
+    bench("profanity · check · short clean", () => filter.check(SHORT_PROFANE)),
     bench("profanity · check · short match", () =>
-      f.check(SHORT_PROFANE_MATCH),
+      filter.check(SHORT_PROFANE_MATCH),
     ),
-    bench("profanity · check · long clean", () => f.check(LONG_PROFANE_CLEAN)),
+    bench("profanity · check · long clean", () =>
+      filter.check(LONG_PROFANE_CLEAN),
+    ),
     bench("profanity · check · long match late", () =>
-      f.check(LONG_PROFANE_MATCH_LATE),
+      filter.check(LONG_PROFANE_MATCH_LATE),
     ),
-    bench("profanity · censor · short clean", () => f.censor(SHORT_PROFANE)),
+    bench("profanity · censor · short clean", () =>
+      filter.censor(SHORT_PROFANE),
+    ),
     bench("profanity · censor · short match", () =>
-      f.censor(SHORT_PROFANE_MATCH),
+      filter.censor(SHORT_PROFANE_MATCH),
     ),
     bench("profanity · censor · long clean", () =>
-      f.censor(LONG_PROFANE_CLEAN),
+      filter.censor(LONG_PROFANE_CLEAN),
     ),
     bench("profanity · censor · long match late", () =>
-      f.censor(LONG_PROFANE_MATCH_LATE),
+      filter.censor(LONG_PROFANE_MATCH_LATE),
     ),
-    bench("profanity · analyze · short clean", () => f.analyze(SHORT_PROFANE)),
-    bench("profanity · analyze · short match", () =>
-      f.analyze(SHORT_PROFANE_MATCH),
+    bench("profanity · find · short clean", () => filter.find(SHORT_PROFANE)),
+    bench("profanity · find · short match", () =>
+      filter.find(SHORT_PROFANE_MATCH),
     ),
-    bench("profanity · analyze · long match late", () =>
-      f.analyze(LONG_PROFANE_MATCH_LATE),
+    bench("profanity · find · long match late", () =>
+      filter.find(LONG_PROFANE_MATCH_LATE),
     ),
-    bench("profanity · compiled reuse · censor · short match", () =>
-      fCompiled.censor(SHORT_PROFANE_MATCH),
+    bench("profanity · check · phrase", () => filter.check("еб твою мать")),
+    bench("profanity · check · obfuscated", () =>
+      filter.check("х-у-й and f-υ-c-k"),
+    ),
+    bench("profanity · check · exact allow", () =>
+      filter.check("сука породы лабрадор"),
     ),
   ];
 });
@@ -431,10 +398,7 @@ runSuite("spam", "spam", () => {
 // ---------------------------------------------------------------------------
 
 runSuite("combined", "pipeline · url + email + phone + profanity", () => {
-  const compiled = compileProfanityDictionary(russianProfanityDictionary);
-  const legacyPipeline = createCombinedPipeline(compiled);
-  const scannerPipeline = createCombinedScannerPipeline(compiled);
-  const sharedHintsScanner = createSharedHintsCombinedScanner(compiled);
+  const combined = createCombinedFilter();
 
   const COMBINED_SHORT_CLEAN = "Hello, this message is clean.";
   const COMBINED_CYRILLIC_CLEAN = "Привет, как дела? Всё хорошо.";
@@ -459,57 +423,16 @@ runSuite("combined", "pipeline · url + email + phone + profanity", () => {
   ];
 
   const results = [
-    bench(
-      "combined pipeline · create composed pipeline",
-      () => createCombinedPipeline(compiled),
-      SETUP_ITERATIONS,
-    ),
-    bench(
-      "combined scanner ranges · create pipeline",
-      () => createCombinedScannerPipeline(compiled),
-      SETUP_ITERATIONS,
-    ),
-    bench(
-      "combined shared hints · create scanner set",
-      () => createSharedHintsCombinedScanner(compiled),
-      SETUP_ITERATIONS,
-    ),
-  ];
-
-  const paths = [
-    {
-      label: "legacy sequential",
-      operations: {
-        censor: (input) => legacyPipeline.censor(input),
-      },
-    },
-    {
-      label: "scanner ranges",
-      operations: {
-        scan: (input) => scannerPipeline.scan(input),
-        censor: (input) => scannerPipeline.censor(input),
-      },
-    },
-    {
-      label: "shared hints",
-      operations: {
-        check: (input) => sharedHintsScanner.check(input),
-        scan: (input) => sharedHintsScanner.scan(input),
-        censor: (input) => sharedHintsScanner.censor(input),
-      },
-    },
+    bench("combined filter · create", createCombinedFilter, SETUP_ITERATIONS),
   ];
 
   for (const [label, input] of scenarios) {
-    for (const path of paths) {
-      for (const [operation, run] of Object.entries(path.operations)) {
-        results.push(
-          bench(`combined ${path.label} · ${operation} · ${label}`, () =>
-            run(input),
-          ),
-        );
-      }
-    }
+    results.push(
+      bench(`combined · check · ${label}`, () => combined.check(input)),
+      bench(`combined · find · ${label}`, () => combined.find(input)),
+      bench(`combined · censor · ${label}`, () => combined.censor(input)),
+      bench(`combined · process · ${label}`, () => combined.process(input)),
+    );
   }
 
   return results;

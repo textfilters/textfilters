@@ -1,0 +1,53 @@
+{
+  "name": "@textfilters/profanity-en",
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Plain English deny and allow dictionary data for @textfilters/profanity.",
+  "license": "MIT",
+  "keywords": [
+    "text-filtering",
+    "content-moderation",
+    "profanity-filter",
+    "english-profanity",
+    "dictionary"
+  ],
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "node ../../scripts/build-profanity-dictionary.mjs packages/profanity-en",
+    "test": "npm run build && vitest run tests",
+    "lint": "prettier README.md package.json data tests --check",
+    "format": "prettier README.md package.json data tests --write",
+    "prepack": "npm run build",
+    "pack:dry-run": "npm pack --dry-run",
+    "smoke:dist": "npm run build && node --input-type=module --eval \"const { default: dictionary } = await import('./dist/index.js'); if (dictionary.id !== 'en') throw new Error('Invalid dictionary');\"",
+    "check": "npm run lint && npm test && node ../../scripts/build-profanity-dictionary.mjs --check packages/profanity-en && npm run smoke:dist && npm run pack:dry-run"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/textfilters/textfilters.git",
+    "directory": "packages/profanity-en"
+  },
+  "bugs": {
+    "url": "https://github.com/textfilters/textfilters/issues"
+  },
+  "homepage": "https://github.com/textfilters/textfilters/tree/main/packages/profanity-en#readme",
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  }
+}

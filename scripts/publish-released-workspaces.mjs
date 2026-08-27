@@ -9,6 +9,8 @@ const WORKSPACES = [
   { path: "packages/email", name: "@textfilters/email" },
   { path: "packages/phone", name: "@textfilters/phone" },
   { path: "packages/profanity", name: "@textfilters/profanity" },
+  { path: "packages/profanity-ru", name: "@textfilters/profanity-ru" },
+  { path: "packages/profanity-en", name: "@textfilters/profanity-en" },
   { path: "packages/spam", name: "@textfilters/spam" },
 ];
 const WORKSPACE_BY_PATH = new Map(

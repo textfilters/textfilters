@@ -1,4 +1,4 @@
-import { type TextCodePointRange } from "@textfilters/core";
+import type { TextCodePointRange, TextFilter } from "@textfilters/core";
 
 export const PHONE_FILTER_NAME = "phone";
 
@@ -6,9 +6,8 @@ export interface PhoneFilterConfig {
   readonly maskChar?: string;
 }
 
-export interface PhoneFilter {
+export interface PhoneFilter extends TextFilter {
   readonly name: typeof PHONE_FILTER_NAME;
-  censor(text: unknown): string;
 }
 
 export interface PhoneScannerConfig {}

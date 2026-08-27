@@ -10,6 +10,8 @@ export type {
   ScanInput,
   ScanResult,
   TextCensor,
+  TextFilter,
+  TextFilterResult,
   TextCodePointRange,
   TextGuard,
   TextGuardAllowedResult,
@@ -22,6 +24,7 @@ export type {
   TextPipelineProcessResult,
   TextRange,
   TextHints,
+  TextMatch,
   TextRangePipeline,
   TextRangePipelineCensorResult,
   TextRangePipelineScanResult,
@@ -48,6 +51,7 @@ export {
   maskCodePointRangesPreservingLength,
   maskRange,
   maskRanges,
+  maskUtf16Ranges,
 } from "./masking.js";
 export { createTextPipeline } from "./pipeline.js";
 export { mergeCodePointRanges, mergeRanges } from "./ranges.js";
@@ -62,3 +66,4 @@ export {
   scanPreparedTextRanges,
   scanTextRanges,
 } from "./scanner.js";
+export { combineFilters, createTextFilterFromScanner } from "./text-filter.js";

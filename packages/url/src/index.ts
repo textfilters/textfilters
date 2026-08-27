@@ -1,4 +1,4 @@
-import { censorCodePointRanges, normalizeTextInput } from "@textfilters/core";
+import { createTextFilterFromScanner } from "@textfilters/core";
 
 import {
   URL_FILTER_NAME,
@@ -33,18 +33,7 @@ export function createUrlFilter(config: UrlFilterConfig = {}): UrlFilter {
     allowedDomains: config.allowedDomains,
     ambiguousSpacedDots: config.ambiguousSpacedDots,
   });
-  const maskChar = config.maskChar ?? "*";
-
-  return {
-    name: URL_FILTER_NAME,
-    censor(text) {
-      const source = normalizeTextInput(text);
-      if (!source) return source;
-      const codePoints = Array.from(source);
-      const ranges = scanner.scan({ text: source, codePoints }).ranges;
-      return censorCodePointRanges(codePoints, ranges, maskChar);
-    },
-  };
+  return createTextFilterFromScanner(URL_FILTER_NAME, scanner, config.maskChar);
 }
 
 export function urlFilter(config?: UrlFilterConfig): UrlFilter {

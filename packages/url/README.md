@@ -44,6 +44,11 @@ const urlFilter = createUrlFilter({ tlds: ["com", "org"], maskChar: "#" });
 const safeText = urlFilter.censor("visit example[.]com");
 ```
 
+`createUrlFilter()` and the default `filter` expose the shared `TextFilter`
+methods: `check()`, `find()`, `censor()`, and `process()`. `find()` reports
+UTF-16 ranges into the original input, and `process()` returns those matches
+with the censored text.
+
 A literal dot followed by whitespace is ambiguous without external context:
 it can be sentence punctuation or a one-sided defanged domain. The
 `ambiguousSpacedDots` option makes that policy explicit:
@@ -221,8 +226,8 @@ npm run benchmark:url
   primitives.
 - `@textfilters/email` for email detection and contact redaction.
 - `@textfilters/phone` for phone number detection and contact redaction.
-- `@textfilters/profanity` for Russian profanity filtering and taxonomy-backed
-  moderation.
+- `@textfilters/profanity` for dictionary-independent profanity filtering with
+  separately selected language data.
 - `@textfilters/spam` for actor-based anti-spam guard checks.
 
 ## Release
