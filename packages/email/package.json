@@ -1,6 +1,6 @@
 {
   "name": "@textfilters/email",
-  "version": "0.3.2",
+  "version": "0.4.0",
   "type": "module",
   "description": "TypeScript email address and obfuscated email detector for content moderation, with exclusions and false-positive guards.",
   "license": "MIT",
@@ -45,7 +45,7 @@
     "benchmark:email": "npm run build && node scripts/benchmark-email.mjs"
   },
   "dependencies": {
-    "@textfilters/core": "^0.4.1"
+    "@textfilters/core": "^0.5.0"
   },
   "engines": {
     "node": ">=24"

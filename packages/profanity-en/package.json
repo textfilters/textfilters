@@ -1,6 +1,6 @@
 {
   "name": "@textfilters/profanity-en",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "type": "module",
   "description": "Plain English deny and allow dictionary data for @textfilters/profanity.",
   "license": "MIT",
