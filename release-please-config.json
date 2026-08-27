@@ -34,11 +34,13 @@
     "packages/profanity-ru": {
       "component": "profanity-ru",
       "package-name": "@textfilters/profanity-ru",
+      "initial-version": "0.1.0",
       "bump-minor-pre-major": true
     },
     "packages/profanity-en": {
       "component": "profanity-en",
       "package-name": "@textfilters/profanity-en",
+      "initial-version": "0.1.0",
       "bump-minor-pre-major": true
     },
     "packages/spam": {

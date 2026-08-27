@@ -125,6 +125,11 @@ for (const name of CORE_CONSUMERS) {
 for (const name of LANGUAGE_PACKAGES) {
   const workspacePath = `packages/${name}`;
   expectEqual(
+    `${name} initial release version`,
+    releaseConfig.packages?.[workspacePath]?.["initial-version"],
+    "0.1.0",
+  );
+  expectEqual(
     `${name} pre-major release policy`,
     releaseConfig.packages?.[workspacePath]?.["bump-minor-pre-major"],
     true,
