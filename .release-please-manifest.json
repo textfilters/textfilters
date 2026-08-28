@@ -4,7 +4,7 @@
   "packages/email": "1.0.0",
   "packages/phone": "1.0.0",
   "packages/profanity": "2.0.1",
-  "packages/profanity-ru": "0.1.0",
-  "packages/profanity-en": "0.1.0",
+  "packages/profanity-ru": "0.2.0",
+  "packages/profanity-en": "0.2.0",
   "packages/spam": "1.0.0"
 }
