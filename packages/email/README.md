@@ -40,5 +40,5 @@ The package detects direct addresses and supported obfuscated forms. It does
 not verify mailbox existence or accept single-label domains. Public methods
 accept strings only, and custom masks are supplied to `censor()` or `process()`.
 
-See [architecture](docs/architecture.md) for internal matching ownership and
-[the release process](docs/release-process.md) for release details.
+See [architecture](https://github.com/textfilters/textfilters/blob/main/packages/email/docs/architecture.md) for internal matching ownership and
+[the release process](https://github.com/textfilters/textfilters/blob/main/packages/email/docs/release-process.md) for release details.

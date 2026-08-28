@@ -212,7 +212,8 @@ try {
     temporaryDirectory,
   )
     .split(/\r?\n/u)
-    .filter((line) => line.includes("node_modules/@textfilters/core"));
+    .map((line) => line.replaceAll("\\", "/"))
+    .filter((line) => line.endsWith("/node_modules/@textfilters/core"));
   assert.equal(corePaths.length, 1, "consumer must resolve one core package");
 
   console.log(

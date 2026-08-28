@@ -35,4 +35,4 @@ match metadata.
 Public methods accept strings only. Custom masks are supplied to `censor()` or
 `process()`. Application-specific policy belongs outside the runtime.
 
-See [the release process](docs/release-process.md) for package release details.
+See [the release process](https://github.com/textfilters/textfilters/blob/main/packages/profanity/docs/release-process.md) for package release details.

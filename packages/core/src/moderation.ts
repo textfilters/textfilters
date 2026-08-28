@@ -51,4 +51,10 @@ function requireModerationInput(input: ModerationInput): void {
   if (typeof input.text !== "string") {
     throw new TypeError("text must be a string");
   }
+  if (
+    input.nowMs !== undefined &&
+    (typeof input.nowMs !== "number" || !Number.isFinite(input.nowMs))
+  ) {
+    throw new TypeError("nowMs must be a finite number");
+  }
 }

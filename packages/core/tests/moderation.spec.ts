@@ -146,6 +146,26 @@ describe("createModerationPipeline", () => {
     );
   });
 
+  it("rejects invalid clocks before invoking guards", () => {
+    const guard = allowingGuard("guard");
+    const pipeline = createModerationPipeline({ guards: [guard] });
+    const unsafe = pipeline.process as unknown as (input: unknown) => unknown;
+
+    for (const nowMs of [NaN, Infinity, -Infinity, "1000", null, {}, []]) {
+      const process = () => unsafe({ actorKey: "u1", text: "value", nowMs });
+      expect(process).toThrow(TypeError);
+      expect(process).toThrow("nowMs must be a finite number");
+    }
+    expect(guard.check).not.toHaveBeenCalled();
+
+    expect(
+      pipeline.process({ actorKey: "u1", text: "value", nowMs: undefined }),
+    ).toMatchObject({ allowed: true });
+    expect(
+      pipeline.process({ actorKey: "u1", text: "value", nowMs: 0 }),
+    ).toMatchObject({ allowed: true });
+  });
+
   it("does not catch child errors", () => {
     const guardError = new Error("guard failed");
     const filterError = new Error("filter failed");

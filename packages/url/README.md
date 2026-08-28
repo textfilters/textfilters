@@ -40,5 +40,5 @@ It does not validate network reachability.
 Public methods accept strings only. Matches use UTF-16 offsets into the source
 text, and custom masks are supplied to `censor()` or `process()`.
 
-See [architecture](docs/architecture.md) for internal matching ownership and
-[the release process](docs/release-process.md) for release details.
+See [architecture](https://github.com/textfilters/textfilters/blob/main/packages/url/docs/architecture.md) for internal matching ownership and
+[the release process](https://github.com/textfilters/textfilters/blob/main/packages/url/docs/release-process.md) for release details.

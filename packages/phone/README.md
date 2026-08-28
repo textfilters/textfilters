@@ -28,5 +28,5 @@ fields that require moderation.
 The detector does not validate whether a number is assigned or reachable.
 Public methods accept strings only.
 
-See [architecture](docs/architecture.md) for internal matching ownership and
-[the release process](docs/release-process.md) for release details.
+See [architecture](https://github.com/textfilters/textfilters/blob/main/packages/phone/docs/architecture.md) for internal matching ownership and
+[the release process](https://github.com/textfilters/textfilters/blob/main/packages/phone/docs/release-process.md) for release details.

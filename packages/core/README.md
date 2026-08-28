@@ -40,4 +40,4 @@ first blocked decision. Public text methods accept strings only, matches use
 UTF-16 offsets, and custom masks must be one BMP code unit; unsupported masks
 fall back to `*`.
 
-See [the release process](docs/release-process.md) for package release details.
+See [the release process](https://github.com/textfilters/textfilters/blob/main/packages/core/docs/release-process.md) for package release details.
