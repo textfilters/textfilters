@@ -1,10 +1,4 @@
 import {
-  lowerNfkc,
-  stripZeroWidth,
-  type TextCodePointRange,
-} from "@textfilters/core";
-
-import {
   DOT_CHAR_SET,
   DOT_LITERALS,
   DOT_WORDS_RAW,
@@ -17,29 +11,21 @@ import {
   WHITESPACE_RE,
 } from "./chars.js";
 import {
-  URL_FILTER_NAME,
-  type AmbiguousSpacedDotPolicy,
+  type CodePointRange,
+  type UrlFilterOptions,
   type UrlRangeMatchSink,
   type UrlRangeScanner,
   type UrlScanInput,
-  type UrlScannerConfig,
 } from "./contracts.js";
-import {
-  EMPTY_ALLOWED_DOMAINS,
-  normalizeAllowedDomains,
-} from "./allowed-domains.js";
+import { normalizeAllowedDomains } from "./allowed-domains.js";
 import { createMeta, toSkeletonFromNormalized } from "./meta.js";
+import { lowerNfkc, stripZeroWidth } from "./normalize.js";
 import {
   collectRangeMatches,
   collectRanges,
   type UrlMatchPolicy,
 } from "./ranges.js";
-import {
-  createTldLookups,
-  DEFAULT_TLD_LOOKUPS,
-  resolveTldLookups,
-  type TldLookups,
-} from "./tlds.js";
+import { resolveTldLookups, type TldLookups } from "./tlds.js";
 
 const ASCII_ONLY_RE = /^[\x00-\x7f]*$/u;
 const VARIATION_SELECTOR_RE = /^[\u{fe00}-\u{fe0f}\u{e0100}-\u{e01ef}]$/u;
@@ -50,46 +36,24 @@ const toCandidateSkeleton = (normalized: string): string =>
     ? normalized
     : toSkeletonFromNormalized(normalized);
 
-const normalizeAmbiguousSpacedDots = (
-  value: unknown,
-): AmbiguousSpacedDotPolicy => (value === "block" ? "block" : "preserve");
-
 const createMatchPolicy = (
   tldLookups: TldLookups,
   allowedDomains: ReadonlySet<string>,
-  ambiguousSpacedDots: unknown,
 ): UrlMatchPolicy => ({
   ...tldLookups,
   allowedDomains,
-  ambiguousSpacedDots: normalizeAmbiguousSpacedDots(ambiguousSpacedDots),
+  ambiguousSpacedDots: "preserve",
 });
 
-const createPositionalMatchPolicy = (
-  listedTlds: ReadonlySet<string>,
-  asciiTldTargets: ReadonlySet<string> | undefined,
-  allowedDomains: ReadonlySet<string>,
-  ambiguousSpacedDots: unknown,
-): UrlMatchPolicy => {
-  // Retain the positional argument for source compatibility, but never let it
-  // replace targets derived from the authoritative listed-TLD set.
-  void asciiTldTargets;
-  return createMatchPolicy(
-    createTldLookups(listedTlds),
-    allowedDomains,
-    ambiguousSpacedDots,
-  );
-};
-
 export function createUrlScanner(
-  config: UrlScannerConfig = {},
+  config: UrlFilterOptions = {},
 ): UrlRangeScanner {
   const policy = createMatchPolicy(
     resolveTldLookups(config.tlds),
     normalizeAllowedDomains(config.allowedDomains),
-    config.ambiguousSpacedDots,
   );
 
-  function scan(input: UrlScanInput): { ranges: readonly TextCodePointRange[] };
+  function scan(input: UrlScanInput): { ranges: readonly CodePointRange[] };
   function scan(input: UrlScanInput, sink: UrlRangeMatchSink): boolean;
   function scan(input: UrlScanInput, sink?: UrlRangeMatchSink) {
     if (sink === undefined) {
@@ -102,8 +66,6 @@ export function createUrlScanner(
   }
 
   return {
-    name: URL_FILTER_NAME,
-    allocationAware: true,
     check(input) {
       return checkUrlRangesWithPolicy(input, policy);
     },
@@ -111,63 +73,14 @@ export function createUrlScanner(
   };
 }
 
-export function scanUrlRanges(
-  text: unknown,
-  listedTlds: ReadonlySet<string> = DEFAULT_TLD_LOOKUPS.listedTlds,
-  asciiTldTargets?: ReadonlySet<string>,
-  allowedDomains: ReadonlySet<string> = EMPTY_ALLOWED_DOMAINS,
-  ambiguousSpacedDots: AmbiguousSpacedDotPolicy = "preserve",
-): readonly TextCodePointRange[] {
-  return scanUrlRangesWithPolicy(
-    text,
-    createPositionalMatchPolicy(
-      listedTlds,
-      asciiTldTargets,
-      allowedDomains,
-      ambiguousSpacedDots,
-    ),
-  );
-}
-
-const scanUrlRangesWithPolicy = (
-  text: unknown,
-  policy: UrlMatchPolicy,
-): readonly TextCodePointRange[] => {
-  const source = String(text ?? "");
-  if (!source || !hasUrlCandidate(source, policy.ambiguousSpacedDots)) {
-    return [];
-  }
-
-  const meta = createMeta(source);
-  return collectRanges(meta, policy);
-};
-
 const scanUrlInputRangesWithPolicy = (
   input: UrlScanInput,
   policy: UrlMatchPolicy,
-): readonly TextCodePointRange[] => {
+): readonly CodePointRange[] => {
   const meta = createUrlInputMeta(input, policy.ambiguousSpacedDots);
   if (!meta) return [];
   return collectRanges(meta, policy);
 };
-
-export function checkUrlRanges(
-  input: UrlScanInput,
-  listedTlds: ReadonlySet<string> = DEFAULT_TLD_LOOKUPS.listedTlds,
-  asciiTldTargets?: ReadonlySet<string>,
-  allowedDomains: ReadonlySet<string> = EMPTY_ALLOWED_DOMAINS,
-  ambiguousSpacedDots: AmbiguousSpacedDotPolicy = "preserve",
-): boolean {
-  return checkUrlRangesWithPolicy(
-    input,
-    createPositionalMatchPolicy(
-      listedTlds,
-      asciiTldTargets,
-      allowedDomains,
-      ambiguousSpacedDots,
-    ),
-  );
-}
 
 const checkUrlRangesWithPolicy = (
   input: UrlScanInput,
@@ -183,26 +96,6 @@ const checkUrlRangesWithPolicy = (
   return found;
 };
 
-export function scanUrlRangeMatches(
-  input: UrlScanInput,
-  sink: UrlRangeMatchSink,
-  listedTlds: ReadonlySet<string> = DEFAULT_TLD_LOOKUPS.listedTlds,
-  asciiTldTargets?: ReadonlySet<string>,
-  allowedDomains: ReadonlySet<string> = EMPTY_ALLOWED_DOMAINS,
-  ambiguousSpacedDots: AmbiguousSpacedDotPolicy = "preserve",
-): boolean {
-  return scanUrlRangeMatchesWithPolicy(
-    input,
-    sink,
-    createPositionalMatchPolicy(
-      listedTlds,
-      asciiTldTargets,
-      allowedDomains,
-      ambiguousSpacedDots,
-    ),
-  );
-}
-
 const scanUrlRangeMatchesWithPolicy = (
   input: UrlScanInput,
   sink: UrlRangeMatchSink,
@@ -215,7 +108,7 @@ const scanUrlRangeMatchesWithPolicy = (
 
 const createUrlInputMeta = (
   input: UrlScanInput,
-  ambiguousSpacedDots: AmbiguousSpacedDotPolicy,
+  ambiguousSpacedDots: UrlMatchPolicy["ambiguousSpacedDots"],
 ) =>
   hasUrlCandidateInput(input, ambiguousSpacedDots)
     ? createMeta(input.text, input.codePoints)
@@ -223,7 +116,7 @@ const createUrlInputMeta = (
 
 function hasUrlCandidateInput(
   input: UrlScanInput,
-  ambiguousSpacedDots: AmbiguousSpacedDotPolicy,
+  ambiguousSpacedDots: UrlMatchPolicy["ambiguousSpacedDots"],
 ): boolean {
   if (!input.text) return false;
   return hasUrlCandidate(input.text, ambiguousSpacedDots);
@@ -231,7 +124,7 @@ function hasUrlCandidateInput(
 
 function hasUrlCandidate(
   source: string,
-  ambiguousSpacedDots: AmbiguousSpacedDotPolicy,
+  ambiguousSpacedDots: UrlMatchPolicy["ambiguousSpacedDots"],
 ): boolean {
   const isAscii = ASCII_ONLY_RE.test(source);
   const normalized = isAscii
@@ -259,7 +152,7 @@ function hasUrlCandidate(
 
 function hasLikelyDomainDot(
   value: string,
-  ambiguousSpacedDots: AmbiguousSpacedDotPolicy,
+  ambiguousSpacedDots: UrlMatchPolicy["ambiguousSpacedDots"],
   isAscii: boolean,
 ): boolean {
   if (isAscii) {

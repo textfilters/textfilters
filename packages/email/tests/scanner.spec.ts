@@ -1,16 +1,17 @@
 import { describe, expect, it } from "vitest";
 
+import { createEmailFilter } from "../src/index.js";
 import {
   checkEmailRanges,
-  createEmailFilter,
   createEmailScanner,
   scanEmailRangeMatches,
   scanEmailRanges,
-  EMAIL_FILTER_NAME,
-  type EmailRangeScanner,
-  type EmailRangeScanResult,
-  type EmailScanHints,
-} from "../src/index.js";
+} from "../src/scanner.js";
+import type {
+  EmailRangeScanner,
+  EmailRangeScanResult,
+  EmailScanHints,
+} from "../src/types.js";
 
 const mask = (value: string, maskChar = "*"): string =>
   maskChar.repeat(Array.from(value).length);
@@ -44,7 +45,6 @@ describe("@textfilters/email scanner", () => {
     ).toEqual({
       ranges: [[8, 24]],
     });
-    expect(scanner.name).toBe(EMAIL_FILTER_NAME);
   });
 
   it("keeps the public censor wrapper aligned with scanner ranges", () => {
@@ -56,7 +56,7 @@ describe("@textfilters/email scanner", () => {
     }).ranges;
 
     expect(ranges).toEqual([[8, 24]]);
-    expect(createEmailFilter({ maskChar: "#" }).censor(text)).toBe(
+    expect(createEmailFilter().censor(text, "#")).toBe(
       `contact ${mask("user@example.com", "#")} now`,
     );
   });
@@ -185,7 +185,7 @@ describe("@textfilters/email scanner", () => {
     ).toEqual([]);
     expect(
       scanEmailRanges("contact user@example.com", {
-        excludeEmails: ["user@example.com"],
+        allowedEmails: ["user@example.com"],
       }),
     ).toEqual([]);
   });

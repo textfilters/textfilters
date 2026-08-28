@@ -1,4 +1,4 @@
-import { type TextCodePointRange } from "@textfilters/core";
+import type { CodePointRange } from "../../types.js";
 
 import { type EmailTextMeta } from "../../normalization.js";
 import { type EmailCandidate, type ScannerOptions } from "../core/types.js";
@@ -17,7 +17,7 @@ export const isCandidateMatchable = (
   options: ScannerOptions,
 ): boolean => {
   if (!isValidLocal(candidate.local)) return false;
-  if (!isValidDomain(candidate.labels, options)) return false;
+  if (!isValidDomain(candidate.labels)) return false;
   if (!hasLeadingBoundary(previousContent(meta, candidate.start - 1))) {
     return false;
   }
@@ -34,7 +34,7 @@ export const collectCandidateRange = (
   meta: EmailTextMeta,
   candidate: EmailCandidate,
   options: ScannerOptions,
-): TextCodePointRange | null => {
+): CodePointRange | null => {
   if (!isCandidateMatchable(meta, candidate, options)) return null;
   if (isCandidateExcluded(candidate, options)) return null;
   return [candidate.start, candidate.end];

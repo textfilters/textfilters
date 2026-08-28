@@ -4,20 +4,18 @@ import {
   type TextRange,
 } from "@textfilters/core";
 
-import { createEmailScanner } from "./scanner.js";
 import {
   type CodePointRange,
-  type EmailFilter,
-  type EmailFilterOptions,
-} from "./types.js";
+  type UrlFilter,
+  type UrlFilterOptions,
+} from "./contracts.js";
+import { createUrlScanner } from "./scanner.js";
 
-export function createEmailFilter(
-  options: EmailFilterOptions = {},
-): EmailFilter {
-  const scanner = createEmailScanner(options);
+export function createUrlFilter(options: UrlFilterOptions = {}): UrlFilter {
+  const scanner = createUrlScanner(options);
 
-  const filter: EmailFilter = {
-    name: "email",
+  const filter: UrlFilter = {
+    name: "url",
 
     check(text) {
       const source = requireText(text);
@@ -46,9 +44,12 @@ export function createEmailFilter(
   function scanRanges(source: string): readonly TextRange[] {
     const codePoints = Array.from(source);
     const offsets = utf16Offsets(codePoints);
-    return scanner
-      .scan({ text: source, codePoints })
-      .ranges.flatMap((range) => toUtf16Range(range, offsets));
+    const ranges: TextRange[] = [];
+    scanner.scan({ text: source, codePoints }, ({ range }) => {
+      const converted = toUtf16Range(range, offsets);
+      if (converted) ranges.push(converted);
+    });
+    return ranges;
   }
 
   function scanMatches(source: string): readonly TextMatch[] {
@@ -56,14 +57,14 @@ export function createEmailFilter(
       start,
       end,
       value: source.slice(start, end),
-      filter: "email",
+      filter: "url",
     }));
   }
 
   return Object.freeze(filter);
 }
 
-export const filter = createEmailFilter();
+export const filter = createUrlFilter();
 
 function utf16Offsets(codePoints: readonly string[]): readonly number[] {
   const offsets = [0];
@@ -76,9 +77,9 @@ function utf16Offsets(codePoints: readonly string[]): readonly number[] {
 function toUtf16Range(
   [start, end]: CodePointRange,
   offsets: readonly number[],
-): readonly TextRange[] {
-  if (start < 0 || end <= start || end >= offsets.length) return [];
-  return [[offsets[start], offsets[end]]];
+): TextRange | undefined {
+  if (start < 0 || end <= start || end >= offsets.length) return undefined;
+  return [offsets[start], offsets[end]];
 }
 
 function toRanges(matches: readonly TextMatch[]): readonly TextRange[] {

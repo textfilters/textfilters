@@ -1,4 +1,4 @@
-import { type TextCodePointRange } from "@textfilters/core";
+import type { CodePointRange } from "../../types.js";
 
 import {
   isAsciiAlphaNumeric,
@@ -16,7 +16,7 @@ export const collectDirectEmailRange = (
   meta: EmailTextMeta,
   atIndex: number,
   options: ScannerOptions,
-): TextCodePointRange | null => {
+): CodePointRange | null => {
   // Literal addresses stay independent from tokenization so direct
   // `user@example.com` matching remains the small scanner path.
   let localStart = atIndex - 1;

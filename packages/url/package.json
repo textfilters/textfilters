@@ -21,7 +21,6 @@
   "sideEffects": false,
   "files": [
     "dist",
-    "docs",
     "README.md",
     "LICENSE"
   ],
@@ -41,7 +40,7 @@
     "benchmark:url": "node scripts/benchmark-url.mjs",
     "prepack": "npm run build",
     "pack:dry-run": "npm pack --dry-run",
-    "smoke:dist": "node --input-type=module --eval \"const url = await import('./dist/index.js'); url.createUrlFilter().censor('go to https://example.com');\"",
+    "smoke:dist": "node --input-type=module --eval \"const url = await import('./dist/index.js'); if (!url.filter.check('go to https://example.com')) throw new Error('Smoke check failed'); url.createUrlFilter({ allowedDomains: ['example.com'] }).censor('https://example.com', '#');\"",
     "check": "npm run lint && npm test && npm run build && npm run smoke:dist && npm run pack:dry-run"
   },
   "dependencies": {

@@ -1,12 +1,7 @@
-import { createTextPipeline } from "@textfilters/core";
+import { combineFilters } from "@textfilters/core";
 import { describe, expect, it } from "vitest";
 
-import {
-  EMAIL_FILTER_NAME,
-  createEmailFilter,
-  emailFilter,
-  filter,
-} from "../src/index.js";
+import { createEmailFilter, filter } from "../src/index.js";
 
 describe("@textfilters/email options and integration", () => {
   it("exposes the shared text filter methods with UTF-16 ranges", () => {
@@ -18,7 +13,7 @@ describe("@textfilters/email options and integration", () => {
       start: 3,
       end: 19,
       value: "user@example.com",
-      filter: EMAIL_FILTER_NAME,
+      filter: "email",
     });
     expect(filter.process(text)).toEqual({
       censored: `😀 ${"*".repeat(16)}`,
@@ -27,17 +22,17 @@ describe("@textfilters/email options and integration", () => {
   });
 
   it("supports custom mask characters", () => {
-    expect(
-      createEmailFilter({ maskChar: "#" }).censor("user@example.com"),
-    ).toBe("################");
-    expect(
-      createEmailFilter({ maskChar: "💥" }).censor("user@example.com"),
-    ).toBe("****************");
+    expect(createEmailFilter().censor("user@example.com", "#")).toBe(
+      "################",
+    );
+    expect(createEmailFilter().censor("user@example.com", "💥")).toBe(
+      "****************",
+    );
   });
 
   it("keeps output length stable for normal mask characters", () => {
     const source = "contact user@example.com and admin at example dot com";
-    const output = createEmailFilter({ maskChar: "#" }).censor(source);
+    const output = createEmailFilter().censor(source, "#");
 
     expect(output).toHaveLength(source.length);
     expect(output).toBe(
@@ -64,49 +59,9 @@ describe("@textfilters/email options and integration", () => {
     );
   });
 
-  it("supports localhost when configured", () => {
-    expect(
-      createEmailFilter({ allowLocalhost: true }).censor("mail user@localhost"),
-    ).toBe("mail **************");
-    expect(
-      createEmailFilter({ allowLocalhost: true }).censor(
-        "email admin at localhost",
-      ),
-    ).toBe("email ******************");
-
-    const user = "user at localhost";
-    const admin = "admin at localhost";
-    expect(
-      createEmailFilter({ allowLocalhost: true }).censor(
-        `email ${user} and ${admin}`,
-      ),
-    ).toBe(`email ${"*".repeat(user.length)} and ${"*".repeat(admin.length)}`);
-  });
-
-  it("supports single-label domains when configured", () => {
-    expect(
-      createEmailFilter({ allowSingleLabelDomain: true }).censor(
-        "mail user@example",
-      ),
-    ).toBe("mail ************");
-    expect(
-      createEmailFilter({ allowSingleLabelDomain: true }).censor(
-        "email admin at example",
-      ),
-    ).toBe("email ****************");
-
-    const user = "user at example";
-    const admin = "admin at example";
-    expect(
-      createEmailFilter({ allowSingleLabelDomain: true }).censor(
-        `email ${user} and ${admin}`,
-      ),
-    ).toBe(`email ${"*".repeat(user.length)} and ${"*".repeat(admin.length)}`);
-  });
-
-  it("excludes configured email addresses from masking", () => {
+  it("allows configured email addresses", () => {
     const configured = createEmailFilter({
-      excludeEmails: ["user@example.com"],
+      allowedEmails: ["user@example.com"],
     });
 
     expect(
@@ -124,9 +79,9 @@ describe("@textfilters/email options and integration", () => {
     );
   });
 
-  it("applies full-address exclusions consistently to direct and obfuscated candidates", () => {
+  it("applies full-address allowlists consistently to direct and obfuscated candidates", () => {
     const configured = createEmailFilter({
-      excludeEmails: ["user@example.com"],
+      allowedEmails: ["user@example.com"],
     });
 
     expect(configured.censor("mail user@example.com")).toBe(
@@ -141,9 +96,9 @@ describe("@textfilters/email options and integration", () => {
     expect(configured.censor(source)).toHaveLength(source.length);
   });
 
-  it("excludes configured usernames from masking", () => {
+  it("allows configured usernames", () => {
     const configured = createEmailFilter({
-      excludeUsernames: ["admin"],
+      allowedUsernames: ["admin"],
     });
 
     expect(
@@ -156,9 +111,9 @@ describe("@textfilters/email options and integration", () => {
     ).toBe("mail admin at example dot com and ***********************");
   });
 
-  it("excludes configured domains from masking", () => {
+  it("allows configured domains", () => {
     const configured = createEmailFilter({
-      excludeDomains: ["example.com"],
+      allowedDomains: ["example.com"],
     });
 
     expect(
@@ -175,11 +130,11 @@ describe("@textfilters/email options and integration", () => {
     ).toBe("mail user at example dot com and ************************");
   });
 
-  it("normalizes configured exclusions before matching", () => {
+  it("normalizes configured allowlists before matching", () => {
     const configured = createEmailFilter({
-      excludeEmails: ["USER@EXAMPLE.COM"],
-      excludeUsernames: ["ＳＵＰＰＯＲＴ"],
-      excludeDomains: ["@EXAMPLE.NET"],
+      allowedEmails: ["USER@EXAMPLE.COM"],
+      allowedUsernames: ["ＳＵＰＰＯＲＴ"],
+      allowedDomains: ["@EXAMPLE.NET"],
     });
 
     expect(
@@ -196,15 +151,14 @@ describe("@textfilters/email options and integration", () => {
     expect(filter.censor(once)).toBe(once);
   });
 
-  it("has a stable name and factory alias", () => {
+  it("has a stable name", () => {
     expect(filter.name).toBe("email");
-    expect(EMAIL_FILTER_NAME).toBe("email");
-    expect(emailFilter().name).toBe("email");
+    expect(createEmailFilter().name).toBe("email");
   });
 
-  it("works inside the core text pipeline", () => {
-    const pipeline = createTextPipeline().use(filter);
-    expect(pipeline.censor("contact user@example.com")).toBe(
+  it("works inside the combined filter", () => {
+    const combined = combineFilters(filter);
+    expect(combined.censor("contact user@example.com")).toBe(
       "contact ****************",
     );
   });

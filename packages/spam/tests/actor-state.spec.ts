@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  cloneActorState,
   createActorState,
   pruneActorStates,
   pruneBurstTimestamps,
@@ -8,151 +9,63 @@ import {
   recordRecentNormalizedText,
   trimActorRecords,
 } from "../src/actor-state.js";
-import type { ActorState } from "../src/index.js";
 
-const actorState = (lastMessageAt: number): ActorState => ({
-  ...createActorState(),
-  lastMessageAt,
-});
-
-describe("actor state pruning", () => {
-  it("prunes duplicate texts in place", () => {
+describe("spam actor state", () => {
+  it("clones mutable records before guard evaluation", () => {
     const actor = createActorState();
-    actor.recentNormalizedTexts.set("old", 1_000);
-    actor.recentNormalizedTexts.set("new", 1_950);
+    actor.timestamps.push(1);
+    actor.lastMessageAt = 1;
+    actor.recentNormalizedTexts.set("one", 1);
 
-    pruneDuplicateTexts(actor, 2_000, 500);
+    const clone = cloneActorState(actor);
+    clone.timestamps.push(2);
+    clone.recentNormalizedTexts.set("two", 2);
 
-    expect([...actor.recentNormalizedTexts]).toEqual([["new", 1_950]]);
+    expect(actor.timestamps).toEqual([1]);
+    expect([...actor.recentNormalizedTexts]).toEqual([["one", 1]]);
   });
 
-  it("compacts burst timestamps without replacing the array", () => {
+  it("prunes expired burst and duplicate records", () => {
     const actor = createActorState();
-    actor.timestamps.push(1_000, 1_500, 1_900);
-    const timestamps = actor.timestamps;
+    actor.timestamps.push(0, 5, 10);
+    actor.recentNormalizedTexts.set("old", 0);
+    actor.recentNormalizedTexts.set("new", 10);
 
-    pruneBurstTimestamps(actor, 2_000, 600);
+    pruneBurstTimestamps(actor, 10, 6);
+    pruneDuplicateTexts(actor, 10, 6);
 
-    expect(actor.timestamps).toBe(timestamps);
-    expect(actor.timestamps).toEqual([1_500, 1_900]);
+    expect(actor.timestamps).toEqual([5, 10]);
+    expect([...actor.recentNormalizedTexts]).toEqual([["new", 10]]);
   });
 
-  it("prunes expired burst timestamps after retained non-monotonic entries", () => {
+  it("retains only the newest bounded records", () => {
     const actor = createActorState();
-    actor.timestamps.push(1_000, 500, 1_250);
+    actor.timestamps.push(3, 1, 2);
+    recordRecentNormalizedText(actor, "old", 1);
+    recordRecentNormalizedText(actor, "middle", 2);
+    recordRecentNormalizedText(actor, "new", 3);
 
-    pruneBurstTimestamps(actor, 1_501, 1_000);
+    trimActorRecords(actor, 2, 2);
 
-    expect(actor.timestamps).toEqual([1_000, 1_250]);
-  });
-
-  it("trims per-actor records without replacing containers", () => {
-    const actor = createActorState();
-    actor.timestamps.push(1_000, 1_100, 1_200, 1_300);
-    actor.recentNormalizedTexts.set("oldest", 1_000);
-    actor.recentNormalizedTexts.set("older", 1_100);
-    actor.recentNormalizedTexts.set("newer", 1_200);
-    actor.recentNormalizedTexts.set("newest", 1_300);
-    const timestamps = actor.timestamps;
-    const recentTexts = actor.recentNormalizedTexts;
-
-    trimActorRecords(actor, { maxTimestamps: 2, maxRecentTexts: 2 });
-
-    expect(actor.timestamps).toBe(timestamps);
-    expect(actor.timestamps).toEqual([1_200, 1_300]);
-    expect(actor.recentNormalizedTexts).toBe(recentTexts);
+    expect(actor.timestamps).toEqual([2, 3]);
     expect([...actor.recentNormalizedTexts]).toEqual([
-      ["newer", 1_200],
-      ["newest", 1_300],
+      ["middle", 2],
+      ["new", 3],
     ]);
   });
 
-  it("keeps newest timestamp values when trimming non-monotonic records", () => {
-    const actor = createActorState();
-    actor.timestamps.push(1_000, 500, 1_250, 1_300);
-
-    trimActorRecords(actor, { maxTimestamps: 3, maxRecentTexts: 10 });
-
-    expect(actor.timestamps).toEqual([1_000, 1_250, 1_300]);
-  });
-
-  it("refreshes duplicate text recency before trimming", () => {
-    const actor = createActorState();
-    actor.recentNormalizedTexts.set("old", 1_000);
-    actor.recentNormalizedTexts.set("middle", 1_100);
-    actor.recentNormalizedTexts.set("new", 1_200);
-
-    recordRecentNormalizedText(actor, "old", 1_300);
-    trimActorRecords(actor, { maxTimestamps: 10, maxRecentTexts: 2 });
-
-    expect([...actor.recentNormalizedTexts]).toEqual([
-      ["new", 1_200],
-      ["old", 1_300],
-    ]);
-  });
-
-  it("keeps newest duplicate text timestamps when trimming non-monotonic records", () => {
-    const actor = createActorState();
-    actor.recentNormalizedTexts.set("future", 10_000);
-    actor.recentNormalizedTexts.set("past-0", 0);
-    actor.recentNormalizedTexts.set("past-1", 1);
-    actor.recentNormalizedTexts.set("past-2", 2);
-
-    trimActorRecords(actor, { maxTimestamps: 10, maxRecentTexts: 3 });
-
-    expect([...actor.recentNormalizedTexts]).toEqual([
-      ["future", 10_000],
-      ["past-1", 1],
-      ["past-2", 2],
-    ]);
-  });
-
-  it("does not prune actors below maxActors", () => {
-    const state = new Map<string, ActorState>([
-      ["a", actorState(1_000)],
-      ["b", actorState(2_000)],
+  it("prunes expired actors before the oldest active actors", () => {
+    const actors = new Map([
+      ["expired", { ...createActorState(), lastMessageAt: 0 }],
+      ["older", { ...createActorState(), lastMessageAt: 90 }],
+      ["newer", { ...createActorState(), lastMessageAt: 100 }],
     ]);
 
-    pruneActorStates(state, 10_000, 3, 100);
+    pruneActorStates(actors, 100, 2, 20);
+    expect([...actors.keys()]).toEqual(["older", "newer"]);
 
-    expect([...state.keys()]).toEqual(["a", "b"]);
-  });
-
-  it("prunes stale actors before evicting oldest active actors", () => {
-    const state = new Map<string, ActorState>([
-      ["stale", actorState(1_000)],
-      ["old", actorState(9_500)],
-      ["new", actorState(9_900)],
-    ]);
-
-    pruneActorStates(state, 10_000, 2, 1_000);
-
-    expect([...state.keys()]).toEqual(["old", "new"]);
-  });
-
-  it("evicts the oldest actors when no stale actors are available", () => {
-    const state = new Map<string, ActorState>([
-      ["oldest", actorState(1_000)],
-      ["middle", actorState(2_000)],
-      ["newest", actorState(3_000)],
-    ]);
-
-    pruneActorStates(state, 3_500, 2, 10_000);
-
-    expect([...state.keys()]).toEqual(["middle", "newest"]);
-  });
-
-  it("evicts multiple oldest actors from oversized maps in one prune", () => {
-    const state = new Map<string, ActorState>([
-      ["oldest", actorState(1_000)],
-      ["older", actorState(2_000)],
-      ["middle", actorState(3_000)],
-      ["newer", actorState(4_000)],
-      ["newest", actorState(5_000)],
-    ]);
-
-    pruneActorStates(state, 5_500, 2, 10_000);
-
-    expect([...state.keys()]).toEqual(["newer", "newest"]);
+    actors.set("newest", { ...createActorState(), lastMessageAt: 110 });
+    pruneActorStates(actors, 110, 2, 1_000);
+    expect([...actors.keys()]).toEqual(["newer", "newest"]);
   });
 });

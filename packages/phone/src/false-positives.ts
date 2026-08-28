@@ -26,12 +26,6 @@ export {
   separatorHas,
 };
 import {
-  hasCompleteJsonMetadataObject,
-  hasExactJsonMetadataValueEnd,
-  jsonNumericMetadataKeyBefore,
-  sourceSpanEquals,
-} from "./json-metadata.js";
-import {
   isWhitespaceSeparator,
   previousContent,
   previousVisible,
@@ -293,107 +287,6 @@ export const isLabeledBookIdentifier = (
   return /(?:^|[^\p{L}\p{N}_])(?:isbn(?:[-\s]?1[03])?|ean(?:[-\s]?13)?)[\s:#-]*$/iu.test(
     prefix,
   );
-};
-
-interface NonContactNumericCandidate {
-  readonly end: number;
-  readonly groupEnds: readonly number[];
-  readonly groups: readonly string[];
-  readonly groupStarts: readonly number[];
-  readonly separators: readonly string[];
-}
-
-const hasRecoverableMetadataSuffix = (
-  meta: TextMeta,
-  candidate: NonContactNumericCandidate,
-  protectedEnd: number,
-  suffixStartIndex: number,
-): boolean => {
-  const suffixStart = candidate.groupStarts[suffixStartIndex];
-  const separator = candidate.separators[suffixStartIndex - 1];
-  const suffixGroups = candidate.groups.slice(suffixStartIndex);
-
-  return (
-    suffixStart !== undefined &&
-    separator !== undefined &&
-    sourceSpanEquals(meta, protectedEnd, suffixStart, separator) &&
-    isRecoverablePhoneSuffix(suffixGroups) &&
-    isValidPhoneGroups(suffixGroups, {
-      hasPlus: false,
-      hasParentheses: false,
-    }) &&
-    getStructuredFalsePositive(
-      suffixGroups,
-      candidate.separators.slice(suffixStartIndex),
-      { hasPlus: false },
-    ) === null
-  );
-};
-
-export const getNonContactNumericMetadataEnd = (
-  meta: TextMeta,
-  start: number,
-  candidate: NonContactNumericCandidate,
-): number | null => {
-  const { end, groupEnds, groups, separators } = candidate;
-
-  if (
-    groups.length === 1 &&
-    groups[0] === "2147483648" &&
-    meta.codePoints[start - 1] === "-" &&
-    sourceSpanEquals(meta, start, end, "2147483648")
-  ) {
-    return end;
-  }
-
-  if (!/^[0-9]{13}$/u.test(groups[0] ?? "")) {
-    return null;
-  }
-
-  const metadata = jsonNumericMetadataKeyBefore(meta, start);
-  const firstGroupEnd = groupEnds[0];
-  if (
-    metadata === null ||
-    firstGroupEnd === undefined ||
-    !sourceSpanEquals(meta, start, firstGroupEnd, groups[0] ?? "") ||
-    !hasCompleteJsonMetadataObject(meta, metadata, end)
-  ) {
-    return null;
-  }
-
-  let protectedEnd = firstGroupEnd;
-  let nextGroupIndex = 1;
-
-  if (metadata.key === "cursor" && groups[1] === "0" && separators[0] === "-") {
-    const cursorSequenceEnd = groupEnds[1];
-    if (
-      cursorSequenceEnd === undefined ||
-      !sourceSpanEquals(meta, start, cursorSequenceEnd, `${groups[0]}-0`)
-    ) {
-      return null;
-    }
-    protectedEnd = cursorSequenceEnd;
-    nextGroupIndex = 2;
-  }
-
-  if (groups.length > nextGroupIndex) {
-    if (
-      !hasRecoverableMetadataSuffix(
-        meta,
-        candidate,
-        protectedEnd,
-        nextGroupIndex,
-      )
-    ) {
-      return null;
-    }
-  } else if (
-    !hasExactJsonMetadataValueEnd(meta, protectedEnd, metadata.quoted)
-  ) {
-    return null;
-  }
-
-  return protectedEnd;
 };
 
 export const hasPhoneLabelBefore = (meta: TextMeta, pos: number): boolean => {

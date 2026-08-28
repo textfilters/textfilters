@@ -88,7 +88,7 @@ After publication:
 
 Published package tags and package versions are immutable.
 
-The profanity redesign uses the package-specific `release-as` override for its
-one-time `2.0.0` transition. Remove that override after the `2.0.0` release is
-recorded in the manifest so later releases return to Conventional Commit
-versioning.
+The current breaking monorepo transition uses the package-specific
+`release-as: 2.0.1` override for `@textfilters/profanity` because its public API
+remains unchanged. Remove the override after `2.0.1` is recorded in the manifest
+so later releases return to Conventional Commit versioning.

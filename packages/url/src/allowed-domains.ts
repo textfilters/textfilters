@@ -1,5 +1,3 @@
-import { lowerNfkc, stripZeroWidth } from "@textfilters/core";
-
 import { DOT_CHAR_SET } from "./chars.js";
 import {
   countCodePoints,
@@ -8,10 +6,11 @@ import {
   type DomainMatch,
   type TextMeta,
 } from "./meta.js";
+import { lowerNfkc, stripZeroWidth } from "./normalize.js";
 
 export const EMPTY_ALLOWED_DOMAINS: ReadonlySet<string> = new Set();
 
-const normalizeDomainLiteral = (value: unknown): string | null => {
+const normalizeDomainLiteral = (value: string): string | null => {
   const normalized = Array.from(
     stripZeroWidth(lowerNfkc(String(value ?? "").trim())),
     (char) => (DOT_CHAR_SET.has(char) ? "." : char),

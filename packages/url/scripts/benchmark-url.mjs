@@ -1,11 +1,5 @@
 import { performance } from "node:perf_hooks";
-import {
-  checkUrlRanges,
-  createUrlFilter,
-  createUrlScanner,
-  scanUrlRangeMatches,
-  scanUrlRanges,
-} from "../dist/index.js";
+import { createUrlFilter } from "../dist/index.js";
 
 const ITERATIONS = 1_000;
 const SETUP_ITERATIONS = 100;
@@ -22,18 +16,18 @@ const ALLOWED_DOMAINS = ["trusted.example"];
 const LATE_MATCH =
   "Lorem ipsum dolor sit amet, consectetur adipiscing elit. ".repeat(40) +
   "Check https://spam.example.com/promo now!";
-const STRICT_SPACED_DOT = "Review evil. Com now. ".repeat(50);
+const SPACED_DOT_PROSE = "Review evil. Com now. ".repeat(50);
 const CANDIDATE_SHAPED_MISS =
   "Review placeholder.invalid before release. ".repeat(50);
 const UNICODE_LATE_MATCH =
   "Café résumé without a link. ".repeat(40) + "example.рф";
 const MALFORMED_AUTHORITY = `http://[${"a[".repeat(2_000)}:a]`;
 const TRAILING_PATH_CLOSERS = `https://example.com/${")".repeat(4_000)}`;
-const CUSTOM_TLDS = new Set([
+const CUSTOM_TLDS = [
   "com",
   ...Array.from({ length: 1_500 }, (_, index) => `custom${index}`),
-]);
-const CUSTOM_TLD_TARGETS = new Set(CUSTOM_TLDS);
+];
+const CUSTOM_TLD_URL = "Visit example.custom1499/path for details";
 
 const median = (values) => {
   const sorted = [...values].sort((left, right) => left - right);
@@ -59,118 +53,65 @@ function bench(label, fn, iterations = ITERATIONS) {
 function printResults(results) {
   console.log(`\nurl benchmark (median of ${SAMPLES} timed samples)`);
   console.log(
-    `${"label".padEnd(40)} ${"iter".padStart(7)} ${"total ms".padStart(10)} ${"avg ms".padStart(10)} ${"ops/sec".padStart(10)}`,
+    `${"label".padEnd(52)} ${"iter".padStart(7)} ${"total ms".padStart(10)} ${"avg ms".padStart(10)} ${"ops/sec".padStart(10)}`,
   );
-  console.log("-".repeat(81));
+  console.log("-".repeat(93));
   for (const result of results) {
     console.log(
-      `${result.label.padEnd(40)} ${String(result.iterations).padStart(7)} ${result.totalMs.toFixed(2).padStart(10)} ${result.avgMs.toFixed(4).padStart(10)} ${String(result.opsPerSec).padStart(10)}`,
+      `${result.label.padEnd(52)} ${String(result.iterations).padStart(7)} ${result.totalMs.toFixed(2).padStart(10)} ${result.avgMs.toFixed(4).padStart(10)} ${String(result.opsPerSec).padStart(10)}`,
     );
   }
 }
 
 const filter = createUrlFilter();
-const scanner = createUrlScanner();
-const strictScanner = createUrlScanner({ ambiguousSpacedDots: "block" });
 const allowlistFilter = createUrlFilter({ allowedDomains: ALLOWED_DOMAINS });
-const allowlistScanner = createUrlScanner({ allowedDomains: ALLOWED_DOMAINS });
-const strictFilter = createUrlFilter({ ambiguousSpacedDots: "block" });
-const input = (text) => ({ text, codePoints: Array.from(text) });
-const hintedInput = (text) => ({
-  text,
-  codePoints: Array.from(text),
-  hints: {
-    hasNonAscii: /[^\x00-\x7f]/u.test(text),
-    hasDot: text.includes("."),
-    hasSlash: text.includes("/"),
-    hasColon: text.includes(":"),
-  },
-});
-// Prepare scanner inputs outside timed loops so steady-state rows measure the
-// scanner rather than repeated input construction.
-const scannerInputs = {
-  longClean: input(LONG_CLEAN),
-  directUrl: input(DIRECT_URL),
-  bareDomain: input(BARE_DOMAIN),
-  malformedAuthority: input(MALFORMED_AUTHORITY),
-  trailingPathClosers: input(TRAILING_PATH_CLOSERS),
-};
+const customTldFilter = createUrlFilter({ tlds: CUSTOM_TLDS });
+
 printResults([
   bench("createUrlFilter()", () => createUrlFilter(), SETUP_ITERATIONS),
-  bench("createUrlScanner()", () => createUrlScanner(), SETUP_ITERATIONS),
   bench(
     "createUrlFilter() with allowlist",
     () => createUrlFilter({ allowedDomains: ALLOWED_DOMAINS }),
     SETUP_ITERATIONS,
   ),
   bench(
-    "createUrlScanner() with allowlist",
-    () => createUrlScanner({ allowedDomains: ALLOWED_DOMAINS }),
+    "createUrlFilter() with large custom TLD snapshot",
+    () => createUrlFilter({ tlds: CUSTOM_TLDS }),
     SETUP_ITERATIONS,
   ),
-  // Keep input construction in the original row names so results remain
-  // comparable with earlier revisions. Prepared-input rows below isolate the
-  // steady-state allocation-aware scanner contract.
-  bench("check short clean", () => scanner.check(input(SHORT_CLEAN))),
-  bench("check hinted short clean", () =>
-    scanner.check(hintedInput(SHORT_CLEAN)),
-  ),
-  bench("check long clean", () => scanner.check(input(LONG_CLEAN))),
-  bench("check hinted long clean", () =>
-    scanner.check(hintedInput(LONG_CLEAN)),
-  ),
-  bench("check direct URL", () => scanner.check(input(DIRECT_URL))),
-  bench("check bare domain", () => scanner.check(input(BARE_DOMAIN))),
-  bench("check allowlist hit", () =>
-    allowlistScanner.check(input(ALLOWLISTED_URL)),
-  ),
-  bench("check allowlist miss", () =>
-    allowlistScanner.check(input(ALLOWLIST_MISS)),
-  ),
-  bench("check late-match URL", () => scanner.check(input(LATE_MATCH))),
-  bench("check strict spaced-dot prose", () =>
-    strictScanner.check(input(STRICT_SPACED_DOT)),
+  bench("check short clean", () => filter.check(SHORT_CLEAN)),
+  bench("check long clean", () => filter.check(LONG_CLEAN)),
+  bench("check direct URL", () => filter.check(DIRECT_URL)),
+  bench("check bare domain", () => filter.check(BARE_DOMAIN)),
+  bench("check obfuscated URL", () => filter.check(OBFUSCATED_URL)),
+  bench("check allowlist hit", () => allowlistFilter.check(ALLOWLISTED_URL)),
+  bench("check allowlist miss", () => allowlistFilter.check(ALLOWLIST_MISS)),
+  bench("check late-match URL", () => filter.check(LATE_MATCH)),
+  bench("check conservative spaced-dot prose", () =>
+    filter.check(SPACED_DOT_PROSE),
   ),
   bench("check candidate-shaped miss", () =>
-    scanner.check(input(CANDIDATE_SHAPED_MISS)),
+    filter.check(CANDIDATE_SHAPED_MISS),
   ),
-  bench("check Unicode late match", () =>
-    scanner.check(input(UNICODE_LATE_MATCH)),
-  ),
-  bench("prepare long scanner input", () => input(LONG_CLEAN)),
-  bench("check prepared long clean", () =>
-    scanner.check(scannerInputs.longClean),
-  ),
-  bench("scan prepared direct URL", () =>
-    scanner.scan(scannerInputs.directUrl),
-  ),
-  bench("scan sink prepared direct URL", () =>
-    scanner.scan(scannerInputs.directUrl, () => true),
-  ),
-  bench("checkUrlRanges custom TLD snapshot", () =>
-    checkUrlRanges(scannerInputs.bareDomain, CUSTOM_TLDS, CUSTOM_TLD_TARGETS),
-  ),
-  bench("scanUrlRanges custom TLD snapshot", () =>
-    scanUrlRanges(BARE_DOMAIN, CUSTOM_TLDS, CUSTOM_TLD_TARGETS),
-  ),
-  bench("scanUrlRangeMatches custom snapshot", () =>
-    scanUrlRangeMatches(
-      scannerInputs.bareDomain,
-      () => true,
-      CUSTOM_TLDS,
-      CUSTOM_TLD_TARGETS,
-    ),
-  ),
+  bench("check Unicode late match", () => filter.check(UNICODE_LATE_MATCH)),
   bench(
     "check malformed explicit authority",
-    () => scanner.check(scannerInputs.malformedAuthority),
+    () => filter.check(MALFORMED_AUTHORITY),
     100,
   ),
   bench(
     "check trailing path closers",
-    () => scanner.check(scannerInputs.trailingPathClosers),
+    () => filter.check(TRAILING_PATH_CLOSERS),
     100,
   ),
+  bench("check large custom TLD snapshot", () =>
+    customTldFilter.check(CUSTOM_TLD_URL),
+  ),
+  bench("find direct URL", () => filter.find(DIRECT_URL)),
+  bench("find bare domain", () => filter.find(BARE_DOMAIN)),
+  bench("find obfuscated URL", () => filter.find(OBFUSCATED_URL)),
+  bench("find late-match URL", () => filter.find(LATE_MATCH)),
+  bench("find Unicode late match", () => filter.find(UNICODE_LATE_MATCH)),
   bench("censor short clean", () => filter.censor(SHORT_CLEAN)),
   bench("censor long clean", () => filter.censor(LONG_CLEAN)),
   bench("censor direct URL", () => filter.censor(DIRECT_URL)),
@@ -179,13 +120,19 @@ printResults([
   bench("censor allowlist hit", () => allowlistFilter.censor(ALLOWLISTED_URL)),
   bench("censor allowlist miss", () => allowlistFilter.censor(ALLOWLIST_MISS)),
   bench("censor late-match URL", () => filter.censor(LATE_MATCH)),
-  bench("censor strict spaced-dot prose", () =>
-    strictFilter.censor(STRICT_SPACED_DOT),
+  bench("censor conservative spaced-dot prose", () =>
+    filter.censor(SPACED_DOT_PROSE),
   ),
   bench("censor candidate-shaped miss", () =>
     filter.censor(CANDIDATE_SHAPED_MISS),
   ),
   bench("censor Unicode late match", () => filter.censor(UNICODE_LATE_MATCH)),
+  bench("censor custom mask", () => filter.censor(DIRECT_URL, "#")),
+  bench("process direct URL", () => filter.process(DIRECT_URL)),
+  bench("process late-match URL", () => filter.process(LATE_MATCH)),
+  bench("process large custom TLD snapshot", () =>
+    customTldFilter.process(CUSTOM_TLD_URL),
+  ),
 ]);
 
 console.log("\nbenchmark complete\n");

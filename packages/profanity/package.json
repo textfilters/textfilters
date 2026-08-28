@@ -19,12 +19,7 @@
   ],
   "sideEffects": false,
   "files": [
-    "dist/compile.*",
-    "dist/index.*",
-    "dist/match.*",
-    "dist/normalize.*",
-    "dist/runtime.*",
-    "dist/types.*",
+    "dist",
     "README.md",
     "LICENSE"
   ],

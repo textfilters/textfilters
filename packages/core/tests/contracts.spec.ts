@@ -1,92 +1,31 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, expectTypeOf, it } from "vitest";
+
 import type {
-  ScanHints,
-  ScanInput,
-  ScanResult,
-  TextCensor,
-  TextGuard,
-  TextGuardResult,
+  GuardDecision,
+  ModerationPipeline,
   TextFilter,
+  TextGuard,
+  TextMatch,
   TextRange,
 } from "../src/index.js";
 
-describe("textfilters core contracts", () => {
-  it("allows censors and guards to share stable shapes", () => {
-    const censor: TextCensor = {
-      name: "test-censor",
-      censor: (value) => value.replace("secret", "******"),
-    };
-    const result: TextGuardResult = {
-      allowed: false,
-      reason: "blocked",
-    };
-    const guard: TextGuard = {
-      name: "test-guard",
-      check: () => result,
-    };
-
-    expect(censor.censor("secret")).toBe("******");
-    expect(guard.check({ text: "value" })).toEqual(result);
-  });
-
-  it("exposes short scanner contract aliases for shared scanner work", () => {
-    const range: TextRange = [1, 3];
-    const hints: ScanHints = {
-      textLength: 3,
-      codePointLength: 3,
-      isEmpty: false,
-      hasAsciiOnly: true,
-      hasNonAscii: false,
-      hasDigit: false,
-      digitCount: 0,
-      hasAsciiLetter: true,
-      hasWhitespace: false,
-      hasPunctuation: false,
-      punctuationCount: 0,
-      hasAtSign: false,
-      hasDot: false,
-      hasSlash: false,
-      hasColon: false,
-      hasPlus: false,
-    };
-    const input: ScanInput = {
-      text: "abc",
-      codePoints: ["a", "b", "c"],
-      hints,
-    };
-    const result: ScanResult = {
-      text: input.text,
-      codePoints: input.codePoints,
-      ranges: [range],
-      scanResults: [{ ranges: [range] }],
-    };
-
-    expect(result).toEqual({
-      text: "abc",
-      codePoints: ["a", "b", "c"],
-      ranges: [[1, 3]],
-      scanResults: [{ ranges: [[1, 3]] }],
-    });
-  });
-
-  it("exposes the shared text filter shape", () => {
-    const filter: TextFilter = {
-      name: "example",
-      check: (text) => text === "bad",
-      find: (text) =>
-        text === "bad"
-          ? [{ start: 0, end: 3, value: "bad", filter: "example" }]
-          : [],
-      censor: (text) => (text === "bad" ? "***" : text),
-      process(text) {
-        const matches = this.find(text);
-        return { censored: this.censor(text), matches };
-      },
-    };
-
-    expect(filter.process("bad")).toEqual({
-      censored: "***",
-      matches: [{ start: 0, end: 3, value: "bad", filter: "example" }],
-    });
+describe("core contracts", () => {
+  it("exposes the final filter and guard shapes", () => {
+    expectTypeOf<TextRange>().toEqualTypeOf<readonly [number, number]>();
+    expectTypeOf<TextMatch>().toMatchTypeOf<{
+      start: number;
+      end: number;
+      value: string;
+      filter: string;
+      data?: unknown;
+    }>();
+    expectTypeOf<TextFilter["process"]>().parameters.toEqualTypeOf<
+      [text: string, mask?: string]
+    >();
+    expectTypeOf<TextGuard["check"]>().returns.toEqualTypeOf<GuardDecision>();
+    expectTypeOf<ModerationPipeline>().toEqualTypeOf<{
+      process: ModerationPipeline["process"];
+    }>();
+    expect(true).toBe(true);
   });
 });

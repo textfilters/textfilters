@@ -1,18 +1,13 @@
 # Benchmarks
 
-## Overview
+The benchmark suite measures built public package operations. Use it only for
+before/after comparisons on the same machine, Node.js version, workspace state,
+and command shape. Absolute timings are not portable promises.
 
-The benchmark suite measures the runtime cost of the current `@textfilters/*`
-workspaces on representative inputs. Use it for **before/after comparisons on
-the same machine**. Absolute numbers depend on hardware, OS scheduling, Node.js
-version, and local load. See [ecosystem policy](ecosystem-policy.md) for the
-performance comparison expectations that PRs should follow, and see
-[performance budget](performance-budget.md) for regression thresholds and PR
-reporting expectations.
+See [performance budget](performance-budget.md) for regression thresholds and
+[ecosystem policy](ecosystem-policy.md) for evidence requirements.
 
-## Setup
-
-Install and build the monorepo from the repository root:
+## Commands
 
 ```sh
 npm ci
@@ -20,123 +15,51 @@ npm run build
 npm run benchmark
 ```
 
-The runner uses Node.js built-in modules and the built public exports of the eight
-local workspaces. It does not import package internals.
-
-## Running a Subset
-
-Pass one or more suite names after `--` to run only part of the benchmark set:
+Run selected suites by passing their names after `--`:
 
 ```sh
-npm run benchmark -- profanity
-npm run benchmark -- url email phone
-npm run benchmark -- spam combined
+npm run benchmark -- core combined spam
+npm run benchmark -- url email phone profanity
 ```
 
-Supported suite names are:
+Supported suites are `core`, `url`, `email`, `phone`, `profanity`, `spam`, and
+`combined`.
 
-- `core`
-- `url`
-- `email`
-- `phone`
-- `profanity`
-- `spam`
-- `combined`
+## Output
 
-Use `npm run benchmark -- --help` to print the suite list in the terminal.
-
-## Output Format
-
-Each row contains four measurements:
-
-| Column     | Meaning                               |
-| ---------- | ------------------------------------- |
-| `iter`     | Iteration count                       |
-| `total ms` | Total elapsed time for all iterations |
-| `avg ms`   | Average time per iteration            |
-| `ops/sec`  | Approximate operations per second     |
+Each row reports its iteration count, total elapsed milliseconds, average
+milliseconds per operation, and approximate operations per second. Compare the
+median `avg ms` value from at least three identical runs.
 
 ## Coverage
 
-### `core` pipeline
+The `url`, `email`, and `phone` suites cover construction or shared-filter
+access plus `check()`, `find()`, `censor()`, and `process()` on short clean,
+long clean, positive, late-match, and custom-mask inputs.
 
-| Case                             | Measures                             |
-| -------------------------------- | ------------------------------------ |
-| create single-filter pipeline    | Setup cost for a one-filter pipeline |
-| create multi-filter pipeline     | Setup cost for a chained pipeline    |
-| single filter · short/long clean | `censor()` overhead with no match    |
-| single filter · short/long match | URL detection and masking cost       |
-| multi filter · short/long        | Chained censor overhead              |
+The `profanity` suite covers Russian, English, and combined dictionary
+construction; clean and matched text; late matches; source range collection;
+masking; combined processing; phrases; obfuscation; and exact allow rules.
 
-### `url`, `email`, and `phone`
+The `core` suite covers combined-filter construction and operations plus
+moderation pipeline construction, an allowed path, and an early blocked path.
 
-Each censor runs these scenarios plus one custom `maskChar` case:
+The `spam` suite covers guard construction, allowed checks, interval,
+duplicate, and burst blocks, bounded per-actor growth, and actor-map pruning.
+Every scenario uses an explicit deterministic clock.
 
-- **short no-match**: baseline cost on short clean text
-- **long no-match**: baseline cost on long clean text, about 2 KB
-- **short positive-match**: detection and masking on short text
-- **long text with match late**: match near the end of long text
-- **custom maskChar**: option overhead for a non-default mask character
+The `combined` suite runs URL, email, phone, and Russian/English profanity
+filters against the same original text. It measures all four `TextFilter`
+operations for clean, late-match, overlapping, multilingual, and obfuscated
+inputs, followed by allowed and early-blocked moderation paths.
 
-### `profanity`
+## Interpretation
 
-| Case                                  | Measures                                                 |
-| ------------------------------------- | -------------------------------------------------------- |
-| full RU, EN, and RU+EN construction   | One-time structural dictionary indexing cost             |
-| retained RU+EN filters                | Approximate same-process heap growth per reusable filter |
-| `check()` short/long clean            | No-match detection                                       |
-| `check()` early/late match            | Early-exit and late-match detection                      |
-| phrase and obfuscated inputs          | Multi-token and normalized matching paths                |
-| `find()`, `censor()`, and `process()` | Source ranges, masking, and combined result creation     |
-
-The dedicated package benchmark runs with the complete maintained Russian and
-English dictionaries. Memory output is an approximate local comparison, not a
-portable allocation claim.
-
-### `spam`
-
-The spam guard is stateful, so every benchmark case creates its own guard and
-uses explicit `nowMs` values instead of wall-clock time.
-
-| Case                            | Measures                                        |
-| ------------------------------- | ----------------------------------------------- |
-| `createSpamFilter()`            | Guard creation cost                             |
-| check · allowed                 | Happy path through all checks                   |
-| check · tooFast block           | Early exit on interval violation                |
-| check · duplicate block         | Duplicate detection within the duplicate window |
-| check · burst block             | Burst threshold rejection                       |
-| many messages · same actor      | Repeated checks and state growth for one actor  |
-| many actors · maxActors pruning | Actor-map pruning under churn                   |
-
-### Combined Pipeline
-
-The combined suite measures one `combineFilters()` instance containing URL,
-email, phone, and full RU+EN profanity filters. Each child receives the same
-original input. `censor()` and `process()` merge all accepted UTF-16 ranges and
-apply one masking pass.
-
-Setup rows are printed separately from steady-state rows. The steady-state
-matrix covers:
-
-- short clean text
-- long clean text
-- short text with all match types
-- long text with matches near the end
-- mixed URL/email/phone/profanity inputs
-- Cyrillic clean text
-- obfuscated profanity candidates
-
-Every scenario records `check()`, `find()`, `censor()`, and `process()` so the
-boolean early-exit path stays distinct from full match collection and masking.
-
-## Interpreting Results
-
-- Compare runs on the same machine before and after a change.
-- Treat a regression as meaningful only when it repeats across several runs.
-- `ops/sec` is derived from `avg ms`; prefer `avg ms` for precise comparisons.
-- For combined benchmark work, compare rows with the same operation and input
-  suffix between the baseline and branch.
-- Compare combined `check()` with `find()`, `censor()`, and `process()` on the
-  same input to confirm boolean checks avoid unnecessary full-match work.
-- Profanity construction is a setup operation. Create selected filters once and
-  reuse them when measuring hot paths.
+- Compare identical labels and inputs wherever the public operation remains
+  comparable.
+- Treat a change as meaningful only when it repeats across multiple runs.
+- Compare `find()`, `censor()`, and `process()` independently; a faster boolean
+  check does not justify a slower full result path.
+- Separate construction rows from steady-state rows.
+- Investigate results outside [the performance budget](performance-budget.md)
+  before delivery.

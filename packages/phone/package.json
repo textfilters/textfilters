@@ -21,7 +21,6 @@
   "sideEffects": false,
   "files": [
     "dist",
-    "docs",
     "README.md",
     "LICENSE"
   ],
@@ -40,7 +39,7 @@
     "format": "prettier README.md docs package.json src tests scripts --write",
     "prepack": "npm run build",
     "pack:dry-run": "npm pack --dry-run",
-    "smoke:dist": "node --input-type=module --eval \"const phone = await import('./dist/index.js'); phone.createPhoneFilter().censor('+1 555 123 4567');\"",
+    "smoke:dist": "node --input-type=module --eval \"const phone = await import('./dist/index.js'); if (!phone.filter.check('+1 555 123 4567')) throw new Error('Smoke check failed'); phone.filter.censor('+1 555 123 4567', '#');\"",
     "check": "npm run lint && npm test && npm run build && npm run smoke:dist && npm run pack:dry-run",
     "benchmark:phone": "npm run build && node scripts/benchmark-phone.mjs"
   },

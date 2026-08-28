@@ -8,10 +8,10 @@ automation.
 
 | Workspace                                           | Owns                                                                                                            | Does not own                                                                               |
 | --------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| [`packages/core`](../packages/core)                 | Shared filter contracts, normalization helpers, filter combination, range merging, and masking helpers.         | URL, email, phone, profanity, or spam detection logic.                                     |
+| [`packages/core`](../packages/core)                 | Filter and guard contracts, filter combination, moderation orchestration, and UTF-16 masking.                   | Detector normalization, matching logic, or actor state.                                    |
 | [`packages/url`](../packages/url)                   | Stateless URL matching, censor factories, URL options, and public wrappers.                                     | Application routing or network validation.                                                 |
 | [`packages/email`](../packages/email)               | Stateless email matching, censor factories, email options, and public wrappers.                                 | Mailbox validation or delivery checks.                                                     |
-| [`packages/phone`](../packages/phone)               | Stateless phone matching, censor factories, phone options, and public wrappers.                                 | Telephony validation or carrier lookups.                                                   |
+| [`packages/phone`](../packages/phone)               | Stateless phone matching, the shared filter, and general text false-positive guards.                            | Telephony validation, carrier lookups, or structured payload parsing.                      |
 | [`packages/profanity`](../packages/profanity)       | Structural dictionary compilation, normalization, matching, source ranges, and censoring.                       | Maintained language data, taxonomy, profiles, validators, or application policy decisions. |
 | [`packages/profanity-ru`](../packages/profanity-ru) | Maintained Russian deny, allow, and alias data.                                                                 | Matching logic or application policy decisions.                                            |
 | [`packages/profanity-en`](../packages/profanity-en) | Maintained English deny, allow, and alias data.                                                                 | Matching logic or application policy decisions.                                            |
@@ -28,17 +28,18 @@ Package-specific detection rules belong in the runtime workspace that uses
 them.
 
 `@textfilters/url`, `@textfilters/email`, and `@textfilters/phone` are
-stateless filters. Their factories expose the common `TextFilter` methods while
-keeping parsers and low-level range collection internal.
+stateless filters. URL and email offer focused configuration factories; phone
+exports one shared immutable filter. All parsers, normalization, and low-level
+range collection remain package internals.
 
 `@textfilters/profanity` is a dictionary-independent runtime. It accepts plain
 `{ id, deny, allow, aliases? }` objects, compiles matcher indexes once, and
 exposes the common `TextFilter` methods. `@textfilters/profanity-ru` and
 `@textfilters/profanity-en` own maintained language data and no matching logic.
 
-`@textfilters/spam` is stateful. It owns guard decisions and actor state
-abstractions but does not depend on an application database, cache, queue, web
-framework, or deployment platform.
+`@textfilters/spam` is stateful. Each guard owns bounded private actor state and
+does not expose storage abstractions or depend on an application database,
+cache, queue, web framework, or deployment platform.
 
 ## Compatibility Policy
 
@@ -52,8 +53,8 @@ dependency ranges and propagates a dependency-only patch when a released local
 version moves outside an otherwise unaffected dependent's current range.
 
 The root `npm run check` command is the local compatibility gate. It runs the
-release path allowlist self-test and every package's lint, test, build, dist
-smoke, and dry-pack checks in workspace order.
+release path allowlist self-test, every package's lint, test, build, dist smoke,
+and dry-pack checks, root dist-surface tests, and a clean tarball consumer.
 
 Before publication, pack results must be compared with the previous release.
 Only intended metadata, documentation, version, and dependency-range changes

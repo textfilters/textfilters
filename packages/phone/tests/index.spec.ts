@@ -1,21 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  createPhoneFilter,
-  filter,
-  PHONE_FILTER_NAME,
-  phoneFilter,
-} from "../src/index.js";
+import { filter } from "../src/index.js";
 
 const mask = (s: string, ch = "*") => ch.repeat(Array.from(s).length);
 const maskLength = (s: string, ch = "*") => ch.repeat(s.length);
 
 describe("textfilters phone package", () => {
-  it("exposes old-compatible public API", () => {
-    expect(filter.name).toBe(PHONE_FILTER_NAME);
-    expect(phoneFilter()).toEqual(
-      expect.objectContaining({ name: PHONE_FILTER_NAME }),
-    );
+  it("exposes the final shared filter", () => {
+    expect(filter.name).toBe("phone");
   });
 
   it("exposes the shared text filter methods with UTF-16 ranges", () => {
@@ -27,7 +19,7 @@ describe("textfilters phone package", () => {
       start: 3,
       end: 18,
       value: "+1 202 555 0187",
-      filter: PHONE_FILTER_NAME,
+      filter: "phone",
     });
     expect(filter.process(text)).toEqual({
       censored: `😀 ${"*".repeat(15)}`,
@@ -126,135 +118,16 @@ describe("textfilters phone package", () => {
     expect(filter.censor("1234567890123456")).toBe("1234567890123456");
   });
 
-  it("keeps reviewed non-contact numeric metadata unchanged", () => {
-    const metadata =
-      '{ "cursor": "1784477618588-0", "serverTs": 1784477618588 }';
+  it("treats serialized machine payloads as ordinary text", () => {
+    const serialized =
+      '{"serverTs":1784477618588,"message":"+7 999 123 45 67"}';
+    const values = filter.find(serialized).map((match) => match.value);
 
-    expect(filter.censor("-2147483648")).toBe("-2147483648");
-    expect(filter.censor("user-2147483648")).toBe("user-2147483648");
-    expect(filter.censor(metadata)).toBe(metadata);
-    expect(filter.censor('{"cursor":1784477618588}')).toBe(
-      '{"cursor":1784477618588}',
-    );
+    expect(values).toContain("1784477618588");
+    expect(filter.check("prefix 1784477618588 suffix")).toBe(true);
 
-    const cursorWithPhone = '{"cursor":"1784477618588-79991234567"}';
-    const cursorSequenceWithPhone = '{"cursor":"1784477618588-0-79991234567"}';
-    const serverTimestampWithPhone = '{"serverTs":"1784477618588-79991234567"}';
-
-    expect(filter.censor(cursorWithPhone)).toBe(
-      `{"cursor":"1784477618588-${mask("79991234567")}"}`,
-    );
-    expect(filter.censor(cursorSequenceWithPhone)).toBe(
-      `{"cursor":"1784477618588-0-${mask("79991234567")}"}`,
-    );
-    expect(filter.censor(serverTimestampWithPhone)).toBe(
-      `{"serverTs":"1784477618588-${mask("79991234567")}"}`,
-    );
-
-    const longJsonWhitespace = " ".repeat(49);
-    const spacedServerTimestamp = `{"serverTs":${longJsonWhitespace}1784477618588}`;
-    const spacedCursor = `{"cursor":${longJsonWhitespace}"1784477618588-0"}`;
-    const spacedCursorWithPhone = `{"cursor":${longJsonWhitespace}"1784477618588-79991234567"}`;
-
-    expect(filter.censor(spacedServerTimestamp)).toBe(spacedServerTimestamp);
-    expect(filter.censor(spacedCursor)).toBe(spacedCursor);
-    expect(filter.censor(spacedCursorWithPhone)).toBe(
-      `{"cursor":${longJsonWhitespace}"1784477618588-${mask("79991234567")}"}`,
-    );
-
-    const escapedServerTimestamp = '{"server\\u0054s":1784477618588}';
-    const escapedCursor = '{"cur\\u0073or":"1784477618588-0"}';
-    const escapedServerTimestampWithPhone =
-      '{"server\\u0054s":"1784477618588-79991234567"}';
-    expect(filter.censor(escapedServerTimestamp)).toBe(escapedServerTimestamp);
-    expect(filter.censor(escapedCursor)).toBe(escapedCursor);
-    expect(filter.censor(escapedServerTimestampWithPhone)).toBe(
-      `{"server\\u0054s":"1784477618588-${mask("79991234567")}"}`,
-    );
-
-    expect(filter.censor('{"CURSOR":1784477618588}')).toBe(
-      `{"CURSOR":${mask("1784477618588")}}`,
-    );
-    expect(filter.censor('{"serverts":1784477618588}')).toBe(
-      `{"serverts":${mask("1784477618588")}}`,
-    );
-
-    const zeroWidthServerTimestamp = '{"serverTs":"178447\u200B7618588"}';
-    const zeroWidthCursorSequence = '{"cursor":"1784477618588-\u200B0"}';
-    const trailingZeroWidthCursor = '{"cursor":"1784477618588\u200B"}';
-    const zeroWidthServerTimestampWithPhone =
-      '{"serverTs":"1784477618588\u200B-79991234567"}';
-    const unicodeDigitServerTimestamp = '{"serverTs":"178447７618588"}';
-
-    expect(filter.censor(zeroWidthServerTimestamp)).toBe(
-      `{"serverTs":"${mask("178447\u200B7618588")}"}`,
-    );
-    expect(filter.censor(zeroWidthCursorSequence)).toBe(
-      `{"cursor":"${mask("1784477618588")}-\u200B0"}`,
-    );
-    expect(filter.censor(trailingZeroWidthCursor)).toBe(
-      `{"cursor":"${mask("1784477618588\u200B")}"}`,
-    );
-    expect(filter.censor(zeroWidthServerTimestampWithPhone)).toBe(
-      `{"serverTs":"${mask("1784477618588")}\u200B-${mask("79991234567")}"}`,
-    );
-    expect(filter.censor(unicodeDigitServerTimestamp)).toBe(
-      `{"serverTs":"${mask("178447７618588")}"}`,
-    );
-
-    expect(filter.censor('{"serverTs":"1784477618588-0"}')).toBe(
-      `{"serverTs":"${mask("1784477618588")}-0"}`,
-    );
-    expect(filter.censor('{"cursor":"1784477618588-1"}')).toBe(
-      `{"cursor":"${mask("1784477618588")}-1"}`,
-    );
-
-    expect(filter.censor('note, "serverTs":1784477618588')).toBe(
-      `note, "serverTs":${mask("1784477618588")}`,
-    );
-    expect(filter.censor('"serverTs":1784477618588')).toBe(
-      `"serverTs":${mask("1784477618588")}`,
-    );
-    expect(filter.censor('{"serverTs":1784477618588')).toBe(
-      `{"serverTs":${mask("1784477618588")}`,
-    );
-    expect(filter.censor('note {"serverTs":1784477618588} after')).toBe(
-      'note {"serverTs":1784477618588} after',
-    );
-    const nestedMetadata =
-      'note {"nested":{"note":"{","serverTs":1784477618588}} after';
-    expect(filter.censor(nestedMetadata)).toBe(nestedMetadata);
-    const metadataAfterUnmatchedBrace =
-      'note { stray {"serverTs":1784477618588}';
-    expect(filter.censor(metadataAfterUnmatchedBrace)).toBe(
-      metadataAfterUnmatchedBrace,
-    );
-    const metadataInsideMalformedObject =
-      'note { stray {"serverTs":1784477618588}} after';
-    expect(filter.censor(metadataInsideMalformedObject)).toBe(
-      metadataInsideMalformedObject,
-    );
-    const metadataAfterMalformedString =
-      'note {"broken":"oops {"serverTs":1784477618588}';
-    expect(filter.censor(metadataAfterMalformedString)).toBe(
-      metadataAfterMalformedString,
-    );
-
-    expect(filter.censor("-214748\u200B3648")).toBe(
-      `-${mask("214748\u200B3648")}`,
-    );
-    expect(filter.censor("-２147483648")).toBe(`-${mask("２147483648")}`);
-    expect(filter.censor("-\u200B2147483648")).toBe(
-      `-\u200B${mask("2147483648")}`,
-    );
-
-    expect(filter.censor("-79991234567")).toBe(`-${mask("79991234567")}`);
-    expect(filter.censor('{"phone":1784477618588}')).toBe(
-      `{"phone":${mask("1784477618588")}}`,
-    );
-    expect(filter.censor('{"value":1784477618588}')).toBe(
-      `{"value":${mask("1784477618588")}}`,
-    );
+    const parsed = JSON.parse(serialized) as { message: string };
+    expect(filter.censor(parsed.message)).toBe(mask(parsed.message));
   });
 
   it("keeps current grouped-number false positive boundaries", () => {
@@ -564,10 +437,11 @@ describe("textfilters phone package", () => {
     expect(filter.censor("2026-03-22 12-34-56")).toBe("2026-03-22 12-34-56");
   });
 
-  it("supports custom mask char", () => {
-    const custom = createPhoneFilter({ maskChar: "#" });
-    expect(custom.censor("+1 202 555 0187")).toBe(mask("+1 202 555 0187", "#"));
-    expect(custom.censor("call 𐒧𐒩𐒩𐒩𐒡𐒢𐒣𐒤𐒥𐒦𐒧 now")).toBe(
+  it("supports a method-level custom mask", () => {
+    expect(filter.censor("+1 202 555 0187", "#")).toBe(
+      mask("+1 202 555 0187", "#"),
+    );
+    expect(filter.censor("call 𐒧𐒩𐒩𐒩𐒡𐒢𐒣𐒤𐒥𐒦𐒧 now", "#")).toBe(
       `call ${maskLength("𐒧𐒩𐒩𐒩𐒡𐒢𐒣𐒤𐒥𐒦𐒧", "#")} now`,
     );
   });

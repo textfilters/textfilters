@@ -1,4 +1,3 @@
-import { lowerNfkc, stripZeroWidth } from "@textfilters/core";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -7,19 +6,21 @@ import {
   LOOKALIKE_TO_ASCII,
   WHITESPACE_RE,
 } from "../src/chars.js";
+import { createUrlFilter } from "../src/index.js";
+import type {
+  UrlRangeScanner,
+  UrlRangeScanResult,
+  UrlScanHints,
+} from "../src/contracts.js";
+import { createMeta } from "../src/meta.js";
+import { lowerNfkc, stripZeroWidth } from "../src/normalize.js";
+import { createUrlScanner } from "../src/scanner.js";
 import {
   checkUrlRanges,
-  createUrlFilter,
-  createUrlScanner,
+  mask,
   scanUrlRangeMatches,
   scanUrlRanges,
-  type AmbiguousSpacedDotPolicy,
-  type UrlRangeScanner,
-  type UrlRangeScanResult,
-  type UrlScanHints,
-} from "../src/index.js";
-import { createMeta } from "../src/meta.js";
-import { mask } from "./helpers.js";
+} from "./helpers.js";
 
 type Range = readonly [number, number];
 
@@ -27,7 +28,6 @@ interface ScannerFixture {
   readonly text: string;
   readonly ranges: readonly Range[];
   readonly allowedDomains?: readonly string[];
-  readonly ambiguousSpacedDots?: AmbiguousSpacedDotPolicy;
 }
 
 const wholeRange = (text: string): readonly Range[] => [
@@ -48,13 +48,12 @@ const expectScannerFixture = ({
   text,
   ranges,
   allowedDomains,
-  ambiguousSpacedDots,
 }: ScannerFixture): void => {
   const input = { text, codePoints: Array.from(text) };
-  const scanner = createUrlScanner({ allowedDomains, ambiguousSpacedDots });
+  const scanner = createUrlScanner({ allowedDomains });
   const seen: Range[] = [];
 
-  if (allowedDomains === undefined && ambiguousSpacedDots === undefined) {
+  if (allowedDomains === undefined) {
     expect(scanUrlRanges(text)).toEqual(ranges);
     expect(checkUrlRanges(input)).toBe(ranges.length > 0);
   }
@@ -66,9 +65,9 @@ const expectScannerFixture = ({
     }),
   ).toBe(true);
   expect(seen).toEqual(ranges);
-  expect(
-    createUrlFilter({ allowedDomains, ambiguousSpacedDots }).censor(text),
-  ).toBe(maskRanges(text, ranges));
+  expect(createUrlFilter({ allowedDomains }).censor(text)).toBe(
+    maskRanges(text, ranges),
+  );
 };
 
 describe("URL scanner", () => {
@@ -172,7 +171,7 @@ describe("URL scanner", () => {
     }).ranges;
 
     expect(ranges).toEqual([[3, 27]]);
-    expect(createUrlFilter({ maskChar: "#" }).censor(text)).toBe(
+    expect(createUrlFilter().censor(text, "#")).toBe(
       `go ${mask("https://example.com/path", "#")} now`,
     );
   });
@@ -297,7 +296,7 @@ describe("URL scanner", () => {
     );
   });
 
-  it("applies an explicit policy to ambiguous spaced-dot candidates", () => {
+  it("preserves ambiguous spaced-dot candidates without stronger URL evidence", () => {
     const cases = [
       ["Fine. Be careful.", "Fine. Be"],
       ["Hello. Fine. Be careful.", "Fine. Be"],
@@ -330,15 +329,7 @@ describe("URL scanner", () => {
     ] as const;
 
     for (const [text, candidate] of cases) {
-      const start = Array.from(text.slice(0, text.indexOf(candidate))).length;
-      const range: Range = [start, start + Array.from(candidate).length];
-
       expectScannerFixture({ text, ranges: [] });
-      expectScannerFixture({
-        text,
-        ranges: [range],
-        ambiguousSpacedDots: "block",
-      });
     }
 
     for (const [text, candidate] of [
@@ -404,39 +395,6 @@ describe("URL scanner", () => {
       expect(scanner.check(input)).toBe(true);
       expect(scanner.scan(input).ranges).not.toEqual([]);
     }
-  });
-
-  it("normalizes invalid spaced-dot policies consistently", () => {
-    const text = "visit evil. com now";
-    const input = { text, codePoints: Array.from(text) };
-    const invalidPolicy = "invalid" as AmbiguousSpacedDotPolicy;
-    const seen: Range[] = [];
-    const scanner = createUrlScanner({ ambiguousSpacedDots: invalidPolicy });
-
-    expect(scanner.scan(input)).toEqual({ ranges: [] });
-    expect(scanner.check(input)).toBe(false);
-    expect(
-      createUrlFilter({ ambiguousSpacedDots: invalidPolicy }).censor(text),
-    ).toBe(text);
-    expect(
-      scanUrlRanges(text, undefined, undefined, undefined, invalidPolicy),
-    ).toEqual([]);
-    expect(
-      checkUrlRanges(input, undefined, undefined, undefined, invalidPolicy),
-    ).toBe(false);
-    expect(
-      scanUrlRangeMatches(
-        input,
-        (match) => {
-          seen.push(match.range);
-        },
-        undefined,
-        undefined,
-        undefined,
-        invalidPolicy,
-      ),
-    ).toBe(true);
-    expect(seen).toEqual([]);
   });
 
   it("checks allowlists against the selected sentence suffix", () => {
