@@ -4,6 +4,15 @@ Plain English dictionary data for `@textfilters/profanity`.
 
 ## Installation
 
+Add the GitHub Packages registry for the `@textfilters` scope:
+
+```ini
+@textfilters:registry=https://npm.pkg.github.com
+```
+
+Install with GitHub npm authentication configured. GitHub Packages requires
+authentication for npm installs, including public packages.
+
 ```sh
 npm install @textfilters/profanity @textfilters/profanity-en
 ```

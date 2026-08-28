@@ -4,6 +4,15 @@ Stateless URL and obfuscated-domain filtering with source UTF-16 matches.
 
 ## Installation
 
+Add the GitHub Packages registry for the `@textfilters` scope:
+
+```ini
+@textfilters:registry=https://npm.pkg.github.com
+```
+
+Install with GitHub npm authentication configured. GitHub Packages requires
+authentication for npm installs, including public packages.
+
 ```sh
 npm install @textfilters/url
 ```
@@ -27,10 +36,10 @@ const url = createUrlFilter({
 });
 ```
 
-| Option           | Meaning                                        |
-| ---------------- | ---------------------------------------------- |
-| `tlds`           | Snapshot of accepted top-level domains         |
-| `allowedDomains` | Exact hosts and their subdomains left unmasked |
+| Option           | Meaning                                               |
+| ---------------- | ----------------------------------------------------- |
+| `tlds`           | Snapshot of accepted top-level domains                |
+| `allowedDomains` | Exact hosts left unmasked; list subdomains separately |
 
 The shared `filter` uses the built-in TLD set. The detector keeps conservative
 handling for ambiguous `example. com` prose, while strong forms such as
