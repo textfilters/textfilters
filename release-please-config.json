@@ -28,8 +28,7 @@
     },
     "packages/profanity": {
       "component": "profanity",
-      "package-name": "@textfilters/profanity",
-      "release-as": "2.0.1"
+      "package-name": "@textfilters/profanity"
     },
     "packages/profanity-ru": {
       "component": "profanity-ru",
