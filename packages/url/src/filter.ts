@@ -44,9 +44,12 @@ export function createUrlFilter(options: UrlFilterOptions = {}): UrlFilter {
   function scanRanges(source: string): readonly TextRange[] {
     const codePoints = Array.from(source);
     const offsets = utf16Offsets(codePoints);
-    return scanner
-      .scan({ text: source, codePoints })
-      .ranges.flatMap((range) => toUtf16Range(range, offsets));
+    const ranges: TextRange[] = [];
+    scanner.scan({ text: source, codePoints }, ({ range }) => {
+      const converted = toUtf16Range(range, offsets);
+      if (converted) ranges.push(converted);
+    });
+    return ranges;
   }
 
   function scanMatches(source: string): readonly TextMatch[] {
@@ -74,9 +77,9 @@ function utf16Offsets(codePoints: readonly string[]): readonly number[] {
 function toUtf16Range(
   [start, end]: CodePointRange,
   offsets: readonly number[],
-): readonly TextRange[] {
-  if (start < 0 || end <= start || end >= offsets.length) return [];
-  return [[offsets[start], offsets[end]]];
+): TextRange | undefined {
+  if (start < 0 || end <= start || end >= offsets.length) return undefined;
+  return [offsets[start], offsets[end]];
 }
 
 function toRanges(matches: readonly TextMatch[]): readonly TextRange[] {

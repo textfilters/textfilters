@@ -1,5 +1,5 @@
 import { performance } from "node:perf_hooks";
-import { createEmailFilter, createEmailScanner } from "../dist/index.js";
+import { createEmailFilter } from "../dist/index.js";
 
 const ITERATIONS = 1_000;
 const SETUP_ITERATIONS = 100;
@@ -12,6 +12,9 @@ const OBFUSCATED_EMAIL = "Contact user [at] example [dot] com for details";
 const LATE_MATCH =
   "Lorem ipsum dolor sit amet, consectetur adipiscing elit. ".repeat(40) +
   "Contact alerts@example.com now";
+const ALLOWED_EMAIL = "Contact support@example.com for details";
+const ALLOWED_DOMAIN = "Contact user@internal.example for details";
+const ALLOWLIST_MISS = "Contact user@blocked.example for details";
 
 function bench(label, fn, iterations = ITERATIONS) {
   for (let i = 0; i < Math.min(100, iterations); i++) fn();
@@ -39,36 +42,51 @@ function printResults(results) {
 }
 
 const filter = createEmailFilter();
-const scanner = createEmailScanner();
-const input = (text) => ({ text, codePoints: Array.from(text) });
-const hintedInput = (text) => ({
-  text,
-  codePoints: Array.from(text),
-  hints: {
-    textLength: text.length,
-    hasNonAscii: /[^\x00-\x7f]/u.test(text),
-    hasAtSign: text.includes("@"),
-    hasDot: text.includes("."),
-  },
+const directOnlyFilter = createEmailFilter({ matchObfuscated: false });
+const allowlistFilter = createEmailFilter({
+  allowedEmails: ["support@example.com"],
+  allowedDomains: ["internal.example"],
 });
 
 printResults([
   bench("createEmailFilter()", () => createEmailFilter(), SETUP_ITERATIONS),
-  bench("createEmailScanner()", () => createEmailScanner(), SETUP_ITERATIONS),
-  bench("check short clean", () => scanner.check(input(SHORT_CLEAN))),
-  bench("check hinted short clean", () =>
-    scanner.check(hintedInput(SHORT_CLEAN)),
+  bench(
+    "createEmailFilter() with allowlists",
+    () =>
+      createEmailFilter({
+        allowedEmails: ["support@example.com"],
+        allowedDomains: ["internal.example"],
+      }),
+    SETUP_ITERATIONS,
   ),
-  bench("check long clean", () => scanner.check(input(LONG_CLEAN))),
-  bench("check no-dot at text", () => scanner.check(input(NO_DOT_AT))),
-  bench("check direct email", () => scanner.check(input(DIRECT_EMAIL))),
-  bench("check late-match email", () => scanner.check(input(LATE_MATCH))),
+  bench("check short clean", () => filter.check(SHORT_CLEAN)),
+  bench("check long clean", () => filter.check(LONG_CLEAN)),
+  bench("check no-dot @ text", () => filter.check(NO_DOT_AT)),
+  bench("check direct email", () => filter.check(DIRECT_EMAIL)),
+  bench("check obfuscated email", () => filter.check(OBFUSCATED_EMAIL)),
+  bench("check late-match email", () => filter.check(LATE_MATCH)),
+  bench("check direct-only direct email", () =>
+    directOnlyFilter.check(DIRECT_EMAIL),
+  ),
+  bench("check direct-only obfuscated email", () =>
+    directOnlyFilter.check(OBFUSCATED_EMAIL),
+  ),
+  bench("check allowed email", () => allowlistFilter.check(ALLOWED_EMAIL)),
+  bench("check allowed domain", () => allowlistFilter.check(ALLOWED_DOMAIN)),
+  bench("check allowlist miss", () => allowlistFilter.check(ALLOWLIST_MISS)),
+  bench("find direct email", () => filter.find(DIRECT_EMAIL)),
+  bench("find obfuscated email", () => filter.find(OBFUSCATED_EMAIL)),
+  bench("find late-match email", () => filter.find(LATE_MATCH)),
   bench("censor short clean", () => filter.censor(SHORT_CLEAN)),
   bench("censor long clean", () => filter.censor(LONG_CLEAN)),
-  bench("censor no-dot at text", () => filter.censor(NO_DOT_AT)),
+  bench("censor no-dot @ text", () => filter.censor(NO_DOT_AT)),
   bench("censor direct email", () => filter.censor(DIRECT_EMAIL)),
   bench("censor obfuscated email", () => filter.censor(OBFUSCATED_EMAIL)),
   bench("censor late-match email", () => filter.censor(LATE_MATCH)),
+  bench("censor custom mask", () => filter.censor(DIRECT_EMAIL, "#")),
+  bench("process direct email", () => filter.process(DIRECT_EMAIL)),
+  bench("process obfuscated email", () => filter.process(OBFUSCATED_EMAIL)),
+  bench("process late-match email", () => filter.process(LATE_MATCH)),
 ]);
 
 console.log("\nbenchmark complete\n");

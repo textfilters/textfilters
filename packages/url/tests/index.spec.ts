@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 
+import { combineFilters } from "@textfilters/core";
+
 import { createUrlFilter, filter } from "../src/index.js";
 import { mask } from "./helpers.js";
 
@@ -26,6 +28,43 @@ describe("compatibility behavior", () => {
       censored: `😀 ${mask("example.com")}`,
       matches: [match],
     });
+  });
+
+  it("preserves adjacent detection matches while masking one span", () => {
+    const source = "http://localhost:80example.com";
+    const expectedMatches = [
+      {
+        start: 0,
+        end: 19,
+        value: "http://localhost:80",
+        filter: "url",
+      },
+      {
+        start: 19,
+        end: 30,
+        value: "example.com",
+        filter: "url",
+      },
+    ];
+
+    expect(filter.check(source)).toBe(true);
+    const matches = filter.find(source);
+    expect(matches).toEqual(expectedMatches);
+    expect(matches[0]?.end).toBe(matches[1]?.start);
+    for (const match of matches) {
+      expect(match.value).toBe(source.slice(match.start, match.end));
+    }
+
+    const processed = filter.process(source);
+    expect(processed.matches).toEqual(matches);
+    expect(processed.censored).toBe(mask(source));
+    expect(processed.censored.length).toBe(source.length);
+    expect(filter.censor(source, "#")).toBe(mask(source, "#"));
+    expect(filter.process(source, "#").censored).toBe(mask(source, "#"));
+
+    const combined = combineFilters(filter);
+    expect(combined.find(source)).toEqual(matches);
+    expect(combined.process(source).matches).toEqual(matches);
   });
 
   it("accepts empty text and rejects non-string TextFilter input", () => {
