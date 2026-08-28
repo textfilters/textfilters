@@ -10,6 +10,7 @@ const REPO_ROOT = path.resolve(
 );
 const REPOSITORY_URL = "https://github.com/textfilters/textfilters.git";
 const ISSUES_URL = "https://github.com/textfilters/textfilters/issues";
+const RELEASE_HISTORY_BOUNDARY = "6928d4d6925d6db98c20ecf7e509d69b1c20847f";
 const WORKSPACES = [
   "core",
   "url",
@@ -132,6 +133,11 @@ for (const name of LANGUAGE_PACKAGES) {
 }
 
 expectEqual("Release Please plugin", releaseConfig.plugins, ["node-workspace"]);
+expectEqual(
+  "Release Please history boundary",
+  releaseConfig["last-release-sha"],
+  RELEASE_HISTORY_BOUNDARY,
+);
 expectEqual(
   "Release Please local dependency policy",
   releaseConfig["always-link-local"],

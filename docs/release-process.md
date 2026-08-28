@@ -88,7 +88,13 @@ After publication:
 
 Published package tags and package versions are immutable.
 
-The current breaking monorepo transition uses the package-specific
-`release-as: 2.0.1` override for `@textfilters/profanity` because its public API
-remains unchanged. Remove the override after `2.0.1` is recorded in the manifest
-so later releases return to Conventional Commit versioning.
+## Release History Boundary
+
+`last-release-sha` points to the merge commit of release pull request #68. This
+intentional post-architecture migration boundary excludes #67 and older commits
+from future release analysis, preventing repeat Russian and English dictionary
+releases caused only by the documentation changes in #67. Release Please still
+processes every future commit after the boundary normally.
+
+Do not remove the boundary as stale configuration. Reconsider it only after
+both dictionary packages have real new releases whose tags are newer than #67.
