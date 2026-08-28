@@ -3,16 +3,16 @@ import { domainToUnicode } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
-import {
-  checkUrlRanges,
-  createUrlFilter,
-  scanUrlRangeMatches,
-  scanUrlRanges,
-} from "../src/index.js";
+import { createUrlFilter } from "../src/index.js";
 import { DOT_CHAR_SET, LOOKALIKE_TO_ASCII } from "../src/chars.js";
 import { toSkeleton } from "../src/meta.js";
 import { DEFAULT_TLDS } from "../src/tlds.js";
-import { mask } from "./helpers.js";
+import {
+  checkUrlRanges,
+  mask,
+  scanUrlRangeMatches,
+  scanUrlRanges,
+} from "./helpers.js";
 
 type Range = readonly [number, number];
 
@@ -158,30 +158,17 @@ describe("TLD matching", () => {
     expect(failures.result()).toEqual({ failures: 0, samples: [] });
   });
 
-  it("applies the ambiguous final-suffix policy to every default TLD", () => {
+  it("preserves ambiguous final suffixes for every default TLD", () => {
     const failures = createFailureRecorder();
 
     for (const tld of DEFAULT_TLDS) {
       const candidate = `Use e.g. ${tld}`;
       const text = `${candidate} prose`;
-      const expectedBlockedRange = wholeRange(candidate);
       const preservedRanges = scanUrlRanges(text);
-      const blockedRanges = scanUrlRanges(
-        text,
-        undefined,
-        undefined,
-        undefined,
-        "block",
-      );
-      if (
-        preservedRanges.length > 0 ||
-        !rangesEqual(blockedRanges, expectedBlockedRange)
-      ) {
+      if (preservedRanges.length > 0) {
         failures.record({
           tld,
           preservedRanges,
-          blockedRanges,
-          expectedBlockedRange,
         });
       }
     }

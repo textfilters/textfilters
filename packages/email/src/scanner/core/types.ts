@@ -5,8 +5,6 @@ export interface ScannerExclusions {
 }
 
 export interface ScannerOptions {
-  readonly allowLocalhost: boolean;
-  readonly allowSingleLabelDomain: boolean;
   readonly matchObfuscated: boolean;
   readonly exclusions: ScannerExclusions;
 }

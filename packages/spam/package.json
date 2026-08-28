@@ -20,7 +20,6 @@
   "sideEffects": false,
   "files": [
     "dist",
-    "docs",
     "README.md",
     "LICENSE"
   ],
@@ -39,7 +38,7 @@
     "format": "prettier README.md docs package.json src tests --write",
     "prepack": "npm run build",
     "pack:dry-run": "npm pack --dry-run",
-    "smoke:dist": "node --input-type=module --eval \"const spam = await import('./dist/index.js'); spam.createSpamFilter().check({ text: 'ok' });\"",
+    "smoke:dist": "node --input-type=module --eval \"const spam = await import('./dist/index.js'); if (!spam.createSpamGuard().check({ actorKey: 'smoke', text: 'ok', nowMs: 0 }).allowed) throw new Error('Smoke check failed');\"",
     "check": "npm run lint && npm test && npm run build && npm run smoke:dist && npm run pack:dry-run"
   },
   "dependencies": {

@@ -1,9 +1,3 @@
-import {
-  lowerNfkc,
-  type TextCodePointRange,
-  mergeCodePointRanges,
-} from "@textfilters/core";
-
 import { createEmailTextMeta } from "./normalization.js";
 import { collectDirectEmailRange } from "./scanner/matching/direct.js";
 import {
@@ -14,17 +8,18 @@ import {
 import { createExclusionSets } from "./scanner/rules/exclusions.js";
 import { TOKEN_VALUE, type ScannerOptions } from "./scanner/core/types.js";
 import {
-  EMAIL_FILTER_NAME,
+  type CodePointRange as TextCodePointRange,
   type EmailFilterOptions,
   type EmailRangeMatchSink,
   type EmailRangeScanner,
   type EmailScanInput,
 } from "./types.js";
 
-export interface EmailScannerConfig extends EmailFilterOptions {}
+const lowerNfkc = (text: string): string =>
+  text.normalize("NFKC").toLowerCase();
 
 export function createEmailScanner(
-  config: EmailScannerConfig = {},
+  config: EmailFilterOptions = {},
 ): EmailRangeScanner {
   const scannerOptions = createScannerOptions(config);
 
@@ -43,8 +38,6 @@ export function createEmailScanner(
   }
 
   return {
-    name: EMAIL_FILTER_NAME,
-    allocationAware: true,
     check(input) {
       return checkEmailRangesWithOptions(input, scannerOptions);
     },
@@ -53,31 +46,19 @@ export function createEmailScanner(
 }
 
 export function scanEmailRanges(
-  value: unknown,
-  options: EmailFilterOptions = {},
-): readonly TextCodePointRange[] {
-  return scanEmailRangesWithOptions(
-    String(value ?? ""),
-    createScannerOptions(options),
-  );
-}
-
-export function collectEmailRanges(
   value: string,
   options: EmailFilterOptions = {},
 ): readonly TextCodePointRange[] {
-  return scanEmailRanges(value, options);
+  return scanEmailRangesWithOptions(value, createScannerOptions(options));
 }
 
 function createScannerOptions(options: EmailFilterOptions): ScannerOptions {
   return {
-    allowLocalhost: options.allowLocalhost === true,
-    allowSingleLabelDomain: options.allowSingleLabelDomain === true,
     matchObfuscated: options.matchObfuscated !== false,
     exclusions: createExclusionSets(
-      options.excludeEmails,
-      options.excludeUsernames,
-      options.excludeDomains,
+      options.allowedEmails,
+      options.allowedUsernames,
+      options.allowedDomains,
     ),
   };
 }
@@ -297,8 +278,6 @@ function hasEmailCandidate(
 
   if (!hasWordCandidate(normalized, TOKEN_VALUE.atWord)) return false;
   return (
-    scannerOptions.allowLocalhost ||
-    scannerOptions.allowSingleLabelDomain ||
     normalized.includes(TOKEN_VALUE.dotSymbol) ||
     hasWordCandidate(normalized, TOKEN_VALUE.dotWord)
   );
@@ -326,4 +305,25 @@ function hasWordCandidate(value: string, word: string): boolean {
 
 function isAsciiLetter(value: string): boolean {
   return value.length === 1 && value >= "a" && value <= "z";
+}
+
+function mergeCodePointRanges(
+  ranges: readonly TextCodePointRange[],
+): readonly TextCodePointRange[] {
+  const sorted = [...ranges].sort(
+    (left, right) => left[0] - right[0] || left[1] - right[1],
+  );
+  const merged: Array<[number, number]> = [];
+
+  for (const [start, end] of sorted) {
+    if (start < 0 || end <= start) continue;
+    const previous = merged[merged.length - 1];
+    if (!previous || start > previous[1]) {
+      merged.push([start, end]);
+    } else {
+      previous[1] = Math.max(previous[1], end);
+    }
+  }
+
+  return merged;
 }

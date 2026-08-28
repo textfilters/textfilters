@@ -2,7 +2,7 @@
   "name": "@textfilters/core",
   "version": "0.5.0",
   "type": "module",
-  "description": "Core TypeScript primitives for composable text filtering, censoring, normalization, range masking, and moderation pipelines.",
+  "description": "Small TypeScript contracts and composition helpers for text filters and actor-aware moderation.",
   "license": "MIT",
   "keywords": [
     "text-filtering",
@@ -13,7 +13,6 @@
     "censoring",
     "redaction",
     "pipeline",
-    "normalization",
     "text-processing",
     "range-masking"
   ],
@@ -38,7 +37,7 @@
     "format": "prettier README.md package.json src tests --write",
     "prepack": "npm run build",
     "pack:dry-run": "npm pack --dry-run",
-    "smoke:dist": "node --input-type=module --eval \"const core = await import('./dist/index.js'); core.createTextPipeline().censor('ok');\"",
+    "smoke:dist": "node --input-type=module --eval \"const core = await import('./dist/index.js'); core.combineFilters().process('ok'); core.createModerationPipeline().process({ actorKey: 'smoke', text: 'ok' });\"",
     "check": "npm run lint && npm test && npm run build && npm run smoke:dist && npm run pack:dry-run"
   },
   "engines": {

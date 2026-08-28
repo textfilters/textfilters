@@ -1,142 +1,93 @@
 # Textfilters
 
-Composable TypeScript text filtering and content moderation packages developed
-in one monorepo and released independently.
+Textfilters is a TypeScript monorepo for composable text filters and actor-aware
+message moderation. Packages are ESM-only, use UTF-16 source offsets, and can be
+installed independently.
+
+## Text Filtering
+
+Use `combineFilters()` when only source text needs to be inspected and masked.
+
+```ts
+import { combineFilters } from "@textfilters/core";
+import { filter as email } from "@textfilters/email";
+import { filter as phone } from "@textfilters/phone";
+import { createProfanityFilter } from "@textfilters/profanity";
+import english from "@textfilters/profanity-en";
+import russian from "@textfilters/profanity-ru";
+import { filter as url } from "@textfilters/url";
+
+const content = combineFilters(
+  url,
+  email,
+  phone,
+  createProfanityFilter(russian, english),
+);
+
+const result = content.process("Contact user@example.com");
+```
+
+Every child receives the same original text. Matches remain source-based and
+ordered, while overlapping ranges are merged for one masking pass.
+
+## Full Moderation
+
+Use `createModerationPipeline()` for messages with actor and time context.
+
+```ts
+import { createModerationPipeline } from "@textfilters/core";
+import { filter as email } from "@textfilters/email";
+import { filter as phone } from "@textfilters/phone";
+import { createProfanityFilter } from "@textfilters/profanity";
+import russian from "@textfilters/profanity-ru";
+import { createSpamGuard } from "@textfilters/spam";
+import { filter as url } from "@textfilters/url";
+
+const moderation = createModerationPipeline({
+  guards: [
+    createSpamGuard({
+      minIntervalMs: 700,
+      duplicateWindowMs: 12_000,
+      burstWindowMs: 10_000,
+      burstMaxMessages: 6,
+    }),
+  ],
+  filters: [url, email, phone, createProfanityFilter(russian)],
+});
+
+const result = moderation.process({
+  actorKey: "user:123",
+  text: "Contact user@example.com",
+});
+```
+
+`TextGuard` may block the whole message and can use actor and time context.
+Spam is a guard. `TextFilter` finds source text ranges and masks them without
+actor state. URL, email, phone, and profanity are filters.
 
 ## Packages
 
-| Package                     | Workspace                                        | Purpose                                                                          |
-| --------------------------- | ------------------------------------------------ | -------------------------------------------------------------------------------- |
-| `@textfilters/core`         | [`packages/core`](packages/core)                 | Shared contracts, normalization, range masking, and pipeline utilities.          |
-| `@textfilters/url`          | [`packages/url`](packages/url)                   | URL detection, obfuscated links, defanged domains, and safe link censoring.      |
-| `@textfilters/email`        | [`packages/email`](packages/email)               | Email detection, obfuscated forms, contact redaction, and false-positive guards. |
-| `@textfilters/phone`        | [`packages/phone`](packages/phone)               | Phone number detection, contact redaction, and numeric false-positive guards.    |
-| `@textfilters/profanity`    | [`packages/profanity`](packages/profanity)       | Dictionary-independent profanity matching, source ranges, and masking.           |
-| `@textfilters/profanity-ru` | [`packages/profanity-ru`](packages/profanity-ru) | Maintained Russian deny, allow, and alias data.                                  |
-| `@textfilters/profanity-en` | [`packages/profanity-en`](packages/profanity-en) | Maintained English deny, allow, and alias data.                                  |
-| `@textfilters/spam`         | [`packages/spam`](packages/spam)                 | Stateful interval, duplicate, burst, and actor-based anti-spam checks.           |
+| Package                     | Purpose                                     |
+| --------------------------- | ------------------------------------------- |
+| `@textfilters/core`         | Filter contracts, composition, and pipeline |
+| `@textfilters/url`          | URL and obfuscated-domain filtering         |
+| `@textfilters/email`        | Direct and obfuscated email filtering       |
+| `@textfilters/phone`        | Phone-like sequence filtering               |
+| `@textfilters/profanity`    | Dictionary-independent profanity runtime    |
+| `@textfilters/profanity-ru` | Maintained Russian dictionary               |
+| `@textfilters/profanity-en` | Maintained English dictionary               |
+| `@textfilters/spam`         | Bounded stateful spam guard                 |
 
-Runtime workspaces own their implementation, tests, package README, public API
-examples, and independently versioned changelog. Language data workspaces own
-their versioned dictionary sources, generated module, smoke test, and package
-README. The repository root owns shared development, CI, release automation,
-compatibility policy, and benchmarks.
+See [package layout](docs/package-layout.md), [ecosystem policy](docs/ecosystem-policy.md),
+and [release process](docs/release-process.md) for repository-level details.
 
-## Requirements
-
-- Node.js 24 or newer
-- npm 11
-- GitHub Packages authentication for installing published packages
-
-Configure the package scope:
-
-```ini
-@textfilters:registry=https://npm.pkg.github.com
-```
-
-Install only the packages needed by an application:
-
-```sh
-npm install @textfilters/core @textfilters/url
-npm install @textfilters/core @textfilters/email
-npm install @textfilters/core @textfilters/phone
-npm install @textfilters/profanity @textfilters/profanity-ru
-npm install @textfilters/profanity @textfilters/profanity-ru @textfilters/profanity-en
-npm install @textfilters/core @textfilters/spam
-```
-
-## Monorepo Development
-
-Install dependencies once from the repository root:
+## Development
 
 ```sh
 npm ci
 npm run check
+npm run benchmark
 ```
 
-The root workspace list is explicit and begins with `packages/core`. npm runs
-workspace scripts in that order, so shared contracts build before dependent
-packages.
-
-Run focused commands with npm workspace selection:
-
-```sh
-npm run test --workspace @textfilters/url
-npm run check --workspace @textfilters/profanity
-npm run build --workspace @textfilters/core
-```
-
-## Usage
-
-```ts
-import { combineFilters } from "@textfilters/core";
-import { createEmailFilter } from "@textfilters/email";
-import { createPhoneFilter } from "@textfilters/phone";
-import { createProfanityFilter } from "@textfilters/profanity";
-import russian from "@textfilters/profanity-ru";
-import { createUrlFilter } from "@textfilters/url";
-
-const filter = combineFilters(
-  createUrlFilter(),
-  createEmailFilter(),
-  createPhoneFilter(),
-  createProfanityFilter(russian),
-);
-
-const safeText = filter.censor(
-  "Contact user@example.com or visit https://example.com",
-);
-```
-
-```ts
-import { createSpamFilter } from "@textfilters/spam";
-
-const spam = createSpamFilter({
-  minIntervalMs: 700,
-  duplicateWindowMs: 12_000,
-  burstWindowMs: 10_000,
-  burstMaxMessages: 6,
-});
-
-const decision = spam.check({
-  actorKey: "user:123",
-  text: "hello",
-});
-```
-
-See each [package workspace](#packages) for its complete public API and
-behavioral contract.
-
-## Independent Releases
-
-Release Please runs in manifest mode with the `node-workspace` plugin. Package
-versions remain independent and are not kept in lockstep.
-
-Normal Conventional Commit changes on `main` update one aggregated release pull
-request. They do not publish immediately. When maintainers explicitly merge
-that release pull request, Release Please creates only the affected releases
-and tags:
-
-```text
-core-v0.4.1
-url-v0.3.1
-email-v0.3.2
-```
-
-The publish job accepts only released paths from the eight-package allowlist and
-publishes selected workspaces sequentially, beginning with
-`@textfilters/core`.
-
-See [the release process](docs/release-process.md), [ecosystem policy](docs/ecosystem-policy.md),
-and [package layout](docs/package-layout.md).
-
-## Support and Security
-
-Use repository issue forms for package bugs and feature requests. Select the
-affected package in the form.
-
-For security reports, follow [the security policy](.github/SECURITY.md).
-
-## License
-
-MIT
+`npm run check` validates all workspaces, built public surfaces, dry packs, and
+a clean consumer installation of all package tarballs.

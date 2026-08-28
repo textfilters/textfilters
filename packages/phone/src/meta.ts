@@ -1,5 +1,6 @@
-import { stripZeroWidth } from "@textfilters/core";
 import { ASCII_DIGIT_RE, toRawChar } from "./digits.js";
+
+const ZERO_WIDTH_RE = /^[\u200B-\u200D\u2060\uFEFF]$/u;
 
 export interface TextMeta {
   readonly codePoints: readonly string[];
@@ -42,7 +43,7 @@ export const createMeta = (source: string): TextMeta => {
     const ch = codePoints[i];
     const rawChar = toRawChar(ch);
     const isZeroWidth =
-      ch !== "" && (stripZeroWidth(ch) === "" || DEFAULT_IGNORABLE_RE.test(ch));
+      ch !== "" && (ZERO_WIDTH_RE.test(ch) || DEFAULT_IGNORABLE_RE.test(ch));
     const isDigit = ASCII_DIGIT_RE.test(rawChar);
     const isWordChar = WORD_OR_DIGIT_RE.test(rawChar);
 

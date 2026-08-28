@@ -1,8 +1,5 @@
-import { mergeCodePointRanges } from "@textfilters/core";
-
 import { isAllowedDomain } from "./allowed-domains.js";
 import { COMBINING_MARK_RE } from "./chars.js";
-import type { AmbiguousSpacedDotPolicy } from "./contracts.js";
 import {
   isIgnorableFormatting,
   isWhitespaceWrappedListSeparator,
@@ -25,6 +22,8 @@ import { parseSchemePrefix } from "./scheme.js";
 import type { TldLookups } from "./tlds.js";
 
 export type UrlRangeSink = (range: CodePointRange) => boolean | void;
+
+type AmbiguousSpacedDotPolicy = "preserve" | "block";
 
 export interface UrlMatchPolicy extends TldLookups {
   readonly allowedDomains: ReadonlySet<string>;
@@ -335,6 +334,27 @@ export const collectRanges = (
   });
   return mergeCodePointRanges(ranges);
 };
+
+function mergeCodePointRanges(
+  ranges: readonly CodePointRange[],
+): readonly CodePointRange[] {
+  const sorted = [...ranges].sort(
+    (left, right) => left[0] - right[0] || left[1] - right[1],
+  );
+  const merged: Array<[number, number]> = [];
+
+  for (const [start, end] of sorted) {
+    if (start < 0 || end <= start) continue;
+    const previous = merged[merged.length - 1];
+    if (!previous || start > previous[1]) {
+      merged.push([start, end]);
+    } else {
+      previous[1] = Math.max(previous[1], end);
+    }
+  }
+
+  return merged;
+}
 
 export const collectRangeMatches = (
   meta: TextMeta,

@@ -1,4 +1,4 @@
-import { type TextCodePointRange } from "@textfilters/core";
+import type { CodePointRange as TextCodePointRange } from "../../types.js";
 
 import { type EmailTextMeta } from "../../normalization.js";
 import { isBareAtProsePhrase } from "../context/bare-at-policy.js";

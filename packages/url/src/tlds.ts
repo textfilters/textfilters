@@ -1,4 +1,4 @@
-import { lowerNfkc } from "@textfilters/core";
+import { lowerNfkc } from "./normalize.js";
 
 // Version 2026081000, Last Updated Mon Aug 10 07:07:01 2026 UTC
 // Source: https://data.iana.org/TLD/tlds-alpha-by-domain.txt
@@ -119,8 +119,7 @@ export const DEFAULT_TLDS: readonly string[] = Object.freeze(
   DEFAULT_TLD_SOURCE.split(/\s+/u),
 );
 
-export const normalizeTld = (value: unknown): string =>
-  lowerNfkc(String(value ?? "").trim());
+export const normalizeTld = (value: string): string => lowerNfkc(value.trim());
 
 export const normalizeTlds = (
   rawList: readonly string[] | undefined,

@@ -14,7 +14,6 @@ import {
   getLeadingTimeEnd,
   getLeadingVersionPhoneSuffixStart,
   getMinuteAfterTimeEnd,
-  getNonContactNumericMetadataEnd,
   getSecondAfterTimeEnd,
   getSignedLongitudeEnd,
   getStructuredFalsePositive,
@@ -33,7 +32,7 @@ import {
 } from "./false-positives.js";
 import { COMBINING_MARK_RE, type TextMeta, WHITESPACE_RE } from "./meta.js";
 import { isValidPhoneGroups, MAX_PHONE_DIGITS } from "./phone-groups.js";
-import { type CodePointRange } from "./ranges.js";
+import { type CodePointRange } from "./contracts.js";
 
 interface PhoneCandidate {
   readonly start: number;
@@ -223,20 +222,6 @@ const parsePhoneCandidate = (
     COMBINING_MARK_RE.test(meta.raw[candidateEnd])
   ) {
     candidateEnd++;
-  }
-  const nonContactNumericMetadataEnd = getNonContactNumericMetadataEnd(
-    meta,
-    candidateStart,
-    {
-      end: candidateEnd,
-      groupEnds,
-      groups,
-      groupStarts,
-      separators: groupSeparators,
-    },
-  );
-  if (nonContactNumericMetadataEnd !== null) {
-    return { rejectedUntil: nonContactNumericMetadataEnd };
   }
   const hasClosingParenthesisBefore = (limit: number): boolean =>
     parenthesisPositions.some(

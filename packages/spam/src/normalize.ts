@@ -1,17 +1,15 @@
-import { lowerNfkc, stripZeroWidth } from "@textfilters/core";
+const ZERO_WIDTH_RE = /[\u200B-\u200D\u2060\uFEFF]/gu;
 
 export const MAX_MESSAGE_NORMALIZED_LENGTH = 512;
-export const UNKNOWN_ACTOR_KEY = "__unknown_actor__";
 
-// Spam comparisons are intentionally short and formatting-insensitive: repeated
-// whitespace and zero-width obfuscation should not create distinct messages.
-export const normalizeForSpam = (text: unknown): string =>
-  lowerNfkc(stripZeroWidth(text))
+const normalize = (text: string): string =>
+  text.replace(ZERO_WIDTH_RE, "").normalize("NFKC").toLowerCase();
+
+export const normalizeForSpam = (text: string): string =>
+  normalize(text)
     .replace(/\s+/gu, " ")
     .slice(0, MAX_MESSAGE_NORMALIZED_LENGTH)
     .trim();
 
-// Missing actor keys still need a stable bucket so stateless callers get
-// deterministic behavior instead of bypassing rate and duplicate checks.
-export const normalizeActorKey = (value: unknown): string =>
-  lowerNfkc(stripZeroWidth(value)).trim() || UNKNOWN_ACTOR_KEY;
+export const normalizeActorKey = (actorKey: string): string =>
+  normalize(actorKey).trim();

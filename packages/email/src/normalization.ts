@@ -1,6 +1,7 @@
-import { lowerNfkc } from "@textfilters/core";
-
 const ZERO_WIDTH_RE = /^[\u200B-\u200D\u2060\uFEFF]$/u;
+
+const lowerNfkc = (text: string): string =>
+  text.normalize("NFKC").toLowerCase();
 
 export interface EmailTextMeta {
   readonly codePoints: readonly string[];

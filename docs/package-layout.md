@@ -22,11 +22,11 @@ release manifest.
 Each runtime package exposes its root public contract through `src/index.ts`.
 That file contains or re-exports:
 
-- package factories such as `createUrlFilter()` or `createSpamFilter()`
-- shared default instances only for stateless or intentionally shared behavior
+- focused factories such as `createUrlFilter()` or `createSpamGuard()`
+- shared default instances only for stateless filters without per-instance state
 - the common `TextFilter` methods for text-matching packages
-- public options, results, matches, and filter instance types
-- stable public constants
+- minimal public options and package instance types
+- stable public constants only when callers compare their values
 
 Parsers, low-level range collectors, dictionary compilers, and normalization
 details stay internal.
@@ -57,9 +57,9 @@ the additional boundary clarifies ownership or removes real duplication.
 
 ## Package Families
 
-URL, email, and phone are stateless text filters. Their root exports expose
-shared instances, isolated factory functions, the common `TextFilter` methods,
-options, and public types.
+URL, email, and phone are stateless text filters. URL and email expose shared
+instances plus isolated factories. Phone has no options and exposes only its
+shared filter. Parser and range contracts stay internal.
 
 Profanity is a dictionary-independent runtime with structural inputs and one
 compiled matcher implementation. The Russian and English language workspaces
@@ -71,9 +71,9 @@ normalization, and public contracts stay separate. Guard instances are not
 shared across unrelated moderation scopes unless the caller intentionally
 wants shared state.
 
-Core owns shared contracts and helpers. Other workspaces depend on core instead
-of copying pipeline contracts, guard result shapes, normalization primitives,
-range merging, or masking helpers.
+Core owns shared contracts, filter combination, moderation orchestration, and
+UTF-16 masking. Detector normalization and internal range conversion stay in
+the detector workspace that needs them.
 
 ## Metadata Contract
 

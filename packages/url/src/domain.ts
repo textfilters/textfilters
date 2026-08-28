@@ -1,4 +1,4 @@
-import { lowerNfkc } from "@textfilters/core";
+import { lowerNfkc } from "./normalize.js";
 
 import { COMBINING_MARK_RE, PATH_START_CHARS } from "./chars.js";
 import {

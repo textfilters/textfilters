@@ -1,21 +1,14 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  createUrlFilter,
-  filter,
-  URL_FILTER_NAME,
-  urlFilter,
-} from "../src/index.js";
+import { createUrlFilter, filter } from "../src/index.js";
 import { mask } from "./helpers.js";
 
 // These tests double as compatibility fixtures for parser boundary decisions:
 // small URL-obfuscation tweaks can otherwise create broad false positives.
 describe("compatibility behavior", () => {
-  it("exposes old-compatible public API", () => {
-    expect(filter.name).toBe(URL_FILTER_NAME);
-    expect(urlFilter()).toEqual(
-      expect.objectContaining({ name: URL_FILTER_NAME }),
-    );
+  it("exposes the final public filter API", () => {
+    expect(filter.name).toBe("url");
+    expect(createUrlFilter().name).toBe("url");
   });
 
   it("exposes the shared text filter methods with UTF-16 ranges", () => {
@@ -27,7 +20,7 @@ describe("compatibility behavior", () => {
       start: 3,
       end: 14,
       value: "example.com",
-      filter: URL_FILTER_NAME,
+      filter: "url",
     });
     expect(filter.process(text)).toEqual({
       censored: `😀 ${mask("example.com")}`,
@@ -348,24 +341,6 @@ describe("compatibility behavior", () => {
     }
   });
 
-  it("blocks ambiguous spaced-dot domains in strict mode", () => {
-    const strict = createUrlFilter({ ambiguousSpacedDots: "block" });
-
-    expect(strict.censor("evil. Com")).toBe(mask("evil. Com"));
-    expect(strict.censor("evil. COM")).toBe(mask("evil. COM"));
-    expect(strict.censor("evil. Com!")).toBe(`${mask("evil. Com")}!`);
-    expect(strict.censor("visit evil. com")).toBe(`visit ${mask("evil. com")}`);
-    expect(strict.censor("please open phishing. net!")).toBe(
-      `please open ${mask("phishing. net")}!`,
-    );
-    expect(strict.censor("Visit evil. com now")).toBe(
-      `Visit ${mask("evil. com")} now`,
-    );
-    expect(strict.censor("Please visit Evil. com now")).toBe(
-      `Please visit ${mask("Evil. com")} now`,
-    );
-  });
-
   it("keeps zero-width marks inside host labels", () => {
     expect(filter.censor("go exa\u200bmple.com now")).toBe(
       `go ${mask("exa\u200bmple.com")} now`,
@@ -415,13 +390,11 @@ describe("compatibility behavior", () => {
     expect(output).toBe(`go ${"*".repeat("http://😀.com/".length)} now`);
     expect(output.length).toBe(input.length);
 
-    const customBmp = createUrlFilter({ maskChar: "#" }).censor(input);
+    const customBmp = createUrlFilter().censor(input, "#");
     expect(customBmp).toBe(`go ${"#".repeat("http://😀.com/".length)} now`);
     expect(customBmp.length).toBe(input.length);
 
-    const custom = createUrlFilter({ maskChar: "😀" }).censor(
-      "go example.com now",
-    );
+    const custom = createUrlFilter().censor("go example.com now", "😀");
     expect(custom).toBe(`go ${mask("example.com")} now`);
     expect(custom.length).toBe("go example.com now".length);
   });
@@ -435,9 +408,9 @@ describe("compatibility behavior", () => {
     expect(filter.censor(dotted)).toBe(dotted);
   });
 
-  it("supports custom tld list and custom mask char", () => {
-    const f = createUrlFilter({ tlds: ["internal"], maskChar: "#" });
-    expect(f.censor("svc.internal")).toBe(mask("svc.internal", "#"));
+  it("supports a custom tld list and method-level mask", () => {
+    const f = createUrlFilter({ tlds: ["internal"] });
+    expect(f.censor("svc.internal", "#")).toBe(mask("svc.internal", "#"));
     expect(f.censor("example.com")).toBe("example.com");
     expect(f.censor("freeaccount.biz")).toBe("freeaccount.biz");
   });

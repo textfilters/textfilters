@@ -1,69 +1,17 @@
 export type {
-  AllocationAwareRangeScanner,
-  CachedTextProcessor,
-  CachedTextProcessorOptions,
-  LegacyTextRangeScanner,
-  PreparedText,
-  RangeMatch,
-  RangeMatchSink,
-  ScanHints,
-  ScanInput,
-  ScanResult,
-  TextCensor,
+  GuardDecision,
+  ModerationAllowedResult,
+  ModerationBlockedResult,
+  ModerationInput,
+  ModerationPipeline,
+  ModerationPipelineOptions,
+  ModerationResult,
   TextFilter,
   TextFilterResult,
-  TextCodePointRange,
   TextGuard,
-  TextGuardAllowedResult,
-  TextGuardBlockedResult,
-  TextGuardInput,
-  TextGuardReason,
-  TextGuardResult,
-  TextPipeline,
-  TextPipelineProcessedResult,
-  TextPipelineProcessResult,
-  TextRange,
-  TextHints,
   TextMatch,
-  TextRangePipeline,
-  TextRangePipelineCensorResult,
-  TextRangePipelineScanResult,
-  TextRangeScanner,
-  TextRangeScannerFunction,
-  TextRangeScannerOutput,
-  TextRangeScanMetadata,
-  TextRangeScanResult,
-  TextScanInput,
+  TextRange,
 } from "./contracts.js";
-export { createCachedTextProcessor } from "./cache.js";
-export {
-  lowerNfkc,
-  normalizeLengthPreservingMaskChar,
-  normalizeMaskChar,
-  normalizeTextInput,
-  normalizeVisibleMaskChar,
-  stripZeroWidth,
-  toCodePoints,
-} from "./input.js";
-export {
-  censorCodePointRanges,
-  maskCodePointRanges,
-  maskCodePointRangesPreservingLength,
-  maskRange,
-  maskRanges,
-  maskUtf16Ranges,
-} from "./masking.js";
-export { createTextPipeline } from "./pipeline.js";
-export { mergeCodePointRanges, mergeRanges } from "./ranges.js";
-export {
-  checkTextRanges,
-  createPreparedText,
-  createTextHints,
-  createTextRangePipeline,
-  createTextRangeScanResult,
-  createTextScanInput,
-  runTextRangeScanner,
-  scanPreparedTextRanges,
-  scanTextRanges,
-} from "./scanner.js";
-export { combineFilters, createTextFilterFromScanner } from "./text-filter.js";
+export { combineFilters } from "./combine.js";
+export { maskTextRanges } from "./mask.js";
+export { createModerationPipeline } from "./moderation.js";

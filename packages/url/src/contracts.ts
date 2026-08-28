@@ -1,23 +1,15 @@
-import type { TextCodePointRange, TextFilter } from "@textfilters/core";
+import type { TextFilter } from "@textfilters/core";
 
-// Keep public API types in a dependency-light module so the entrypoint can
-// re-export them without exposing parser internals.
-export type AmbiguousSpacedDotPolicy = "preserve" | "block";
-
-export interface UrlFilterConfig {
+export interface UrlFilterOptions {
   readonly tlds?: readonly string[];
-  readonly maskChar?: string;
   readonly allowedDomains?: readonly string[];
-  readonly ambiguousSpacedDots?: AmbiguousSpacedDotPolicy;
 }
-
-export type UrlScannerConfig = Omit<UrlFilterConfig, "maskChar">;
-
-export const URL_FILTER_NAME = "url";
 
 export interface UrlFilter extends TextFilter {
-  readonly name: typeof URL_FILTER_NAME;
+  readonly name: "url";
 }
+
+export type CodePointRange = readonly [start: number, end: number];
 
 export interface UrlScanHints {
   readonly hasNonAscii?: boolean;
@@ -28,24 +20,19 @@ export interface UrlScanHints {
 
 export interface UrlScanInput {
   readonly text: string;
-  /** The reusable `Array.from(text)` code-point view prepared by the caller. */
   readonly codePoints: readonly string[];
   readonly hints?: UrlScanHints;
 }
 
+export type UrlRangeMatchSink = (match: {
+  readonly range: CodePointRange;
+}) => boolean | void;
+
 export type UrlRangeScanResult = {
-  readonly ranges: readonly TextCodePointRange[];
+  readonly ranges: readonly CodePointRange[];
 };
-
-export type UrlRangeMatch = {
-  readonly range: TextCodePointRange;
-};
-
-export type UrlRangeMatchSink = (match: UrlRangeMatch) => boolean | void;
 
 export interface UrlRangeScanner {
-  readonly name: typeof URL_FILTER_NAME;
-  readonly allocationAware: true;
   check(input: UrlScanInput): boolean;
   scan(input: UrlScanInput): UrlRangeScanResult;
   scan(input: UrlScanInput, sink: UrlRangeMatchSink): boolean | void;

@@ -42,7 +42,7 @@ const previousObfuscatedAddressLocalIndex = (
     cursor -= 2;
   }
 
-  if (!isValidDomain(labels, options)) return undefined;
+  if (!isValidDomain(labels)) return undefined;
   if (tokens[cursor]?.type !== TOKEN_TYPE.at) return undefined;
 
   const localIndex = cursor - 1;

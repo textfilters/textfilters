@@ -1,10 +1,4 @@
 import {
-  lowerNfkc,
-  stripZeroWidth,
-  type TextCodePointRange,
-} from "@textfilters/core";
-
-import {
   DOT_CHAR_SET,
   isAsciiLetterOrDigitCode,
   isAsciiWhitespaceCode,
@@ -12,6 +6,8 @@ import {
   LOOKALIKE_TO_ASCII,
   WHITESPACE_RE,
 } from "./chars.js";
+import type { CodePointRange } from "./contracts.js";
+import { lowerNfkc, stripZeroWidth } from "./normalize.js";
 
 export interface TextMeta {
   readonly codePoints: readonly string[];
@@ -40,7 +36,7 @@ export interface DomainMatch extends Match {
   readonly labels: readonly Label[];
 }
 
-export type CodePointRange = TextCodePointRange;
+export type { CodePointRange } from "./contracts.js";
 
 export const MAX_HOST_LABEL_CODE_POINTS = 63;
 export const MAX_HOSTNAME_CODE_POINTS = 253;
@@ -59,7 +55,7 @@ export const toSkeletonFromNormalized = (value: string): string =>
     .map((ch) => LOOKALIKE_TO_ASCII.get(ch) ?? ch)
     .join("");
 
-export const toSkeleton = (value: unknown): string =>
+export const toSkeleton = (value: string): string =>
   toSkeletonFromNormalized(lowerNfkc(value));
 
 export const toRawChars = (value: string): string[] =>

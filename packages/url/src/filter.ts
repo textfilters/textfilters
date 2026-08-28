@@ -4,20 +4,18 @@ import {
   type TextRange,
 } from "@textfilters/core";
 
-import { createEmailScanner } from "./scanner.js";
 import {
   type CodePointRange,
-  type EmailFilter,
-  type EmailFilterOptions,
-} from "./types.js";
+  type UrlFilter,
+  type UrlFilterOptions,
+} from "./contracts.js";
+import { createUrlScanner } from "./scanner.js";
 
-export function createEmailFilter(
-  options: EmailFilterOptions = {},
-): EmailFilter {
-  const scanner = createEmailScanner(options);
+export function createUrlFilter(options: UrlFilterOptions = {}): UrlFilter {
+  const scanner = createUrlScanner(options);
 
-  const filter: EmailFilter = {
-    name: "email",
+  const filter: UrlFilter = {
+    name: "url",
 
     check(text) {
       const source = requireText(text);
@@ -56,14 +54,14 @@ export function createEmailFilter(
       start,
       end,
       value: source.slice(start, end),
-      filter: "email",
+      filter: "url",
     }));
   }
 
   return Object.freeze(filter);
 }
 
-export const filter = createEmailFilter();
+export const filter = createUrlFilter();
 
 function utf16Offsets(codePoints: readonly string[]): readonly number[] {
   const offsets = [0];

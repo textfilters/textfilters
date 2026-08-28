@@ -1,23 +1,19 @@
-import type { TextCodePointRange, TextFilter } from "@textfilters/core";
-
-export const EMAIL_FILTER_NAME = "email";
+import type { TextFilter } from "@textfilters/core";
 
 export interface EmailFilterOptions {
-  readonly maskChar?: string;
   readonly matchObfuscated?: boolean;
-  readonly allowLocalhost?: boolean;
-  readonly allowSingleLabelDomain?: boolean;
-  readonly excludeEmails?: readonly string[];
-  readonly excludeUsernames?: readonly string[];
-  readonly excludeDomains?: readonly string[];
+  readonly allowedEmails?: readonly string[];
+  readonly allowedUsernames?: readonly string[];
+  readonly allowedDomains?: readonly string[];
 }
 
 export interface EmailFilter extends TextFilter {
-  readonly name: typeof EMAIL_FILTER_NAME;
+  readonly name: "email";
 }
 
+export type CodePointRange = readonly [start: number, end: number];
+
 export interface EmailScanHints {
-  readonly textLength?: number;
   readonly hasNonAscii?: boolean;
   readonly hasAtSign?: boolean;
   readonly hasDot?: boolean;
@@ -29,19 +25,15 @@ export interface EmailScanInput {
   readonly hints?: EmailScanHints;
 }
 
+export type EmailRangeMatchSink = (match: {
+  readonly range: CodePointRange;
+}) => boolean | void;
+
 export type EmailRangeScanResult = {
-  readonly ranges: readonly TextCodePointRange[];
+  readonly ranges: readonly CodePointRange[];
 };
-
-export type EmailRangeMatch = {
-  readonly range: TextCodePointRange;
-};
-
-export type EmailRangeMatchSink = (match: EmailRangeMatch) => boolean | void;
 
 export interface EmailRangeScanner {
-  readonly name: typeof EMAIL_FILTER_NAME;
-  readonly allocationAware: true;
   check(input: EmailScanInput): boolean;
   scan(input: EmailScanInput): EmailRangeScanResult;
   scan(input: EmailScanInput, sink: EmailRangeMatchSink): boolean | void;

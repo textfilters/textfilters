@@ -1,4 +1,4 @@
-import { maskUtf16Ranges, type TextRange } from "@textfilters/core";
+import { maskTextRanges, type TextRange } from "@textfilters/core";
 
 import { compileDictionaries } from "./compile.js";
 import {
@@ -41,7 +41,7 @@ export function createProfanityFilter(
     censor(text, mask) {
       const source = requireText(text);
       if (source === "") return source;
-      return maskUtf16Ranges(source, toRanges(scan(source)), mask);
+      return maskTextRanges(source, toRanges(scan(source)), mask);
     },
 
     process(text, mask) {
@@ -49,7 +49,7 @@ export function createProfanityFilter(
       const internal = source === "" ? [] : scan(source);
       const matches = toPublicMatches(source, internal);
       return {
-        censored: maskUtf16Ranges(source, toRanges(internal), mask),
+        censored: maskTextRanges(source, toRanges(internal), mask),
         matches,
       };
     },

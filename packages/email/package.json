@@ -2,7 +2,7 @@
   "name": "@textfilters/email",
   "version": "0.4.0",
   "type": "module",
-  "description": "TypeScript email address and obfuscated email detector for content moderation, with exclusions and false-positive guards.",
+  "description": "TypeScript email address and obfuscated email detector with allowlists and false-positive guards.",
   "license": "MIT",
   "keywords": [
     "text-filtering",
@@ -21,7 +21,6 @@
   "sideEffects": false,
   "files": [
     "dist",
-    "docs",
     "README.md",
     "LICENSE"
   ],
@@ -40,7 +39,7 @@
     "format": "prettier README.md docs package.json src tests scripts --write",
     "prepack": "npm run build",
     "pack:dry-run": "npm pack --dry-run",
-    "smoke:dist": "node --input-type=module --eval \"const email = await import('./dist/index.js'); email.createEmailFilter().censor('user@example.com');\"",
+    "smoke:dist": "node --input-type=module --eval \"const email = await import('./dist/index.js'); if (!email.filter.check('user@example.com')) throw new Error('Smoke check failed'); email.createEmailFilter({ allowedDomains: ['example.com'] }).censor('user@example.com', '#');\"",
     "check": "npm run lint && npm test && npm run build && npm run smoke:dist && npm run pack:dry-run",
     "benchmark:email": "npm run build && node scripts/benchmark-email.mjs"
   },

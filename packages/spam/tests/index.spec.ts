@@ -1,311 +1,250 @@
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
 
+import { createModerationPipeline, type TextGuard } from "@textfilters/core";
 import {
-  createSpamFilter,
+  createSpamGuard,
   SPAM_BLOCK_REASONS,
-  SPAM_FILTER_NAME,
-  spamFilter,
-  type ActorState,
-  type SpamCheckInput,
-  type SpamCheckResult,
-  type SpamFilterConfig,
-  type SpamFilterDecision,
-  type SpamFilterInput,
-  type SpamStateStore,
+  type SpamBlockReason,
+  type SpamDecision,
+  type SpamGuard,
+  type SpamGuardOptions,
 } from "../src/index.js";
-import { expectDecisions } from "./helpers.js";
 
-describe("spam filter decisions", () => {
-  it("exposes old-compatible guard API and alias factory", () => {
-    const filter = spamFilter({ minIntervalMs: 0 });
-    const input: SpamCheckInput = {
-      actorKey: "u1",
-      text: "hello",
-      nowMs: 1,
+const input = (actorKey: string, text: string, nowMs: number) => ({
+  actorKey,
+  text,
+  nowMs,
+});
+
+describe("@textfilters/spam", () => {
+  it("exports the final guard contract", () => {
+    const guard: SpamGuard = createSpamGuard();
+    const options: SpamGuardOptions = { minIntervalMs: 0 };
+    const reason: SpamBlockReason = SPAM_BLOCK_REASONS.duplicate;
+    const decision: SpamDecision = { allowed: false, reason };
+
+    expectTypeOf(guard).toMatchTypeOf<TextGuard>();
+    expect(options).toEqual({ minIntervalMs: 0 });
+    expect(decision).toEqual({ allowed: false, reason: "duplicate" });
+    expect(SPAM_BLOCK_REASONS).toEqual({
+      empty: "empty",
+      tooFast: "too_fast",
+      duplicate: "duplicate",
+      burst: "burst",
+    });
+    expect(guard.name).toBe("spam");
+    expect(Object.isFrozen(guard)).toBe(true);
+  });
+
+  it("rejects empty normalized text without creating actor state", () => {
+    const guard = createSpamGuard({ minIntervalMs: 1_000 });
+
+    expect(guard.check(input("u1", " \u200B \t", 1_000))).toEqual({
+      allowed: false,
+      reason: SPAM_BLOCK_REASONS.empty,
+    });
+    expect(guard.check(input("u1", "hello", 1_001))).toEqual({
+      allowed: true,
+    });
+  });
+
+  it("enforces the minimum interval at an exact boundary", () => {
+    const guard = createSpamGuard({ minIntervalMs: 700 });
+
+    expect(guard.check(input("u1", "one", 0))).toEqual({ allowed: true });
+    expect(guard.check(input("u1", "two", 699))).toEqual({
+      allowed: false,
+      reason: SPAM_BLOCK_REASONS.tooFast,
+    });
+    expect(guard.check(input("u1", "two", 700))).toEqual({ allowed: true });
+  });
+
+  it("detects normalized duplicates until the window expires", () => {
+    const guard = createSpamGuard({
+      minIntervalMs: 0,
+      duplicateWindowMs: 1_000,
+    });
+
+    expect(guard.check(input("u1", "Ｈello\u200B   WORLD", 0))).toEqual({
+      allowed: true,
+    });
+    expect(guard.check(input("u1", " hello world ", 999))).toEqual({
+      allowed: false,
+      reason: SPAM_BLOCK_REASONS.duplicate,
+    });
+    expect(guard.check(input("u1", "hello world", 1_000))).toEqual({
+      allowed: true,
+    });
+  });
+
+  it("blocks bursts without counting rejected attempts", () => {
+    const guard = createSpamGuard({
+      minIntervalMs: 0,
+      duplicateWindowMs: 10_000,
+      burstWindowMs: 1_000,
+      burstMaxMessages: 2,
+    });
+
+    expect(guard.check(input("u1", "one", 0))).toEqual({ allowed: true });
+    expect(guard.check(input("u1", "one", 100))).toEqual({
+      allowed: false,
+      reason: SPAM_BLOCK_REASONS.duplicate,
+    });
+    expect(guard.check(input("u1", "two", 200))).toEqual({ allowed: true });
+    expect(guard.check(input("u1", "three", 300))).toEqual({
+      allowed: false,
+      reason: SPAM_BLOCK_REASONS.burst,
+    });
+    expect(guard.check(input("u1", "three", 1_000))).toEqual({
+      allowed: true,
+    });
+  });
+
+  it("keeps actors and guard instances isolated", () => {
+    const options = { minIntervalMs: 0, duplicateWindowMs: 10_000 };
+    const first = createSpamGuard(options);
+    const second = createSpamGuard(options);
+
+    expect(first.check(input(" User ", "same", 0))).toEqual({ allowed: true });
+    expect(first.check(input("user", "same", 1))).toEqual({
+      allowed: false,
+      reason: SPAM_BLOCK_REASONS.duplicate,
+    });
+    expect(first.check(input("other", "same", 1))).toEqual({ allowed: true });
+    expect(second.check(input("user", "same", 1))).toEqual({ allowed: true });
+  });
+
+  it("does not commit interval-rejected text", () => {
+    const guard = createSpamGuard({
+      minIntervalMs: 100,
+      duplicateWindowMs: 1_000,
+    });
+
+    expect(guard.check(input("u1", "one", 0))).toEqual({ allowed: true });
+    expect(guard.check(input("u1", "two", 50))).toEqual({
+      allowed: false,
+      reason: SPAM_BLOCK_REASONS.tooFast,
+    });
+    expect(guard.check(input("u1", "two", 100))).toEqual({ allowed: true });
+  });
+
+  it("uses Date.now only when nowMs is absent", () => {
+    const now = vi.spyOn(Date, "now");
+    const guard = createSpamGuard({ minIntervalMs: 100 });
+
+    try {
+      now.mockReturnValueOnce(1_000).mockReturnValueOnce(1_050);
+      expect(guard.check({ actorKey: "u1", text: "one" })).toEqual({
+        allowed: true,
+      });
+      expect(guard.check({ actorKey: "u1", text: "two" })).toEqual({
+        allowed: false,
+        reason: SPAM_BLOCK_REASONS.tooFast,
+      });
+      expect(now).toHaveBeenCalledTimes(2);
+    } finally {
+      now.mockRestore();
+    }
+  });
+
+  it("rejects invalid moderation input and explicit clocks", () => {
+    const guard = createSpamGuard();
+    const unsafe = guard as unknown as {
+      check(value: unknown): SpamDecision;
     };
 
-    expectTypeOf<SpamCheckInput>().toEqualTypeOf<SpamFilterInput>();
-    expectTypeOf<SpamCheckResult>().toEqualTypeOf<SpamFilterDecision>();
-    expectTypeOf<ActorState>().toMatchTypeOf<{
-      timestamps: number[];
-      lastMessageAt: number;
-      lastNormalizedText: string;
-      lastTextAt: number;
-      recentNormalizedTexts: Map<string, number>;
-    }>();
-    expectTypeOf<SpamFilterConfig>().toMatchTypeOf<{
-      actorKeyPolicy: "shared_unknown" | "reject_missing";
-      clockPolicy: "input_or_system" | "system";
-      trackRejectedAttempts: boolean;
-      stateStore?: SpamStateStore;
-    }>();
-    expect(filter.name).toBe(SPAM_FILTER_NAME);
-    const result: SpamCheckResult = filter.check(input);
-    expect(result).toEqual({ allowed: true });
+    expect(() => unsafe.check(null)).toThrow("input must be an object");
+    expect(() => unsafe.check({ text: "hello" })).toThrow(
+      "actorKey must be a non-empty string",
+    );
+    expect(() => unsafe.check({ actorKey: " ", text: "hello" })).toThrow(
+      "actorKey must be a non-empty string",
+    );
+    expect(() => unsafe.check({ actorKey: "u1", text: null })).toThrow(
+      "text must be a string",
+    );
+    expect(() =>
+      unsafe.check({ actorKey: "u1", text: "hello", nowMs: Number.NaN }),
+    ).toThrow("nowMs must be a finite number");
   });
 
-  it("allows first message and blocks empty/whitespace", () => {
-    expect(
-      expectDecisions(undefined, [
-        { actorKey: "u1", text: "hello", nowMs: 1_000 },
-        { actorKey: "u1", text: "   ", nowMs: 2_000 },
-      ]),
-    ).toEqual([
-      { allowed: true },
-      { allowed: false, reason: SPAM_BLOCK_REASONS.empty },
-    ]);
+  it("resets all private actor state", () => {
+    const guard = createSpamGuard({ minIntervalMs: 0 });
+
+    expect(guard.check(input("u1", "same", 0))).toEqual({ allowed: true });
+    expect(guard.check(input("u1", "same", 1))).toEqual({
+      allowed: false,
+      reason: SPAM_BLOCK_REASONS.duplicate,
+    });
+    guard.reset();
+    expect(guard.check(input("u1", "same", 1))).toEqual({ allowed: true });
   });
 
-  it("blocks too fast consecutive messages", () => {
-    expect(
-      expectDecisions({ minIntervalMs: 700 }, [
-        { actorKey: "u1", text: "one", nowMs: 1_000 },
-        { actorKey: "u1", text: "two", nowMs: 1_600 },
-        { actorKey: "u1", text: "two", nowMs: 1_701 },
-      ]),
-    ).toEqual([
-      { allowed: true },
-      { allowed: false, reason: SPAM_BLOCK_REASONS.tooFast },
-      { allowed: true },
-    ]);
-  });
-
-  it("allows zero to disable interval checks", () => {
-    expect(
-      expectDecisions({ minIntervalMs: 0 }, [
-        { actorKey: "u1", text: "one", nowMs: 1_000 },
-        { actorKey: "u1", text: "two", nowMs: 1_001 },
-      ]),
-    ).toEqual([{ allowed: true }, { allowed: true }]);
-  });
-
-  it("keeps interval checks disabled when explicit clocks move backward", () => {
-    expect(
-      expectDecisions({ minIntervalMs: 0 }, [
-        { actorKey: "u1", text: "one", nowMs: 1_000 },
-        { actorKey: "u1", text: "two", nowMs: 999 },
-      ]),
-    ).toEqual([{ allowed: true }, { allowed: true }]);
-  });
-
-  it("enforces interval and duplicate checks after messages at time zero", () => {
-    expect(
-      expectDecisions({ minIntervalMs: 700 }, [
-        { actorKey: "u1", text: "one", nowMs: 0 },
-        { actorKey: "u1", text: "two", nowMs: 100 },
-      ]),
-    ).toEqual([
-      { allowed: true },
-      { allowed: false, reason: SPAM_BLOCK_REASONS.tooFast },
-    ]);
-
-    expect(
-      expectDecisions({ minIntervalMs: 0, duplicateWindowMs: 700 }, [
-        { actorKey: "u1", text: "same", nowMs: 0 },
-        { actorKey: "u1", text: "same", nowMs: 100 },
-      ]),
-    ).toEqual([
-      { allowed: true },
-      { allowed: false, reason: SPAM_BLOCK_REASONS.duplicate },
-    ]);
-  });
-
-  it("does not update actor state on rejected interval checks", () => {
-    expect(
-      expectDecisions({ minIntervalMs: 700 }, [
-        { actorKey: "u1", text: "one", nowMs: 1_000 },
-        { actorKey: "u1", text: "two", nowMs: 1_600 },
-        { actorKey: "u1", text: "three", nowMs: 1_701 },
-      ]),
-    ).toEqual([
-      { allowed: true },
-      { allowed: false, reason: SPAM_BLOCK_REASONS.tooFast },
-      { allowed: true },
-    ]);
-  });
-
-  it("keeps current non-monotonic and negative nowMs behavior", () => {
-    expect(
-      expectDecisions({ minIntervalMs: 700 }, [
-        { actorKey: "u1", text: "first", nowMs: 1_000 },
-        { actorKey: "u1", text: "back", nowMs: 500 },
-        { actorKey: "u1", text: "next", nowMs: 1_701 },
-      ]),
-    ).toEqual([
-      { allowed: true },
-      { allowed: false, reason: SPAM_BLOCK_REASONS.tooFast },
-      { allowed: true },
-    ]);
-
-    expect(
-      expectDecisions({ minIntervalMs: 700 }, [
-        { actorKey: "u1", text: "negative", nowMs: -100 },
-        { actorKey: "u1", text: "zero", nowMs: 0 },
-      ]),
-    ).toEqual([{ allowed: true }, { allowed: true }]);
-  });
-
-  it("falls back to Date.now for non-finite nowMs", () => {
-    const nowSpy = vi.spyOn(Date, "now").mockReturnValue(1_600);
-    const filter = createSpamFilter({ minIntervalMs: 700 });
-
-    try {
-      expect(
-        filter.check({ actorKey: "u1", text: "one", nowMs: 1_000 }),
-      ).toEqual({
-        allowed: true,
-      });
-      expect(
-        filter.check({ actorKey: "u1", text: "two", nowMs: Number.NaN }),
-      ).toEqual({
-        allowed: false,
-        reason: SPAM_BLOCK_REASONS.tooFast,
-      });
-    } finally {
-      nowSpy.mockRestore();
-    }
-  });
-
-  it("falls back to Date.now when nowMs is missing", () => {
-    const nowSpy = vi.spyOn(Date, "now");
-    const filter = createSpamFilter({ minIntervalMs: 700 });
-
-    try {
-      nowSpy.mockReturnValueOnce(1_000).mockReturnValueOnce(1_600);
-
-      expect(filter.check({ actorKey: "u1", text: "one" })).toEqual({
-        allowed: true,
-      });
-      expect(filter.check({ actorKey: "u1", text: "two" })).toEqual({
-        allowed: false,
-        reason: SPAM_BLOCK_REASONS.tooFast,
-      });
-    } finally {
-      nowSpy.mockRestore();
-    }
-  });
-
-  it("can ignore caller-provided clocks for server-side time policy", () => {
-    const nowSpy = vi.spyOn(Date, "now");
-    const filter = createSpamFilter({
-      clockPolicy: "system",
-      minIntervalMs: 700,
+  it("prunes the oldest actors after maxActors is exceeded", () => {
+    const guard = createSpamGuard({
+      minIntervalMs: 0,
+      duplicateWindowMs: 10_000,
+      burstWindowMs: 10_000,
+      burstMaxMessages: 10,
+      maxActors: 2,
     });
 
-    try {
-      nowSpy.mockReturnValueOnce(1_000).mockReturnValueOnce(1_600);
-
-      expect(
-        filter.check({ actorKey: "u1", text: "one", nowMs: 10_000 }),
-      ).toEqual({ allowed: true });
-      expect(
-        filter.check({ actorKey: "u1", text: "two", nowMs: 20_000 }),
-      ).toEqual({
-        allowed: false,
-        reason: SPAM_BLOCK_REASONS.tooFast,
-      });
-    } finally {
-      nowSpy.mockRestore();
-    }
+    expect(guard.check(input("a", "same", 0))).toEqual({ allowed: true });
+    expect(guard.check(input("b", "same", 1))).toEqual({ allowed: true });
+    expect(guard.check(input("c", "same", 2))).toEqual({ allowed: true });
+    expect(guard.check(input("a", "same", 3))).toEqual({ allowed: true });
   });
 
-  it("uses system time with missing nowMs under system clock policy", () => {
-    const nowSpy = vi.spyOn(Date, "now");
-    const filter = createSpamFilter({
-      clockPolicy: "system",
-      minIntervalMs: 700,
+  it("bounds remembered duplicate texts per actor", () => {
+    const guard = createSpamGuard({
+      minIntervalMs: 0,
+      duplicateWindowMs: 1_000_000,
+      burstWindowMs: 1,
+      burstMaxMessages: 1,
     });
 
-    try {
-      nowSpy.mockReturnValueOnce(1_000).mockReturnValueOnce(1_701);
-
-      expect(filter.check({ actorKey: "u1", text: "one" })).toEqual({
+    for (let index = 0; index < 257; index += 1) {
+      expect(guard.check(input("u1", `message-${index}`, index * 2))).toEqual({
         allowed: true,
       });
-      expect(filter.check({ actorKey: "u1", text: "two" })).toEqual({
-        allowed: true,
-      });
-    } finally {
-      nowSpy.mockRestore();
     }
+    expect(guard.check(input("u1", "message-0", 1_000))).toEqual({
+      allowed: true,
+    });
   });
 
-  it("blocks duplicate messages in duplicate window after text normalization", () => {
-    expect(
-      expectDecisions({ minIntervalMs: 0, duplicateWindowMs: 10_000 }, [
-        { actorKey: "u1", text: "Hello   world", nowMs: 1_000 },
-        { actorKey: "u1", text: " hello world ", nowMs: 2_000 },
-        { actorKey: "u1", text: "hello world", nowMs: 11_500 },
-      ]),
-    ).toEqual([
-      { allowed: true },
-      { allowed: false, reason: SPAM_BLOCK_REASONS.duplicate },
-      { allowed: true },
-    ]);
-  });
+  it("short-circuits moderation before filters and returns guard identity", () => {
+    let processed = 0;
+    const guard = createSpamGuard({ minIntervalMs: 0 });
+    const pipeline = createModerationPipeline({
+      guards: [guard],
+      filters: [
+        {
+          name: "marker",
+          check: () => true,
+          find: () => {
+            processed += 1;
+            return [{ start: 0, end: 4, value: "same", filter: "marker" }];
+          },
+          censor: () => "****",
+          process: () => ({
+            censored: "****",
+            matches: [{ start: 0, end: 4, value: "same", filter: "marker" }],
+          }),
+        },
+      ],
+    });
 
-  it("blocks repeated messages after intervening accepted text", () => {
-    expect(
-      expectDecisions({ minIntervalMs: 0, duplicateWindowMs: 10_000 }, [
-        { actorKey: "u1", text: "spam", nowMs: 1_000 },
-        { actorKey: "u1", text: "other", nowMs: 2_000 },
-        { actorKey: "u1", text: "spam", nowMs: 3_000 },
-        { actorKey: "u1", text: "spam", nowMs: 12_000 },
-      ]),
-    ).toEqual([
-      { allowed: true },
-      { allowed: true },
-      { allowed: false, reason: SPAM_BLOCK_REASONS.duplicate },
-      { allowed: true },
-    ]);
-  });
-
-  it("normalizes text by stripping zero-width chars, NFKC, trimming, and lowercasing", () => {
-    expect(
-      expectDecisions({ minIntervalMs: 0, duplicateWindowMs: 10_000 }, [
-        { actorKey: "u1", text: " Ｈe\u200Bllo ", nowMs: 1_000 },
-        { actorKey: "u1", text: "hello", nowMs: 2_000 },
-      ]),
-    ).toEqual([
-      { allowed: true },
-      { allowed: false, reason: SPAM_BLOCK_REASONS.duplicate },
-    ]);
-  });
-
-  it("blocks burst flooding by actor", () => {
-    expect(
-      expectDecisions(
-        { minIntervalMs: 0, burstWindowMs: 5_000, burstMaxMessages: 3 },
-        [
-          { actorKey: "u1", text: "1", nowMs: 1_000 },
-          { actorKey: "u1", text: "2", nowMs: 2_000 },
-          { actorKey: "u1", text: "3", nowMs: 3_000 },
-          { actorKey: "u1", text: "4", nowMs: 4_000 },
-          { actorKey: "u1", text: "5", nowMs: 7_001 },
-        ],
-      ),
-    ).toEqual([
-      { allowed: true },
-      { allowed: true },
-      { allowed: true },
-      { allowed: false, reason: SPAM_BLOCK_REASONS.burst },
-      { allowed: true },
-    ]);
-  });
-
-  it("tracks actors independently", () => {
-    expect(
-      expectDecisions({ minIntervalMs: 700 }, [
-        { actorKey: "u1", text: "one", nowMs: 1_000 },
-        { actorKey: "u2", text: "one", nowMs: 1_100 },
-        { actorKey: "u1", text: "two", nowMs: 1_200 },
-        { actorKey: "u2", text: "two", nowMs: 1_900 },
-      ]),
-    ).toEqual([
-      { allowed: true },
-      { allowed: true },
-      { allowed: false, reason: SPAM_BLOCK_REASONS.tooFast },
-      { allowed: true },
-    ]);
+    expect(pipeline.process(input("u1", "same", 0))).toEqual({
+      allowed: true,
+      text: "****",
+      matches: [{ start: 0, end: 4, value: "same", filter: "marker" }],
+    });
+    expect(pipeline.process(input("u1", "same", 1))).toEqual({
+      allowed: false,
+      guard: "spam",
+      reason: SPAM_BLOCK_REASONS.duplicate,
+    });
+    expect(processed).toBe(1);
   });
 });

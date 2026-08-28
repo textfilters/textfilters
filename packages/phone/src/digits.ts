@@ -1,5 +1,3 @@
-import { lowerNfkc } from "@textfilters/core";
-
 export const ASCII_DIGIT_RE = /^[0-9]$/u;
 const DECIMAL_ZERO_CODE_POINTS = [
   0x30, 0x660, 0x6f0, 0x7c0, 0x966, 0x9e6, 0xa66, 0xae6, 0xb66, 0xbe6, 0xc66,
@@ -24,7 +22,7 @@ export const toAsciiDigit = (ch: string): string | null => {
 };
 
 export const toRawChar = (ch: string): string => {
-  const normalizedChars = Array.from(lowerNfkc(ch));
+  const normalizedChars = Array.from(ch.normalize("NFKC").toLowerCase());
   // Multi-code-point NFKC expansions are symbols, not phone digits or letters.
   const normalized = normalizedChars.length === 1 ? normalizedChars[0] : ch;
   return toAsciiDigit(normalized) ?? normalized;
