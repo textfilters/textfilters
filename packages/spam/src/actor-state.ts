@@ -83,8 +83,18 @@ export function pruneActorStates(
     if (actors.size <= maxActors) return;
   }
 
-  const oldest = [...actors]
-    .sort((left, right) => left[1].lastMessageAt - right[1].lastMessageAt)
-    .slice(0, actors.size - maxActors);
-  for (const [key] of oldest) actors.delete(key);
+  // Normal insertion adds at most one actor. Strict comparison preserves the
+  // stable-sort tie break without assuming timestamps follow insertion order.
+  while (actors.size > maxActors) {
+    let oldestKey: string | undefined;
+    let oldestAt = Number.POSITIVE_INFINITY;
+    for (const [key, actor] of actors) {
+      if (oldestKey === undefined || actor.lastMessageAt < oldestAt) {
+        oldestKey = key;
+        oldestAt = actor.lastMessageAt;
+      }
+    }
+    if (oldestKey === undefined) return;
+    actors.delete(oldestKey);
+  }
 }

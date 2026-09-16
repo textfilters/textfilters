@@ -18,12 +18,17 @@ ModerationInput
 ```
 
 The first failed check returns one of `empty`, `too_fast`, `duplicate`, or
-`burst`. Evaluation happens on a cloned actor record, so a rejected attempt does
-not change interval, duplicate, or burst windows.
+`burst`. The interval check reads the existing record before copying any
+collections. Later decisions use a cloned record, so duplicate/burst pruning on
+a rejected attempt does not change recorded windows, even if a later call uses
+an earlier clock. New actors start directly with an empty record.
 
 Each actor retains a bounded timestamp list and a bounded map of recent
 normalized texts. The actor map is capped by `maxActors`; expired and then
-oldest records are pruned when the cap is exceeded. `reset()` clears the map.
+oldest records are pruned when the cap is exceeded. A selection pass removes
+the oldest timestamp without sorting or copying the actor map; equal timestamps
+retain insertion-order tie handling. Finite caller clocks may repeat or decrease;
+eviction never assumes insertion order is chronological. `reset()` clears the map.
 
 When `nowMs` is omitted, the guard reads `Date.now()`. Explicit clocks are
 useful for deterministic callers and tests, but non-finite values are rejected.

@@ -58,15 +58,16 @@ export function createSpamGuard(options: SpamGuardOptions = {}): SpamGuard {
         return { allowed: false, reason: SPAM_BLOCK_REASONS.empty };
       }
 
-      const actor = cloneActorState(actors.get(actorKey) ?? createActorState());
+      const previous = actors.get(actorKey);
       if (
         config.minIntervalMs > 0 &&
-        actor.lastMessageAt !== Number.NEGATIVE_INFINITY &&
-        nowMs - actor.lastMessageAt < config.minIntervalMs
+        previous !== undefined &&
+        nowMs - previous.lastMessageAt < config.minIntervalMs
       ) {
         return { allowed: false, reason: SPAM_BLOCK_REASONS.tooFast };
       }
 
+      const actor = previous ? cloneActorState(previous) : createActorState();
       pruneDuplicateTexts(actor, nowMs, config.duplicateWindowMs);
       const previousTextAt = actor.recentNormalizedTexts.get(normalized);
       if (

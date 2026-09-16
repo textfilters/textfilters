@@ -5,11 +5,12 @@ import {
   type TextFilter,
   type TextMatch,
 } from "@textfilters/core";
-import { filter as email } from "@textfilters/email";
+import { filter as email, createEmailFilter } from "@textfilters/email";
 import { filter as phone } from "@textfilters/phone";
 import { createProfanityFilter } from "@textfilters/profanity";
 import english from "@textfilters/profanity-en";
-import { filter as url } from "@textfilters/url";
+import russian from "@textfilters/profanity-ru";
+import { filter as url, createUrlFilter } from "@textfilters/url";
 
 const profanity = createProfanityFilter(english);
 const combined = combineFilters(url, email, phone, profanity);
@@ -214,3 +215,128 @@ function compareMatches(left: TextMatch, right: TextMatch): number {
     left.filter.localeCompare(right.filter)
   );
 }
+
+// Synthetic public-API fixtures, captured before the spam-only optimization.
+const regressionCases = [
+  {
+    name: "URL/email overlaps",
+    filter: combineFilters(url, email),
+    text: "😀 mail user@example.com; https://example.com",
+    expected: {
+      censored: "😀 mail ################; ###################",
+      matches: [
+        { start: 8, end: 24, value: "user@example.com", filter: "email" },
+        { start: 13, end: 24, value: "example.com", filter: "url" },
+        { start: 26, end: 45, value: "https://example.com", filter: "url" },
+      ],
+    },
+  },
+  {
+    name: "email allowlist remains local",
+    filter: combineFilters(
+      url,
+      createEmailFilter({ allowedEmails: ["user@example.com"] }),
+    ),
+    text: "😀 user@example.com",
+    expected: {
+      censored: "😀 user@###########",
+      matches: [{ start: 8, end: 19, value: "example.com", filter: "url" }],
+    },
+  },
+  {
+    name: "URL allowlist remains local",
+    filter: combineFilters(
+      createUrlFilter({ allowedDomains: ["example.com"] }),
+      email,
+    ),
+    text: "😀 user@example.com",
+    expected: {
+      censored: "😀 ################",
+      matches: [
+        { start: 3, end: 19, value: "user@example.com", filter: "email" },
+      ],
+    },
+  },
+  {
+    name: "phone beside date and identifier",
+    filter: phone,
+    text: "date 2026-03-22; ID abc1234567890xyz; call +1 202 555 0187",
+    expected: {
+      censored: "date 2026-03-22; ID abc1234567890xyz; call ###############",
+      matches: [
+        { start: 43, end: 58, value: "+1 202 555 0187", filter: "phone" },
+      ],
+    },
+  },
+  {
+    name: "neutral date and identifier",
+    filter: phone,
+    text: "date 2026-03-22; ID abc1234567890xyz",
+    expected: { censored: "date 2026-03-22; ID abc1234567890xyz", matches: [] },
+  },
+  {
+    name: "Unicode phone digits",
+    filter: phone,
+    text: "😀 call １２３４５６７８９０",
+    expected: {
+      censored: "😀 call ##########",
+      matches: [
+        { start: 8, end: 18, value: "１２３４５６７８９０", filter: "phone" },
+      ],
+    },
+  },
+  {
+    name: "astral URL label",
+    filter: url,
+    text: "😀 𐐷.com",
+    expected: {
+      censored: "😀 ######",
+      matches: [{ start: 3, end: 9, value: "𐐷.com", filter: "url" }],
+    },
+  },
+  {
+    name: "mixed language obfuscation",
+    filter: createProfanityFilter(russian, english),
+    text: "😀 х-у-й and f-υ-c-k; shitake",
+    expected: {
+      censored: "😀 ##### and #######; shitake",
+      matches: [
+        {
+          start: 3,
+          end: 8,
+          value: "х-у-й",
+          filter: "profanity",
+          data: { dictionary: "ru", term: "хуй" },
+        },
+        {
+          start: 13,
+          end: 20,
+          value: "f-υ-c-k",
+          filter: "profanity",
+          data: { dictionary: "en", term: "fuck" },
+        },
+      ],
+    },
+  },
+  {
+    name: "exact allows and nearby neutral text",
+    filter: createProfanityFilter(russian, english),
+    text: "Gandon family; cocktail; shitake",
+    expected: { censored: "Gandon family; cocktail; shitake", matches: [] },
+  },
+];
+
+describe.each(regressionCases)(
+  "synthetic regression: $name",
+  ({ filter, text, expected }) => {
+    it("keeps exact matches, metadata, source offsets and one-pass masking", () => {
+      expect(filter.find(text)).toEqual(expected.matches);
+      expect(filter.check(text)).toBe(expected.matches.length > 0);
+      expect(filter.censor(text, "#")).toBe(expected.censored);
+      expect(filter.process(text, "#")).toEqual(expected);
+      expect(expected.censored.length).toBe(text.length);
+      for (const match of expected.matches)
+        expect(text.slice(match.start, match.end)).toBe(match.value);
+    });
+  },
+);

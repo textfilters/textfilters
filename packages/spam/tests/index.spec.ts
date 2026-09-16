@@ -10,6 +10,8 @@ import {
   type SpamGuardOptions,
 } from "../src/index.js";
 
+import * as actorState from "../src/actor-state.js";
+
 const input = (actorKey: string, text: string, nowMs: number) => ({
   actorKey,
   text,
@@ -211,6 +213,108 @@ describe("@textfilters/spam", () => {
     expect(guard.check(input("u1", "message-0", 1_000))).toEqual({
       allowed: true,
     });
+  });
+
+  it("preserves priority and validation for repeated and decreasing clocks", () => {
+    const guard = createSpamGuard({ minIntervalMs: 10 });
+    expect(guard.check(input("actor", "same", 100))).toEqual({ allowed: true });
+    expect(guard.check(input("actor", " ", 90))).toEqual({
+      allowed: false,
+      reason: "empty",
+    });
+    for (const now of [100, 99, -100]) {
+      expect(guard.check(input("actor", "same", now))).toEqual({
+        allowed: false,
+        reason: "too_fast",
+      });
+    }
+    expect(() => guard.check(input("actor", "same", Infinity))).toThrow(
+      "nowMs must be a finite number",
+    );
+    expect(guard.check(input("actor", "same", 110))).toEqual({
+      allowed: false,
+      reason: "duplicate",
+    });
+    expect(guard.check(input("actor", "different", 110))).toEqual({
+      allowed: true,
+    });
+  });
+
+  it("does not commit pruning from a burst-rejected attempt", () => {
+    const guard = createSpamGuard({
+      minIntervalMs: 0,
+      duplicateWindowMs: 10,
+      burstWindowMs: 100,
+      burstMaxMessages: 1,
+    });
+    expect(guard.check(input("a", "first", 100))).toEqual({ allowed: true });
+    expect(guard.check(input("a", "second", 110))).toEqual({
+      allowed: false,
+      reason: "burst",
+    });
+    expect(guard.check(input("a", "first", 105))).toEqual({
+      allowed: false,
+      reason: "duplicate",
+    });
+    expect(guard.check(input("a", "second", 200))).toEqual({ allowed: true });
+    guard.reset();
+    expect(guard.check(input("a", "second", 0))).toEqual({ allowed: true });
+  });
+
+  it("evicts the first inserted actor on equal timestamps", () => {
+    const guard = createSpamGuard({ minIntervalMs: 0, maxActors: 2 });
+    for (const actor of ["a", "b", "c"])
+      expect(guard.check(input(actor, "same", 100))).toEqual({ allowed: true });
+    for (const actor of ["b", "c"])
+      expect(guard.check(input(actor, "same", 100))).toEqual({
+        allowed: false,
+        reason: "duplicate",
+      });
+    expect(guard.check(input("a", "same", 100))).toEqual({ allowed: true });
+  });
+
+  it("evicts by timestamp rather than insertion order with decreasing clocks", () => {
+    const guard = createSpamGuard({ minIntervalMs: 0, maxActors: 2 });
+    for (const [actor, now] of [
+      ["a", 100],
+      ["b", 50],
+      ["c", 75],
+    ] as const)
+      expect(guard.check(input(actor, "same", now))).toEqual({ allowed: true });
+    expect(guard.check(input("a", "same", 100))).toEqual({
+      allowed: false,
+      reason: "duplicate",
+    });
+    expect(guard.check(input("c", "same", 75))).toEqual({
+      allowed: false,
+      reason: "duplicate",
+    });
+    expect(guard.check(input("b", "same", 50))).toEqual({ allowed: true });
+  });
+
+  it("does not copy recorded history for interval-rejected attempts", () => {
+    const guard = createSpamGuard({
+      minIntervalMs: 1,
+      duplicateWindowMs: 1_000_000,
+      burstWindowMs: 1,
+      burstMaxMessages: 1,
+    });
+    for (let index = 0; index < 256; index++)
+      guard.check(input("a", `accepted ${index}`, index * 2));
+    const clone = vi.spyOn(actorState, "cloneActorState");
+    try {
+      for (let index = 0; index < 1_000; index++)
+        expect(guard.check(input("a", "rejected", 510))).toEqual({
+          allowed: false,
+          reason: "too_fast",
+        });
+      expect(clone).not.toHaveBeenCalled();
+      expect(guard.check(input("a", "rejected", 511))).toEqual({
+        allowed: true,
+      });
+    } finally {
+      clone.mockRestore();
+    }
   });
 
   it("short-circuits moderation before filters and returns guard identity", () => {
