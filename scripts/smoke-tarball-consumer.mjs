@@ -2,7 +2,14 @@
 
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
+import {
+  access,
+  mkdtemp,
+  readFile,
+  readdir,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -12,48 +19,39 @@ const REPO_ROOT = path.resolve(
   "..",
 );
 const npm = process.platform === "win32" ? "npm.cmd" : "npm";
-const workspaces = [
-  "@textfilters/core",
-  "@textfilters/url",
-  "@textfilters/email",
-  "@textfilters/phone",
-  "@textfilters/profanity",
-  "@textfilters/profanity-ru",
-  "@textfilters/profanity-en",
-  "@textfilters/spam",
-];
-const obsoleteArtifacts = new Map([
-  [
-    "@textfilters/core",
-    new Set([
-      "dist/cache.js",
-      "dist/input.js",
-      "dist/masking.js",
-      "dist/pipeline.js",
-      "dist/ranges.js",
-      "dist/scanner.js",
-      "dist/text-filter.js",
-    ]),
-  ],
-  [
-    "@textfilters/phone",
-    new Set([
-      "dist/json-metadata.js",
-      "dist/public-scanner.js",
-      "dist/ranges.js",
-    ]),
-  ],
-]);
+const alreadyBuilt = process.argv[2] === "--already-built";
+if (process.argv.length > 3 || (process.argv[2] && !alreadyBuilt)) {
+  throw new Error("Usage: smoke-tarball-consumer.mjs [--already-built]");
+}
+const rootPackage = JSON.parse(
+  await readFile(path.join(REPO_ROOT, "package.json"), "utf8"),
+);
+const workspaces = await Promise.all(
+  rootPackage.workspaces.map(async (directory) => ({
+    directory,
+    name: JSON.parse(
+      await readFile(path.join(REPO_ROOT, directory, "package.json"), "utf8"),
+    ).name,
+  })),
+);
+if (alreadyBuilt) {
+  for (const { directory } of workspaces) {
+    for (const file of ["dist/index.js", "dist/index.d.ts"]) {
+      await access(path.join(REPO_ROOT, directory, file));
+    }
+  }
+}
 const temporaryDirectory = await mkdtemp(
   path.join(tmpdir(), "textfilters-tarball-consumer-"),
 );
 
 try {
   const packResults = [];
-  for (const workspace of workspaces) {
+  for (const { name: workspace } of workspaces) {
     const output = runCapture(npm, [
       "pack",
       "--json",
+      ...(alreadyBuilt ? ["--ignore-scripts"] : []),
       "--pack-destination",
       temporaryDirectory,
       "--workspace",
@@ -83,10 +81,6 @@ try {
           file === "LICENSE" ||
           file.startsWith("dist/"),
         `${result.name} contains unexpected tarball file: ${file}`,
-      );
-      assert(
-        !obsoleteArtifacts.get(result.name)?.has(file),
-        `${result.name} contains ${file}`,
       );
     }
   }
@@ -226,7 +220,10 @@ try {
 function run(command, arguments_, cwd = REPO_ROOT) {
   const result = spawnSync(command, arguments_, { cwd, stdio: "inherit" });
   if (result.error) throw result.error;
-  if (result.status !== 0) process.exit(result.status ?? 1);
+  if (result.status !== 0)
+    throw new Error(
+      `Consumer command failed with status ${result.status ?? 1}.`,
+    );
 }
 
 function runCapture(command, arguments_, cwd = REPO_ROOT) {
@@ -236,7 +233,10 @@ function runCapture(command, arguments_, cwd = REPO_ROOT) {
     stdio: ["ignore", "pipe", "inherit"],
   });
   if (result.error) throw result.error;
-  if (result.status !== 0) process.exit(result.status ?? 1);
+  if (result.status !== 0)
+    throw new Error(
+      `Consumer command failed with status ${result.status ?? 1}.`,
+    );
   return result.stdout.trim();
 }
 

@@ -74,7 +74,8 @@ Before merging a release pull request:
 
 - inspect every proposed package version and release note
 - run `npm ci` and `npm run check`
-- compare package dry-pack contents with the previous release
+- compare the validated real tarball contents with the previous release
+  (`npm run pack:dry-run` remains available for standalone inspection)
 - confirm only intended metadata, version, documentation, and dependency-range
   changes
 

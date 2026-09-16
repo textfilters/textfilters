@@ -10,9 +10,12 @@ const repoRoot = path.resolve(
   "..",
 );
 const script = process.argv[2];
+const alreadyBuilt = process.argv[3] === "--already-built";
 
-if (!script) {
-  console.error("Usage: node scripts/run-workspace-script.mjs <script>");
+if (!script || process.argv.length > 4 || (process.argv[3] && !alreadyBuilt)) {
+  console.error(
+    "Usage: node scripts/run-workspace-script.mjs <script> [--already-built]",
+  );
   process.exit(2);
 }
 
@@ -28,12 +31,28 @@ if (!Array.isArray(packageJson.workspaces)) {
 const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
 
 for (const workspace of packageJson.workspaces) {
+  const workspacePackage = JSON.parse(
+    await readFile(path.join(repoRoot, workspace, "package.json"), "utf8"),
+  );
+  const selectedScript =
+    alreadyBuilt && workspacePackage.scripts?.[`${script}:built`]
+      ? `${script}:built`
+      : script;
   const result = spawnSync(
-    npmCommand,
-    ["run", script, "--workspace", workspace],
+    process.env.npm_execpath ? process.execPath : npmCommand,
+    process.env.npm_execpath
+      ? [
+          process.env.npm_execpath,
+          "run",
+          selectedScript,
+          "--workspace",
+          workspace,
+        ]
+      : ["run", selectedScript, "--workspace", workspace],
     {
       cwd: repoRoot,
       stdio: "inherit",
+      shell: !process.env.npm_execpath && process.platform === "win32",
     },
   );
 

@@ -27,7 +27,11 @@ try {
   );
   await writeFile(path.join(packageDirectory, "data/aliases.txt"), "α=A\n");
 
+  const staleFile = path.join(packageDirectory, "dist/stale-build.js");
+  await mkdir(path.dirname(staleFile), { recursive: true });
+  await writeFile(staleFile, 'throw new Error("stale");\n');
   expectSuccess(runBuilder(packageDirectory));
+  await assert.rejects(readFile(staleFile), { code: "ENOENT" });
   const generated = await readFile(
     path.join(packageDirectory, "dist/index.js"),
     "utf8",

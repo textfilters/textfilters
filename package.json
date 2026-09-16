@@ -19,7 +19,7 @@
     "benchmark": "node scripts/benchmark.mjs",
     "build:profanity-dictionaries": "node scripts/build-profanity-dictionary.mjs",
     "build": "node scripts/run-workspace-script.mjs build",
-    "check": "npm run check:metadata && npm run check:release-paths && npm run test:profanity-builder && npm run check:workspaces && npm run test:dist && npm run test:profanity-integration && npm run smoke:tarballs",
+    "check": "npm run check:metadata && npm run check:release-paths && npm run lint && npm run test:profanity-builder && npm run build && node scripts/run-workspace-script.mjs test --already-built && node scripts/run-workspace-script.mjs smoke:dist --already-built && npm run test:dist && npm run test:profanity-integration -- --already-built && npm run smoke:tarballs -- --already-built",
     "check:metadata": "node scripts/check-monorepo-metadata.mjs",
     "check:release-paths": "node scripts/publish-released-workspaces.mjs --self-test",
     "check:workspaces": "node scripts/run-workspace-script.mjs check",
