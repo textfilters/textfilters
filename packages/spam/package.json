@@ -1,6 +1,6 @@
 {
   "name": "@textfilters/spam",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "type": "module",
   "description": "Lightweight TypeScript anti-spam guard for chat moderation: interval, duplicate, burst, and actor-based message checks.",
   "license": "MIT",
