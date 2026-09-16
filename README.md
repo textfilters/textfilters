@@ -24,11 +24,24 @@ const content = combineFilters(
   createProfanityFilter(russian, english),
 );
 
+email.find("😀 user@example.com");
+// [{ start: 3, end: 19, value: "user@example.com", filter: "email" }]
+
 const result = content.process("Contact user@example.com");
+// {
+//   censored: "Contact ****************",
+//   matches: [
+//     { start: 8, end: 24, value: "user@example.com", filter: "email" },
+//     { start: 13, end: 24, value: "example.com", filter: "url" },
+//   ],
+// }
 ```
 
 Every child receives the same original text. Matches remain source-based and
-ordered, while overlapping ranges are merged for one masking pass.
+ordered, while overlapping ranges are merged for one masking pass. Offsets are
+UTF-16 `[start, end)` positions in the original string, so the emoji above takes
+two code units. The email and nested URL matches remain separate in the result;
+masking preserves the original string length.
 
 ## Full Moderation
 
@@ -58,12 +71,46 @@ const moderation = createModerationPipeline({
 const result = moderation.process({
   actorKey: "user:123",
   text: "Contact user@example.com",
+  nowMs: 1_000,
 });
+// {
+//   allowed: true,
+//   text: "Contact ****************",
+//   matches: [
+//     { start: 8, end: 24, value: "user@example.com", filter: "email" },
+//     { start: 13, end: 24, value: "example.com", filter: "url" },
+//   ],
+// }
+
+moderation.process({
+  actorKey: "user:123",
+  text: "A different message",
+  nowMs: 1_001,
+});
+// { allowed: false, guard: "spam", reason: "too_fast" }
 ```
 
 `TextGuard` may block the whole message and can use actor and time context.
 Spam is a guard. `TextFilter` finds source text ranges and masks them without
 actor state. URL, email, phone, and profanity are filters.
+
+## Lifetime and Policy
+
+Reuse immutable filters so options and dictionary indexes are prepared once.
+Reuse each spam guard within its intended moderation scope so it remembers
+accepted messages; create separate guards for independent scopes and use
+`reset()` when that history should be cleared. Rejected messages do not extend
+windows or consume accepted-message quota.
+
+Allowlists are local to a filter. Allowing `user@example.com` in email does not
+allow `example.com` in URL; combined masking may still redact the domain. Specify
+each exception in the detector that owns it. Profanity exact allows remain
+local to their dictionary and covered source range.
+
+Detectors recognize supported text forms, not every possible obfuscation. URL
+and email do not verify reachable hosts or mailboxes; phone does not verify
+assigned numbers. Parse structured payloads first and filter only the relevant
+user text. Package READMEs document detector-specific options and limitations.
 
 ## Packages
 

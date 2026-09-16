@@ -46,7 +46,12 @@ moderation pipeline construction, an allowed path, and an early blocked path.
 
 The `spam` suite covers guard construction, allowed checks, interval,
 duplicate, and burst blocks, bounded per-actor growth, and actor-map pruning.
-Every scenario uses an explicit deterministic clock.
+Every scenario uses an explicit deterministic clock. Guard construction and
+accepted-history setup run outside steady-state timing. Block scenarios assert
+their intended decision before measuring repeated checks. Capacity churn starts
+with 3,000 retained actors; interval rejection also covers a full 256-text
+history. When comparing older revisions, run this same harness against both
+built package sets; old setup-inclusive block timings are not comparable.
 
 The `combined` suite runs URL, email, phone, and Russian/English profanity
 filters against the same original text. It measures all four `TextFilter`

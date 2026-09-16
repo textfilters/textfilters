@@ -5,6 +5,7 @@
  * Compare medians from identical runs on the same machine and Node.js version.
  */
 
+import assert from "node:assert/strict";
 import { performance } from "node:perf_hooks";
 import { combineFilters, createModerationPipeline } from "@textfilters/core";
 import { createEmailFilter } from "@textfilters/email";
@@ -286,9 +287,85 @@ runSuite("profanity", "profanity", () => {
 runSuite("spam", "spam", () => {
   let clock = 1_000_000;
   let messageId = 0;
-  const nextTime = (gap = 2_000) => (clock += gap);
   const allowedGuard = createSpamGuard({ minIntervalMs: 0 });
+  const intervalGuard = createSpamGuard({ minIntervalMs: 5_000 });
+  const duplicateGuard = createSpamGuard({
+    minIntervalMs: 0,
+    duplicateWindowMs: 60_000,
+  });
+  const burstGuard = createSpamGuard({
+    minIntervalMs: 0,
+    burstMaxMessages: 3,
+    burstWindowMs: 10_000,
+  });
+  for (const guard of [intervalGuard, duplicateGuard, burstGuard]) {
+    assert.deepEqual(guard.check({ actorKey: "u1", text: "first", nowMs: 0 }), {
+      allowed: true,
+    });
+  }
+  for (const [text, nowMs] of [
+    ["second", 100],
+    ["third", 200],
+  ]) {
+    assert.deepEqual(burstGuard.check({ actorKey: "u1", text, nowMs }), {
+      allowed: true,
+    });
+  }
+  const intervalInput = { actorKey: "u1", text: "next", nowMs: 100 };
+  const duplicateInput = { actorKey: "u1", text: "first", nowMs: 1_000 };
+  const burstInput = { actorKey: "u1", text: "next", nowMs: 300 };
+  assert.deepEqual(intervalGuard.check(intervalInput), {
+    allowed: false,
+    reason: "too_fast",
+  });
+  assert.deepEqual(duplicateGuard.check(duplicateInput), {
+    allowed: false,
+    reason: "duplicate",
+  });
+  assert.deepEqual(burstGuard.check(burstInput), {
+    allowed: false,
+    reason: "burst",
+  });
 
+  const historyGuard = createSpamGuard({
+    minIntervalMs: 1,
+    duplicateWindowMs: 1_000_000,
+    burstWindowMs: 1,
+    burstMaxMessages: 1,
+  });
+  for (let index = 0; index < 256; index++) {
+    assert.deepEqual(
+      historyGuard.check({
+        actorKey: "u1",
+        text: `history ${index}`,
+        nowMs: index * 2,
+      }),
+      { allowed: true },
+    );
+  }
+  let historyClock = 510;
+  const fullHistoryInput = { actorKey: "u1", text: "rejected", nowMs: 510 };
+  assert.deepEqual(historyGuard.check(fullHistoryInput), {
+    allowed: false,
+    reason: "too_fast",
+  });
+
+  const churnGuard = createSpamGuard({
+    minIntervalMs: 0,
+    maxActors: 3_000,
+    duplicateWindowMs: 1_000_000_000,
+  });
+  let actorId = 0;
+  for (; actorId < 3_000; actorId++) {
+    assert.deepEqual(
+      churnGuard.check({
+        actorKey: `actor ${actorId}`,
+        text: "first",
+        nowMs: actorId,
+      }),
+      { allowed: true },
+    );
+  }
   return [
     bench(
       "spam · createSpamGuard()",
@@ -299,74 +376,32 @@ runSuite("spam", "spam", () => {
       allowedGuard.check({
         actorKey: "u1",
         text: `allowed ${messageId++}`,
-        nowMs: nextTime(),
+        nowMs: (clock += 2_000),
       }),
     ),
-    bench("spam · check · tooFast block", () => {
-      const guard = createSpamGuard({ minIntervalMs: 5_000 });
-      const base = nextTime(10_000);
-      guard.check({ actorKey: "u1", text: "first", nowMs: base });
-      return guard.check({ actorKey: "u1", text: "second", nowMs: base + 100 });
-    }),
-    bench("spam · check · duplicate block", () => {
-      const guard = createSpamGuard({ duplicateWindowMs: 60_000 });
-      const base = nextTime(10_000);
-      guard.check({ actorKey: "u1", text: SHORT_CLEAN, nowMs: base });
-      return guard.check({
-        actorKey: "u1",
-        text: SHORT_CLEAN,
-        nowMs: base + 1_000,
-      });
-    }),
-    bench("spam · check · burst block", () => {
-      const guard = createSpamGuard({
-        minIntervalMs: 0,
-        burstMaxMessages: 3,
-        burstWindowMs: 10_000,
-      });
-      const base = nextTime(10_000);
-      guard.check({ actorKey: "u1", text: "a", nowMs: base });
-      guard.check({ actorKey: "u1", text: "b", nowMs: base + 100 });
-      guard.check({ actorKey: "u1", text: "c", nowMs: base + 200 });
-      return guard.check({ actorKey: "u1", text: "d", nowMs: base + 300 });
-    }),
-    bench(
-      "spam · check · many messages · same actor",
-      () => {
-        const guard = createSpamGuard({
-          minIntervalMs: 0,
-          duplicateWindowMs: 1_000,
-          burstMaxMessages: 100,
-          burstWindowMs: 1_000,
-        });
-        for (let index = 0; index < 50; index += 1) {
-          guard.check({
-            actorKey: "u1",
-            text: `msg ${index}`,
-            nowMs: nextTime(100),
-          });
-        }
-      },
-      500,
+    bench("spam · check · tooFast block", () =>
+      intervalGuard.check(intervalInput),
     ),
-    bench(
-      "spam · check · many actors · maxActors pruning",
-      () => {
-        const guard = createSpamGuard({
-          maxActors: 10,
-          minIntervalMs: 0,
-          burstMaxMessages: 100,
-        });
-        const base = nextTime(10_000);
-        for (let index = 0; index < 50; index += 1) {
-          guard.check({
-            actorKey: `u${index}`,
-            text: `msg ${index}`,
-            nowMs: base + index,
-          });
-        }
-      },
-      500,
+    bench("spam · check · duplicate block", () =>
+      duplicateGuard.check(duplicateInput),
+    ),
+    bench("spam · check · burst block", () => burstGuard.check(burstInput)),
+    bench("spam · check · tooFast · full history", () =>
+      historyGuard.check(fullHistoryInput),
+    ),
+    bench("spam · check · actor capacity churn", () =>
+      churnGuard.check({
+        actorKey: `actor ${++actorId}`,
+        text: "first",
+        nowMs: actorId,
+      }),
+    ),
+    bench("spam · check · bounded history accepted", () =>
+      historyGuard.check({
+        actorKey: "u1",
+        text: `accepted ${messageId++}`,
+        nowMs: (historyClock += 2),
+      }),
     ),
   ];
 });
