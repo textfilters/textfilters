@@ -53,8 +53,9 @@ dependency ranges and propagates a dependency-only patch when a released local
 version moves outside an otherwise unaffected dependent's current range.
 
 The root `npm run check` command is the local compatibility gate. It runs the
-release path allowlist self-test, every package's lint, test, build, dist smoke,
-and dry-pack checks, root dist-surface tests, and a clean tarball consumer.
+release path allowlist self-test, root and workspace formatting, every package's
+clean build, tests and dist smoke, root dist-surface tests, and real tarball checks
+with a clean consumer. See the [validation flow](package-layout.md#workspace-tooling).
 
 Before publication, pack results must be compared with the previous release.
 Only intended metadata, documentation, version, and dependency-range changes

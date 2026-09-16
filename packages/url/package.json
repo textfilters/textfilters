@@ -33,7 +33,7 @@
     }
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "node ../../scripts/clean-dist.mjs && tsc -p tsconfig.json",
     "test": "vitest run",
     "lint": "prettier README.md package.json src docs tests scripts --check",
     "format": "prettier README.md package.json src docs tests scripts --write",

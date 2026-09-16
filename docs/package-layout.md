@@ -99,9 +99,37 @@ Workspace manifests contain only runtime dependencies and package-specific
 scripts, while each workspace `tsconfig.json` extends `tsconfig.base.json`.
 
 Root package commands run workspaces sequentially in the declared order through
-`scripts/run-workspace-script.mjs`. Keeping `core` first ensures dependent
-workspace tests resolve a freshly built local package without repeating the
-workspace list in every script.
+`scripts/run-workspace-script.mjs`. Keep this small runner: npm 11.16.0 native
+`npm run <script> --workspaces` continues to the next workspace after a failure,
+whereas validation must stop immediately. The runner propagates failure and
+uses the active npm CLI through Node when invoked by npm (including Windows).
+Direct invocation falls back to the platform npm command. It accepts one script
+name and an optional `--already-built` flag; additional arguments are rejected.
+
+The root check runs metadata/release safeguards, root and workspace formatting,
+builder fixtures, all clean builds in dependency order, workspace tests and
+smokes, public API/integration checks, and one real pack per workspace followed
+by a clean consumer installation. Dictionary tests require built output, so the
+common build precedes workspace tests. Each workspace builds once and packs
+once; synthetic builder fixtures are independent of workspace builds.
+
+`--already-built` is internal to this ordered validation flow. The runner selects
+an explicit `<script>:built` command only where a standalone test or smoke would
+otherwise rebuild (language dictionaries and profanity smoke). Integration skips
+its prerequisite builds with the same explicit flag. Tarball smoke checks for
+all public output entrypoints before passing `--ignore-scripts` to its individual
+pack commands. No lifecycle suppression is exported globally, and ordinary
+`npm pack`, `prepack`, workspace `test`, `check`, and `smoke:dist` retain their
+existing build behavior. Runtime workspace tests require a prior core build;
+`npm run build` is the recommended prerequisite for direct workspace development.
+
+Every runtime build removes its own `dist` before TypeScript compilation. The
+dictionary builder validates inputs, then replaces its generated `dist`. Root
+`check` uses real tarball content validation instead of repeating equivalent dry
+packs; `pack:dry-run` remains available for standalone inspection. Tarball checks
+retain ESM, TypeScript, dictionary, public surface, and single-compatible-core
+coverage. Operational pack inventory follows root workspaces; metadata policy
+and publication retain independent explicit allowlists.
 
 ## Alignment Rules
 

@@ -11,9 +11,17 @@ const REPO_ROOT = path.resolve(
 );
 const npm = process.platform === "win32" ? "npm.cmd" : "npm";
 
-run(process.execPath, ["scripts/build-profanity-dictionary.mjs"]);
-run(npm, ["run", "build", "--workspace", "@textfilters/core"]);
-run(npm, ["run", "build", "--workspace", "@textfilters/profanity"]);
+if (
+  process.argv.length > 3 ||
+  (process.argv[2] && process.argv[2] !== "--already-built")
+) {
+  throw new Error("Usage: test-profanity-integration.mjs [--already-built]");
+}
+if (process.argv[2] !== "--already-built") {
+  run(process.execPath, ["scripts/build-profanity-dictionary.mjs"]);
+  run(npm, ["run", "build", "--workspace", "@textfilters/core"]);
+  run(npm, ["run", "build", "--workspace", "@textfilters/profanity"]);
+}
 
 const { createProfanityFilter } = await importFrom(
   "packages/profanity/dist/index.js",

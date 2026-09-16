@@ -89,5 +89,6 @@ npm run check
 npm run benchmark
 ```
 
-`npm run check` validates all workspaces, built public surfaces, dry packs, and
-a clean consumer installation of all package tarballs.
+`npm run check` validates root formatting, all workspaces, built public surfaces,
+and a clean consumer installation of all package tarballs. It builds and packs
+each workspace once; see the [validation flow](docs/package-layout.md#workspace-tooling).

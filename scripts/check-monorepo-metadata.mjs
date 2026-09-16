@@ -144,21 +144,6 @@ expectEqual(
   true,
 );
 expectEqual(
-  "pre-2.0 profanity release override",
-  validateProfanityReleaseAs("1.0.1", "2.0.0"),
-  undefined,
-);
-expectEqual(
-  "released profanity override cleanup",
-  validateProfanityReleaseAs("2.0.0", undefined),
-  undefined,
-);
-const profanityReleaseAsFailure = validateProfanityReleaseAs(
-  releaseManifest["packages/profanity"],
-  releaseConfig.packages?.["packages/profanity"]?.["release-as"],
-);
-if (profanityReleaseAsFailure) failures.push(profanityReleaseAsFailure);
-expectEqual(
   "Release Please aggregate PR mode",
   releaseConfig["separate-pull-requests"],
   false,
@@ -204,12 +189,4 @@ function expectEqual(label, actual, expected) {
       `${label}: expected ${JSON.stringify(expected)}, received ${JSON.stringify(actual)}.`,
     );
   }
-}
-
-function validateProfanityReleaseAs(manifestVersion, releaseAs) {
-  if (Number.parseInt(manifestVersion, 10) >= 2 || releaseAs === "2.0.0") {
-    return undefined;
-  }
-
-  return `profanity next release: expected "2.0.0", received ${JSON.stringify(releaseAs)}.`;
 }

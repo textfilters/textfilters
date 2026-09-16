@@ -27,13 +27,15 @@
   },
   "scripts": {
     "build": "node ../../scripts/build-profanity-dictionary.mjs packages/profanity-ru",
-    "test": "npm run build && vitest run tests",
+    "test": "npm run build && npm run test:built",
     "lint": "prettier README.md package.json data tests --check",
     "format": "prettier README.md package.json data tests --write",
     "prepack": "npm run build",
     "pack:dry-run": "npm pack --dry-run",
-    "smoke:dist": "npm run build && node --input-type=module --eval \"const { default: dictionary } = await import('./dist/index.js'); if (dictionary.id !== 'ru') throw new Error('Invalid dictionary');\"",
-    "check": "npm run lint && npm test && node ../../scripts/build-profanity-dictionary.mjs --check packages/profanity-ru && npm run smoke:dist && npm run pack:dry-run"
+    "smoke:dist": "npm run build && npm run smoke:dist:built",
+    "check": "npm run lint && npm test && node ../../scripts/build-profanity-dictionary.mjs --check packages/profanity-ru && npm run smoke:dist && npm run pack:dry-run",
+    "test:built": "vitest run tests",
+    "smoke:dist:built": "node ../../scripts/build-profanity-dictionary.mjs --check packages/profanity-ru && node --input-type=module --eval \"const { default: dictionary } = await import('./dist/index.js'); if (dictionary.id !== 'ru') throw new Error('Invalid dictionary');\""
   },
   "engines": {
     "node": ">=24"
