@@ -11,7 +11,6 @@ import {
   WHITESPACE_RE,
 } from "./chars.js";
 import {
-  type CodePointRange,
   type UrlFilterOptions,
   type UrlRangeMatchSink,
   type UrlRangeScanner,
@@ -20,11 +19,7 @@ import {
 import { normalizeAllowedDomains } from "./allowed-domains.js";
 import { createMeta, toSkeletonFromNormalized } from "./meta.js";
 import { lowerNfkc, stripZeroWidth } from "./normalize.js";
-import {
-  collectRangeMatches,
-  collectRanges,
-  type UrlMatchPolicy,
-} from "./ranges.js";
+import { collectRangeMatches, type UrlMatchPolicy } from "./ranges.js";
 import { resolveTldLookups, type TldLookups } from "./tlds.js";
 
 const ASCII_ONLY_RE = /^[\x00-\x7f]*$/u;
@@ -53,34 +48,15 @@ export function createUrlScanner(
     normalizeAllowedDomains(config.allowedDomains),
   );
 
-  function scan(input: UrlScanInput): { ranges: readonly CodePointRange[] };
-  function scan(input: UrlScanInput, sink: UrlRangeMatchSink): boolean;
-  function scan(input: UrlScanInput, sink?: UrlRangeMatchSink) {
-    if (sink === undefined) {
-      return {
-        ranges: scanUrlInputRangesWithPolicy(input, policy),
-      };
-    }
-
-    return scanUrlRangeMatchesWithPolicy(input, sink, policy);
-  }
-
   return {
     check(input) {
       return checkUrlRangesWithPolicy(input, policy);
     },
-    scan,
+    scan(input, sink) {
+      return scanUrlRangeMatchesWithPolicy(input, sink, policy);
+    },
   };
 }
-
-const scanUrlInputRangesWithPolicy = (
-  input: UrlScanInput,
-  policy: UrlMatchPolicy,
-): readonly CodePointRange[] => {
-  const meta = createUrlInputMeta(input, policy.ambiguousSpacedDots);
-  if (!meta) return [];
-  return collectRanges(meta, policy);
-};
 
 const checkUrlRangesWithPolicy = (
   input: UrlScanInput,
@@ -103,7 +79,9 @@ const scanUrlRangeMatchesWithPolicy = (
 ): boolean => {
   const meta = createUrlInputMeta(input, policy.ambiguousSpacedDots);
   if (!meta) return true;
-  return collectRangeMatches(meta, policy, (range) => sink({ range }));
+  return collectRangeMatches(meta, policy, (range) =>
+    sink({ range }, meta.codePoints),
+  );
 };
 
 const createUrlInputMeta = (
@@ -111,7 +89,7 @@ const createUrlInputMeta = (
   ambiguousSpacedDots: UrlMatchPolicy["ambiguousSpacedDots"],
 ) =>
   hasUrlCandidateInput(input, ambiguousSpacedDots)
-    ? createMeta(input.text, input.codePoints)
+    ? createMeta(input.text)
     : null;
 
 function hasUrlCandidateInput(

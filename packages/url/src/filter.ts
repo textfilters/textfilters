@@ -19,7 +19,7 @@ export function createUrlFilter(options: UrlFilterOptions = {}): UrlFilter {
 
     check(text) {
       const source = requireText(text);
-      return scanner.check({ text: source, codePoints: Array.from(source) });
+      return scanner.check({ text: source });
     },
 
     find(text) {
@@ -42,10 +42,10 @@ export function createUrlFilter(options: UrlFilterOptions = {}): UrlFilter {
   };
 
   function scanRanges(source: string): readonly TextRange[] {
-    const codePoints = Array.from(source);
-    const offsets = utf16Offsets(codePoints);
+    let offsets: readonly number[] | undefined;
     const ranges: TextRange[] = [];
-    scanner.scan({ text: source, codePoints }, ({ range }) => {
+    scanner.scan({ text: source }, ({ range }, codePoints) => {
+      offsets ??= utf16Offsets(codePoints);
       const converted = toUtf16Range(range, offsets);
       if (converted) ranges.push(converted);
     });

@@ -29,3 +29,5 @@ explicit authority, remains detectable.
 The parser stays split by responsibility because URL syntax has independent
 scheme, authority, host, path, normalization, and TLD concerns. None of those
 internal contracts are package exports.
+
+A candidate check runs before code-point metadata is prepared. One callback path emits ranges and shares its metadata with the adapter, which creates UTF-16 offsets only on the first match. The boolean check stops the same matcher immediately; there is no second array collection or sorting path.

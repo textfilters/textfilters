@@ -27,3 +27,5 @@ semantics. Localhost and other single-label domains are not supported.
 Tokenizer, context, direct-match, obfuscated-match, validation, and allowlist
 modules remain internal because they represent distinct matching concerns. No
 range-scanner contracts are exported.
+
+The scanner retains one array collection and merge path plus a direct early-exit check. Both use the same direct and obfuscated matchers; the obfuscated matcher visits ranges without a cursor. No caller prepares unused code points or shared hints. UTF-16 offsets are built only when ranges exist.

@@ -1,192 +1,111 @@
-import { describe, expect, it } from "vitest";
-
+import { describe, expect, it, vi } from "vitest";
 import { createEmailFilter } from "../src/index.js";
-import {
-  checkEmailRanges,
-  createEmailScanner,
-  scanEmailRangeMatches,
-  scanEmailRanges,
-} from "../src/scanner.js";
-import type {
-  EmailRangeScanner,
-  EmailRangeScanResult,
-  EmailScanHints,
-} from "../src/types.js";
+import { createEmailScanner } from "../src/scanner.js";
+import { createEmailTextMeta } from "../src/normalization.js";
+import { collectObfuscatedEmailRangeMatches } from "../src/scanner/matching/obfuscated.js";
+import { createExclusionSets } from "../src/scanner/rules/exclusions.js";
+import * as direct from "../src/scanner/matching/direct.js";
 
-const mask = (value: string, maskChar = "*"): string =>
-  maskChar.repeat(Array.from(value).length);
-
-describe("@textfilters/email scanner", () => {
-  it("keeps scanner contracts compatible with shared range shapes", () => {
-    const scanner: EmailRangeScanner = createEmailScanner();
-    const hints: EmailScanHints = {
-      textLength: "contact user@example.com now".length,
-      hasNonAscii: false,
-      hasAtSign: true,
-      hasDot: true,
-    };
-    const text = "contact user@example.com now";
-    const result: EmailRangeScanResult = scanner.scan({
-      text,
-      codePoints: Array.from(text),
-      hints,
+describe("email retained scanner paths", () => {
+  it.each([
+    ["contact user@example.com now", [[8, 24]]],
+    ["contact user [at] example [dot] com", [[8, 35]]],
+    ["contact user(at)example(dot)com", [[8, 31]]],
+    ["contact user [@] example [.] com", [[8, 32]]],
+    ["plain words only", []],
+    ["", []],
+    [
+      "contact first@example.com and second@example.com",
+      [
+        [8, 25],
+        [30, 48],
+      ],
+    ],
+    [
+      "user at example dot com then admin@example.org",
+      [
+        [0, 23],
+        [29, 46],
+      ],
+    ],
+    ["user@example.com dot org", [[0, 24]]],
+    [
+      "mail user@example.com, then admin [at] example [dot] org.",
+      [
+        [5, 21],
+        [28, 56],
+      ],
+    ],
+    ["😀 user@example.com", [[2, 18]]],
+    ["😀 ﬀoo@example.com", [[3, 17]]],
+  ] as const)("preserves ranges, ordering and masking: %s", (text, ranges) => {
+    const scanner = createEmailScanner();
+    const filter = createEmailFilter();
+    expect(scanner.scan(text)).toEqual(ranges);
+    expect(scanner.check(text)).toBe(ranges.length > 0);
+    const points = Array.from(text);
+    const matches = ranges.map(([start, end]) => ({
+      start: points.slice(0, start).join("").length,
+      end: points.slice(0, end).join("").length,
+      value: points.slice(start, end).join(""),
+      filter: "email",
+    }));
+    const masked = text.split("");
+    for (const { start, end } of matches) masked.fill("#", start, end);
+    expect(filter.find(text)).toEqual(matches);
+    expect(filter.censor(text, "#")).toBe(masked.join(""));
+    expect(filter.process(text, "#")).toEqual({
+      matches,
+      censored: masked.join(""),
     });
-
-    expect(result).toEqual({ ranges: [[8, 24]] });
   });
 
-  it("exposes scanner ranges compatible with code point masking", () => {
-    const scanner = createEmailScanner();
+  it("stops direct check after the first accepted candidate", () => {
+    const visit = vi.spyOn(direct, "collectDirectEmailRange");
+    try {
+      expect(
+        createEmailFilter().check("first@example.com and second@example.com"),
+      ).toBe(true);
+      expect(visit).toHaveBeenCalledTimes(1);
+    } finally {
+      visit.mockRestore();
+    }
+  });
+
+  it("stops obfuscated check at its first accepted range", () => {
+    const text = "user [at] example [dot] com; admin [at] example [dot] org";
+    const visit = vi.fn(() => false);
     expect(
-      scanner.scan({
-        text: "contact user@example.com now",
-        codePoints: Array.from("contact user@example.com now"),
-      }),
-    ).toEqual({
-      ranges: [[8, 24]],
-    });
-  });
-
-  it("keeps the public censor wrapper aligned with scanner ranges", () => {
-    const text = "contact user@example.com now";
-    const scanner = createEmailScanner();
-    const ranges = scanner.scan({
-      text,
-      codePoints: Array.from(text),
-    }).ranges;
-
-    expect(ranges).toEqual([[8, 24]]);
-    expect(createEmailFilter().censor(text, "#")).toBe(
-      `contact ${mask("user@example.com", "#")} now`,
-    );
-  });
-
-  it("keeps direct and obfuscated coverage through the scanner path", () => {
-    expect(scanEmailRanges("contact user@example.com")).toEqual([[8, 24]]);
-    expect(scanEmailRanges("contact user [at] example [dot] com")).toEqual([
-      [8, 35],
-    ]);
-    expect(scanEmailRanges("contact user(at)example(dot)com")).toEqual([
-      [8, 31],
-    ]);
-    expect(scanEmailRanges("contact user [@] example [.] com")).toEqual([
-      [8, 32],
-    ]);
-  });
-
-  it("returns no ranges for clearly clean text", () => {
-    const scanner = createEmailScanner();
-    expect(
-      scanner.scan({
-        text: "plain words only",
-        codePoints: Array.from("plain words only"),
-      }),
-    ).toEqual({ ranges: [] });
-  });
-
-  it("checks candidates without collecting every range", () => {
-    const scanner = createEmailScanner();
-    const text = "contact first@example.com and second@example.com";
-    const input = { text, codePoints: Array.from(text) };
-
-    expect(scanner.check(input)).toBe(true);
-    expect(checkEmailRanges(input)).toBe(true);
-    expect(scanner.check({ text: "plain words only", codePoints: [] })).toBe(
-      false,
-    );
-  });
-
-  it("streams ranges into a sink and supports early stop", () => {
-    const scanner = createEmailScanner();
-    const text = "contact first@example.com and second@example.com";
-    const seen: Array<readonly [number, number]> = [];
-
-    const completed = scanner.scan(
-      { text, codePoints: Array.from(text) },
-      (match) => {
-        seen.push(match.range);
-        return false;
-      },
-    );
-
-    expect(completed).toBe(false);
-    expect(seen).toEqual([[8, 25]]);
-  });
-
-  it("streams mixed direct and obfuscated ranges in source order", () => {
-    const scanner = createEmailScanner();
-    const text = "user at example dot com then admin@example.org";
-    const seen: Array<readonly [number, number]> = [];
-
-    const completed = scanner.scan(
-      { text, codePoints: Array.from(text) },
-      (match) => {
-        seen.push(match.range);
-        return false;
-      },
-    );
-
-    expect(completed).toBe(false);
-    expect(seen).toEqual([[0, 23]]);
-  });
-
-  it("merges overlapping direct and obfuscated ranges before streaming", () => {
-    const scanner = createEmailScanner();
-    const text = "user@example.com dot org";
-    const seen: Array<readonly [number, number]> = [];
-
-    const completed = scanner.scan(
-      { text, codePoints: Array.from(text) },
-      (match) => {
-        seen.push(match.range);
-        return false;
-      },
-    );
-
-    expect(completed).toBe(false);
-    expect(seen).toEqual([[0, 24]]);
-  });
-
-  it("uses shared-style hints to skip clearly clean text", () => {
-    expect(
-      checkEmailRanges({
-        text: "plain words only",
-        codePoints: Array.from("plain words only"),
-        hints: {
-          textLength: "plain words only".length,
-          hasNonAscii: false,
-          hasAtSign: false,
-          hasDot: false,
+      collectObfuscatedEmailRangeMatches(
+        createEmailTextMeta(text),
+        {
+          matchObfuscated: true,
+          exclusions: createExclusionSets(),
         },
-      }),
+        visit,
+      ),
     ).toBe(false);
-  });
-
-  it("streams direct, punctuation-trimmed, and obfuscated ranges", () => {
-    const text = "mail user@example.com, then admin [at] example [dot] org.";
-    const seen: Array<readonly [number, number]> = [];
-
-    expect(
-      scanEmailRangeMatches({ text, codePoints: Array.from(text) }, (match) => {
-        seen.push(match.range);
-      }),
-    ).toBe(true);
-    expect(seen).toEqual([
-      [5, 21],
-      [28, 56],
+    expect(visit.mock.calls).toEqual([[[0, 27]]]);
+    expect(createEmailScanner().scan(text)).toEqual([
+      [0, 27],
+      [29, 57],
     ]);
   });
 
-  it("preserves scanner option behavior", () => {
+  it("preserves obfuscation options and each allowlist", () => {
     expect(
-      scanEmailRanges("contact user at example dot com", {
-        matchObfuscated: false,
-      }),
+      createEmailScanner({ matchObfuscated: false }).scan(
+        "contact user at example dot com",
+      ),
     ).toEqual([]);
-    expect(
-      scanEmailRanges("contact user@example.com", {
-        allowedEmails: ["user@example.com"],
-      }),
-    ).toEqual([]);
+    for (const options of [
+      { allowedEmails: ["user@example.com"] },
+      { allowedUsernames: ["user"] },
+      { allowedDomains: ["example.com"] },
+    ]) {
+      const scanner = createEmailScanner(options);
+      expect(scanner.scan("contact user@example.com")).toEqual([]);
+      expect(scanner.check("contact user@example.com")).toBe(false);
+    }
   });
 });

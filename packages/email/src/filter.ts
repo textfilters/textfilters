@@ -21,7 +21,7 @@ export function createEmailFilter(
 
     check(text) {
       const source = requireText(text);
-      return scanner.check({ text: source, codePoints: Array.from(source) });
+      return scanner.check(source);
     },
 
     find(text) {
@@ -44,11 +44,10 @@ export function createEmailFilter(
   };
 
   function scanRanges(source: string): readonly TextRange[] {
-    const codePoints = Array.from(source);
-    const offsets = utf16Offsets(codePoints);
-    return scanner
-      .scan({ text: source, codePoints })
-      .ranges.flatMap((range) => toUtf16Range(range, offsets));
+    const ranges = scanner.scan(source);
+    if (ranges.length === 0) return [];
+    const offsets = utf16Offsets(source);
+    return ranges.flatMap((range) => toUtf16Range(range, offsets));
   }
 
   function scanMatches(source: string): readonly TextMatch[] {
@@ -65,9 +64,9 @@ export function createEmailFilter(
 
 export const filter = createEmailFilter();
 
-function utf16Offsets(codePoints: readonly string[]): readonly number[] {
+function utf16Offsets(source: string): readonly number[] {
   const offsets = [0];
-  for (const codePoint of codePoints) {
+  for (const codePoint of source) {
     offsets.push(offsets[offsets.length - 1] + codePoint.length);
   }
   return offsets;

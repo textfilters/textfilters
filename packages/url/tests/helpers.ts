@@ -15,10 +15,13 @@ export function scanUrlRanges(
   _asciiTldTargets?: ReadonlySet<string>,
   allowedDomains: ReadonlySet<string> = new Set(),
 ): readonly CodePointRange[] {
-  return createUrlScanner({
-    tlds: [...listedTlds],
-    allowedDomains: [...allowedDomains],
-  }).scan({ text, codePoints: Array.from(text) }).ranges;
+  return scanRanges(
+    createUrlScanner({
+      tlds: [...listedTlds],
+      allowedDomains: [...allowedDomains],
+    }),
+    { text },
+  ).ranges;
 }
 
 export function checkUrlRanges(
@@ -44,4 +47,15 @@ export function scanUrlRangeMatches(
     tlds: [...listedTlds],
     allowedDomains: [...allowedDomains],
   }).scan(input, sink);
+}
+
+export function scanRanges(
+  scanner: ReturnType<typeof createUrlScanner>,
+  input: UrlScanInput,
+) {
+  const ranges: CodePointRange[] = [];
+  scanner.scan(input, ({ range }) => {
+    ranges.push(range);
+  });
+  return { ranges };
 }

@@ -324,38 +324,6 @@ const selectBareDomainCandidate = (
   };
 };
 
-export const collectRanges = (
-  meta: TextMeta,
-  policy: UrlMatchPolicy,
-): readonly CodePointRange[] => {
-  const ranges: CodePointRange[] = [];
-  collectRangeMatches(meta, policy, (range) => {
-    ranges.push(range);
-  });
-  return mergeCodePointRanges(ranges);
-};
-
-function mergeCodePointRanges(
-  ranges: readonly CodePointRange[],
-): readonly CodePointRange[] {
-  const sorted = [...ranges].sort(
-    (left, right) => left[0] - right[0] || left[1] - right[1],
-  );
-  const merged: Array<[number, number]> = [];
-
-  for (const [start, end] of sorted) {
-    if (start < 0 || end <= start) continue;
-    const previous = merged[merged.length - 1];
-    if (!previous || start > previous[1]) {
-      merged.push([start, end]);
-    } else {
-      previous[1] = Math.max(previous[1], end);
-    }
-  }
-
-  return merged;
-}
-
 export const collectRangeMatches = (
   meta: TextMeta,
   policy: UrlMatchPolicy,
