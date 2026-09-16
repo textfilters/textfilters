@@ -27,3 +27,5 @@ filtering.
 
 Public matches always use UTF-16 offsets into the original string. Internal
 code-point ranges and matching helpers are not exported.
+
+Range scanning and UTF-16 offset conversion reuse the same metadata code-point array. Candidate preparation remains local to the phone detector.

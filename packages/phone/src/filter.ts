@@ -57,12 +57,12 @@ function scanMatches(source: string): readonly TextMatch[] {
 function scanRanges(source: string): readonly TextRange[] {
   if (!hasPhoneCandidate(source)) return [];
 
-  const codePoints = Array.from(source);
-  const offsets = utf16Offsets(codePoints);
+  const meta = createMeta(source);
+  const offsets = utf16Offsets(meta.codePoints);
   const ranges: CodePointRange[] = [];
   let pending: CodePointRange | undefined;
 
-  collectCandidateRangeMatches(createMeta(source), (range) => {
+  collectCandidateRangeMatches(meta, (range) => {
     if (!pending) {
       pending = range;
     } else if (range[0] <= pending[1]) {

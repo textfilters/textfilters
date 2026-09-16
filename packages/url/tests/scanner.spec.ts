@@ -7,11 +7,7 @@ import {
   WHITESPACE_RE,
 } from "../src/chars.js";
 import { createUrlFilter } from "../src/index.js";
-import type {
-  UrlRangeScanner,
-  UrlRangeScanResult,
-  UrlScanHints,
-} from "../src/contracts.js";
+import type { UrlRangeScanner } from "../src/contracts.js";
 import { createMeta } from "../src/meta.js";
 import { lowerNfkc, stripZeroWidth } from "../src/normalize.js";
 import { createUrlScanner } from "../src/scanner.js";
@@ -20,6 +16,7 @@ import {
   mask,
   scanUrlRangeMatches,
   scanUrlRanges,
+  scanRanges,
 } from "./helpers.js";
 
 type Range = readonly [number, number];
@@ -49,7 +46,7 @@ const expectScannerFixture = ({
   ranges,
   allowedDomains,
 }: ScannerFixture): void => {
-  const input = { text, codePoints: Array.from(text) };
+  const input = { text };
   const scanner = createUrlScanner({ allowedDomains });
   const seen: Range[] = [];
 
@@ -58,7 +55,7 @@ const expectScannerFixture = ({
     expect(checkUrlRanges(input)).toBe(ranges.length > 0);
   }
   expect(scanner.check(input)).toBe(ranges.length > 0);
-  expect(scanner.scan(input)).toEqual({ ranges });
+  expect(scanRanges(scanner, input)).toEqual({ ranges });
   expect(
     scanner.scan(input, (match) => {
       seen.push(match.range);
@@ -117,17 +114,9 @@ describe("URL scanner", () => {
 
   it("keeps scanner contracts compatible with shared range shapes", () => {
     const scanner: UrlRangeScanner = createUrlScanner();
-    const hints: UrlScanHints = {
-      hasNonAscii: false,
-      hasDot: true,
-      hasSlash: false,
-      hasColon: false,
-    };
     const text = "visit example.com now";
-    const result: UrlRangeScanResult = scanner.scan({
+    const result = scanRanges(scanner, {
       text,
-      codePoints: Array.from(text),
-      hints,
     });
 
     expect(result).toEqual({ ranges: [[6, 17]] });
@@ -136,9 +125,8 @@ describe("URL scanner", () => {
   it("exposes scanner ranges compatible with code point masking", () => {
     const scanner = createUrlScanner();
     expect(
-      scanner.scan({
+      scanRanges(scanner, {
         text: "visit https://example.com now",
-        codePoints: Array.from("visit https://example.com now"),
       }),
     ).toEqual({
       ranges: [[6, 25]],
@@ -148,12 +136,12 @@ describe("URL scanner", () => {
   it("keeps prepared astral code point ranges aligned across scanner paths", () => {
     const scanner = createUrlScanner();
     const text = "😀 visit example.com now";
-    const input = { text, codePoints: Array.from(text) };
+    const input = { text };
     const expected: readonly Range[] = [[8, 19]];
     const seen: Range[] = [];
 
     expect(scanner.check(input)).toBe(true);
-    expect(scanner.scan(input)).toEqual({ ranges: expected });
+    expect(scanRanges(scanner, input)).toEqual({ ranges: expected });
     expect(
       scanner.scan(input, (match) => {
         seen.push(match.range);
@@ -165,9 +153,8 @@ describe("URL scanner", () => {
   it("keeps the public censor wrapper aligned with scanner ranges", () => {
     const text = "go https://example.com/path now";
     const scanner = createUrlScanner();
-    const ranges = scanner.scan({
+    const ranges = scanRanges(scanner, {
       text,
-      codePoints: Array.from(text),
     }).ranges;
 
     expect(ranges).toEqual([[3, 27]]);
@@ -179,12 +166,10 @@ describe("URL scanner", () => {
   it("checks URL candidates without collecting every range", () => {
     const scanner = createUrlScanner();
     const text = "visit https://example.com and https://second.example now";
-    const input = { text, codePoints: Array.from(text) };
+    const input = { text };
 
     expect(scanner.check(input)).toBe(true);
-    expect(scanner.check({ text: "plain words only", codePoints: [] })).toBe(
-      false,
-    );
+    expect(scanner.check({ text: "plain words only" })).toBe(false);
     expect(checkUrlRanges(input)).toBe(true);
   });
 
@@ -193,45 +178,28 @@ describe("URL scanner", () => {
     const text = "visit example.com and example.org now";
     const seen: Array<readonly [number, number]> = [];
 
-    const completed = scanner.scan(
-      { text, codePoints: Array.from(text) },
-      (match) => {
-        seen.push(match.range);
-        return false;
-      },
-    );
+    const completed = scanner.scan({ text }, (match) => {
+      seen.push(match.range);
+      return false;
+    });
 
     expect(completed).toBe(false);
     expect(seen).toEqual([[6, 17]]);
   });
 
-  it("uses shared-style hints to skip clearly clean text", () => {
+  it("skips clearly clean text", () => {
     expect(
       checkUrlRanges({
         text: "plain words only",
-        codePoints: Array.from("plain words only"),
-        hints: {
-          hasNonAscii: false,
-          hasDot: false,
-          hasSlash: false,
-          hasColon: false,
-        },
       }),
     ).toBe(false);
   });
 
-  it("does not let false shared hints hide split-dot URLs", () => {
+  it("recognizes split-dot URLs", () => {
     const scanner = createUrlScanner();
     const text = "visit example d o t com";
     const input = {
       text,
-      codePoints: Array.from(text),
-      hints: {
-        hasNonAscii: false,
-        hasDot: false,
-        hasSlash: false,
-        hasColon: false,
-      },
     };
     const seen: Array<readonly [number, number]> = [];
 
@@ -250,7 +218,7 @@ describe("URL scanner", () => {
     const seen: Array<readonly [number, number]> = [];
 
     expect(
-      scanUrlRangeMatches({ text, codePoints: Array.from(text) }, (match) => {
+      scanUrlRangeMatches({ text }, (match) => {
         seen.push(match.range);
       }),
     ).toBe(true);
@@ -272,7 +240,7 @@ describe("URL scanner", () => {
 
     expect(scanUrlRanges(text)).toEqual(expected);
     expect(
-      scanUrlRangeMatches({ text, codePoints: Array.from(text) }, (match) => {
+      scanUrlRangeMatches({ text }, (match) => {
         seen.push(match.range);
       }),
     ).toBe(true);
@@ -382,18 +350,11 @@ describe("URL scanner", () => {
     ]) {
       const input = {
         text,
-        codePoints: Array.from(text),
-        hints: {
-          hasDot: false,
-          hasSlash: false,
-          hasColon: false,
-          hasNonAscii: false,
-        },
       };
       const scanner = createUrlScanner();
 
       expect(scanner.check(input)).toBe(true);
-      expect(scanner.scan(input).ranges).not.toEqual([]);
+      expect(scanRanges(scanner, input).ranges).not.toEqual([]);
     }
   });
 
@@ -401,7 +362,7 @@ describe("URL scanner", () => {
     const text = "foo.invalid. evil.com";
     const suffix = "evil.com";
     const suffixStart = Array.from(text.slice(0, text.indexOf(suffix))).length;
-    const input = { text, codePoints: Array.from(text) };
+    const input = { text };
     const cases = [
       {
         allowedDomains: [] as string[],
@@ -429,7 +390,7 @@ describe("URL scanner", () => {
       const scanner = createUrlScanner({ allowedDomains });
       const seen: Array<readonly [number, number]> = [];
 
-      expect(scanner.scan(input)).toEqual({ ranges });
+      expect(scanRanges(scanner, input)).toEqual({ ranges });
       expect(scanner.check(input)).toBe(ranges.length > 0);
       expect(
         scanner.scan(input, (match) => {
@@ -457,9 +418,8 @@ describe("URL scanner", () => {
       });
 
       expect(
-        scanner.scan({
+        scanRanges(scanner, {
           text: sentenceText,
-          codePoints: Array.from(sentenceText),
         }),
       ).toEqual({
         ranges: [[sentenceSuffixStart, Array.from(sentenceText).length]],
@@ -475,9 +435,8 @@ describe("URL scanner", () => {
 
     const spacedSubdomain = "foo. bar.evil.com";
     expect(
-      createUrlScanner({ allowedDomains: ["foo.bar.evil.com"] }).scan({
+      scanRanges(createUrlScanner({ allowedDomains: ["foo.bar.evil.com"] }), {
         text: spacedSubdomain,
-        codePoints: Array.from(spacedSubdomain),
       }),
     ).toEqual({ ranges: [] });
     expect(
@@ -717,9 +676,9 @@ describe("URL scanner", () => {
     const text = `visit ${domain} now`;
     const start = Array.from("visit ").length;
     const expected = [start, start + Array.from(domain).length] as const;
-    const input = { text, codePoints: Array.from(text) };
+    const input = { text };
     expectScannerFixture({ text, ranges: [expected] });
-    expect(createUrlScanner({ tlds: ["com"] }).scan(input)).toEqual({
+    expect(scanRanges(createUrlScanner({ tlds: ["com"] }), input)).toEqual({
       ranges: [],
     });
     expectScannerFixture({
@@ -863,7 +822,7 @@ describe("URL scanner", () => {
       "evil.com\u200b_x.org",
       "evil.com's.org",
     ]) {
-      const input = { text, codePoints: Array.from(text) };
+      const input = { text };
 
       expect(scanUrlRanges(text)).toEqual([[0, Array.from(text).length]]);
       expect(createUrlScanner().check(input)).toBe(true);
@@ -923,10 +882,10 @@ describe("URL scanner", () => {
       "\u200b,",
     ]) {
       const text = `https://evil.com${separator}x.org`;
-      const input = { text, codePoints: Array.from(text) };
+      const input = { text };
       const expectedRange = [0, Array.from(text).length] as const;
 
-      expect(scanner.scan(input)).toEqual({ ranges: [expectedRange] });
+      expect(scanRanges(scanner, input)).toEqual({ ranges: [expectedRange] });
       expect(scanner.check(input)).toBe(true);
       expect(filter.censor(text)).toBe(mask(text));
     }
@@ -938,9 +897,9 @@ describe("URL scanner", () => {
     const glued = "https://evil.com,x.org";
     const suffixStart = Array.from("https://evil.com,").length;
     const firstOnly = createUrlScanner({ allowedDomains: ["evil.com"] });
-    expect(
-      firstOnly.scan({ text: glued, codePoints: Array.from(glued) }),
-    ).toEqual({ ranges: [[suffixStart, Array.from(glued).length]] });
+    expect(scanRanges(firstOnly, { text: glued })).toEqual({
+      ranges: [[suffixStart, Array.from(glued).length]],
+    });
     expect(
       createUrlFilter({ allowedDomains: ["evil.com"] }).censor(glued),
     ).toBe(`https://evil.com,${mask("x.org")}`);
@@ -989,26 +948,22 @@ describe("URL scanner", () => {
       mixedText.slice(0, mixedText.indexOf(blocked)),
     ).length;
     const blockedEnd = blockedStart + Array.from(blocked).length;
-    const mixedInput = { text: mixedText, codePoints: Array.from(mixedText) };
+    const mixedInput = { text: mixedText };
     const seen: Array<readonly [number, number]> = [];
 
-    expect(
-      scanner.scan({ text: allowedText, codePoints: Array.from(allowedText) }),
-    ).toEqual({ ranges: [] });
+    expect(scanRanges(scanner, { text: allowedText })).toEqual({ ranges: [] });
     expect(
       scanner.check({
         text: allowedText,
-        codePoints: Array.from(allowedText),
       }),
     ).toBe(false);
-    expect(scanner.scan(mixedInput)).toEqual({
+    expect(scanRanges(scanner, mixedInput)).toEqual({
       ranges: [[blockedStart, blockedEnd]],
     });
     expect(scanner.check(mixedInput)).toBe(true);
     expect(
-      scanner.scan({
+      scanRanges(scanner, {
         text: spacedSubdomainText,
-        codePoints: Array.from(spacedSubdomainText),
       }),
     ).toEqual({ ranges: [[0, Array.from(spacedSubdomainText).length]] });
     expect(
@@ -1020,9 +975,8 @@ describe("URL scanner", () => {
       allowedDomains: ["evil.trusted.com"],
     });
     expect(
-      exactSubdomainScanner.scan({
+      scanRanges(exactSubdomainScanner, {
         text: spacedSubdomainText,
-        codePoints: Array.from(spacedSubdomainText),
       }),
     ).toEqual({ ranges: [] });
     expect(
@@ -1041,9 +995,8 @@ describe("URL scanner", () => {
   it("returns no ranges for clearly clean text", () => {
     const scanner = createUrlScanner();
     expect(
-      scanner.scan({
+      scanRanges(scanner, {
         text: "plain words only",
-        codePoints: Array.from("plain words only"),
       }),
     ).toEqual({ ranges: [] });
   });
