@@ -68,5 +68,4 @@ Use the guard in `createModerationPipeline({ guards: [spam] })` when spam and
 stateless text filters should form one moderation operation. The package does
 not provide storage adapters or asynchronous checks.
 
-See [architecture](docs/architecture.md) for state ownership and
-[the release process](docs/release-process.md) for release details.
+Architecture and release documentation are available from the package homepage.
