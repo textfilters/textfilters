@@ -49,8 +49,7 @@ export type ModerationBlockedResult = {
 };
 
 export type ModerationResult =
-  | ModerationAllowedResult
-  | ModerationBlockedResult;
+  ModerationAllowedResult | ModerationBlockedResult;
 
 export interface ModerationPipelineOptions {
   readonly guards?: readonly TextGuard[];
