@@ -31,3 +31,19 @@ scheme, authority, host, path, normalization, and TLD concerns. None of those
 internal contracts are package exports.
 
 A candidate check runs before code-point metadata is prepared. One callback path emits ranges and shares its metadata with the adapter, which creates UTF-16 offsets only on the first match. The boolean check stops the same matcher immediately; there is no second array collection or sorting path.
+
+## Domain-dot Candidate Pass
+
+The candidate pass remembers the latest letter/digit on the left and whether an
+eligible dot has occurred since it. The next letter/digit establishes the right
+side and returns immediately. ASCII uses direct character-code checks. Unicode
+uses code points and remembers the last non-variation-selector position, so the
+left sentence-boundary check never revisits a selector run.
+
+The only lookahead skips selectors immediately following a sentence dot. These
+runs are disjoint (a selector is not a dot), so their total work is bounded by the
+input size. Every code point is visited at most once by the forward pass and
+once by selector lookahead. ASCII uses constant auxiliary space; Unicode still
+allocates its code-point array. Neither path truncates input or limits candidate
+length. This proves O(n) time for `hasLikelyDomainDot`, not for the full URL
+parser. Existing marker, split-word, and downstream parser paths are unchanged.

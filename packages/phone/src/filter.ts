@@ -80,7 +80,8 @@ function scanRanges(source: string): readonly TextRange[] {
 function hasPhoneCandidate(source: string): boolean {
   let digitCount = 0;
   for (const codePoint of source) {
-    const raw = toRawChar(codePoint);
+    const raw =
+      codePoint.charCodeAt(0) <= 0x7f ? codePoint : toRawChar(codePoint);
     if (raw >= "0" && raw <= "9" && ++digitCount >= 10) return true;
   }
   return false;

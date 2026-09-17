@@ -133,74 +133,54 @@ function hasLikelyDomainDot(
   ambiguousSpacedDots: UrlMatchPolicy["ambiguousSpacedDots"],
   isAscii: boolean,
 ): boolean {
+  let left = -1;
+  let pendingDot = false;
   if (isAscii) {
-    for (let i = 1; i < value.length - 1; i++) {
-      if (value.charCodeAt(i) !== 0x2e) continue;
-
-      let left = i - 1;
-      while (left >= 0 && !isAsciiLetterOrDigitCode(value.charCodeAt(left))) {
-        left--;
-      }
-      if (left < 0) continue;
-
-      let right = i + 1;
-      while (
-        right < value.length &&
-        !isAsciiLetterOrDigitCode(value.charCodeAt(right))
+    for (let i = 0; i < value.length; i++) {
+      const code = value.charCodeAt(i);
+      if (isAsciiLetterOrDigitCode(code)) {
+        if (pendingDot) return true;
+        left = i;
+      } else if (
+        code === 0x2e &&
+        left >= 0 &&
+        !(
+          ambiguousSpacedDots === "preserve" &&
+          left + 1 === i &&
+          isAsciiWhitespaceCode(value.charCodeAt(i + 1))
+        )
       ) {
-        right++;
+        pendingDot = true;
       }
-      if (right >= value.length) continue;
-
-      if (
-        ambiguousSpacedDots === "preserve" &&
-        left + 1 === i &&
-        isAsciiWhitespaceCode(value.charCodeAt(i + 1))
-      ) {
-        continue;
-      }
-      return true;
     }
     return false;
   }
 
   const chars = Array.from(value);
-  for (let i = 1; i < chars.length - 1; i++) {
-    if (!DOT_CHAR_SET.has(chars[i])) continue;
-
-    let left = i - 1;
-    while (left >= 0 && !LETTER_OR_DIGIT_RE.test(chars[left])) left--;
-    if (left < 0) continue;
-
-    let right = i + 1;
-    while (right < chars.length && !LETTER_OR_DIGIT_RE.test(chars[right])) {
-      right++;
-    }
-    if (right >= chars.length) continue;
-
-    if (
-      ambiguousSpacedDots === "preserve" &&
-      isSentenceDotSymbol(chars[i]) &&
-      hasOnlyVariationSelectors(chars, left + 1, i) &&
-      startsWithWhitespaceAfterVariationSelectors(chars, i + 1)
+  let lastNonVariationSelector = -1;
+  for (let i = 0; i < chars.length; i++) {
+    const char = chars[i];
+    if (LETTER_OR_DIGIT_RE.test(char)) {
+      if (pendingDot) return true;
+      left = i;
+    } else if (
+      !pendingDot &&
+      left >= 0 &&
+      DOT_CHAR_SET.has(char) &&
+      !(
+        ambiguousSpacedDots === "preserve" &&
+        isSentenceDotSymbol(char) &&
+        lastNonVariationSelector === left &&
+        startsWithWhitespaceAfterVariationSelectors(chars, i + 1)
+      )
     ) {
-      continue;
+      pendingDot = true;
     }
-    return true;
+    // Each selector run after a dot is inspected at most once by lookahead.
+    // Remember the last non-selector instead of rescanning from the left letter.
+    if (!VARIATION_SELECTOR_RE.test(char)) lastNonVariationSelector = i;
   }
-
   return false;
-}
-
-function hasOnlyVariationSelectors(
-  chars: readonly string[],
-  start: number,
-  end: number,
-): boolean {
-  for (let i = start; i < end; i++) {
-    if (!VARIATION_SELECTOR_RE.test(chars[i] ?? "")) return false;
-  }
-  return true;
 }
 
 function startsWithWhitespaceAfterVariationSelectors(
