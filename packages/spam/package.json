@@ -42,6 +42,7 @@
     "check": "npm run lint && npm test && npm run build && npm run smoke:dist && npm run pack:dry-run"
   },
   "dependencies": {
+    "@noble/hashes": "^2.4.0",
     "@textfilters/core": "^1.0.0"
   },
   "engines": {
