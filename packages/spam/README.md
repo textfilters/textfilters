@@ -55,9 +55,17 @@ Each guard instance owns independent bounded state. `actorKey` is required.
 Omitted `nowMs` uses `Date.now()`; an explicit value must be finite. Rejected
 messages do not extend any window, and `reset()` clears all state.
 
+Duplicate comparison covers the entire normalized message, including differences
+beyond 512 UTF-16 code units. Normalization removes supported zero-width
+characters, applies NFKC and lowercase, collapses whitespace, and trims it.
+Short normalized messages are compared exactly; messages longer than 512 code
+units use SHA-256 of their exact UTF-16LE code units. The residual risk of a
+SHA-256 collision is negligible, but equality is not mathematically guaranteed.
+Unpaired surrogates remain distinct. History retains at most 256 bounded keys
+per actor; temporary normalization memory still grows with the input length.
+
 Use the guard in `createModerationPipeline({ guards: [spam] })` when spam and
 stateless text filters should form one moderation operation. The package does
 not provide storage adapters or asynchronous checks.
 
-See [architecture](https://github.com/textfilters/textfilters/blob/main/packages/spam/docs/architecture.md) for state ownership and
-[the release process](https://github.com/textfilters/textfilters/blob/main/packages/spam/docs/release-process.md) for release details.
+Architecture and release documentation are available from the package homepage.

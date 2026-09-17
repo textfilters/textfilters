@@ -15,6 +15,7 @@ import {
   type SpamGuardOptions,
 } from "./contracts.js";
 import { normalizeActorKey, normalizeForSpam } from "./normalize.js";
+import { createDuplicateKey } from "./duplicate-key.js";
 
 const MAX_RECENT_TEXTS_PER_ACTOR = 256;
 
@@ -67,9 +68,10 @@ export function createSpamGuard(options: SpamGuardOptions = {}): SpamGuard {
         return { allowed: false, reason: SPAM_BLOCK_REASONS.tooFast };
       }
 
+      const duplicateKey = createDuplicateKey(normalized);
       const actor = previous ? cloneActorState(previous) : createActorState();
       pruneDuplicateTexts(actor, nowMs, config.duplicateWindowMs);
-      const previousTextAt = actor.recentNormalizedTexts.get(normalized);
+      const previousTextAt = actor.recentNormalizedTexts.get(duplicateKey);
       if (
         previousTextAt !== undefined &&
         nowMs - previousTextAt < config.duplicateWindowMs
@@ -84,7 +86,7 @@ export function createSpamGuard(options: SpamGuardOptions = {}): SpamGuard {
 
       actor.timestamps.push(nowMs);
       actor.lastMessageAt = nowMs;
-      recordRecentNormalizedText(actor, normalized, nowMs);
+      recordRecentNormalizedText(actor, duplicateKey, nowMs);
       trimActorRecords(
         actor,
         Math.max(config.burstMaxMessages, 1),

@@ -1,6 +1,7 @@
 export interface ActorState {
   readonly timestamps: number[];
   lastMessageAt: number;
+  // Bounded duplicate keys, never full long messages.
   readonly recentNormalizedTexts: Map<string, number>;
 }
 
