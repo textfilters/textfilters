@@ -1,4 +1,5 @@
 import {
+  COMBINING_MARK_RE,
   PATH_GLUED_PROSE_CHARS,
   PATH_START_CHARS,
   PATH_TRAILING_CHARS,
@@ -339,6 +340,13 @@ export const consumeSpacedHostContinuation = (
     }
     if (meta.alphaNum[cursor]) {
       sawAlphaNum = true;
+      labelEnd = cursor + 1;
+    } else if (
+      sawAlphaNum &&
+      !isIgnorableFormatting(meta, cursor) &&
+      COMBINING_MARK_RE.test(meta.codePoints[cursor] ?? "")
+    ) {
+      // Match parseLabel: attached marks belong to the preceding host label.
       labelEnd = cursor + 1;
     }
     lastSignificantSymbol = symbol;

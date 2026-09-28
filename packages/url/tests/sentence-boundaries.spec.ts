@@ -144,6 +144,36 @@ describe("closed sentence boundaries", () => {
     verify(text, [text], ["bar.example.com"]);
   });
 
+  it.each([
+    "é",
+    "e\u0301",
+    "ḗ",
+    "e\u0304\u0301",
+    "ế",
+    "e\u0302\u0301",
+    "ש\u05b8",
+    "e\u{1d185}",
+  ])("keeps attached marks inside a continued host label: %s", (label) => {
+    for (const separator of [".", "[.]", ")."]) {
+      const text = `http://a ${label}${separator}com/path`;
+      verify(text, [text]);
+    }
+    for (const ending of asciiEndings) {
+      for (const url of ["http://a", "hxxp://a"]) {
+        const prefix = `😌 ${url} ${label}${ending}`;
+        verify(prefix + "Bot", [url]);
+        const text = prefix + "evil.org/path";
+        verify(text, [url, "evil.org/path"]);
+        verify(text, [url], ["evil.org"]);
+        verify(
+          text,
+          [url, "evil.org/path"],
+          [`a${label.normalize("NFC")}.evil.org`],
+        );
+      }
+    }
+  });
+
   it.each(["http://abc", "https://example.com", "hxxp://example[.]com"])(
     "keeps a following domain separate from explicit URL %s",
     (url) => {
