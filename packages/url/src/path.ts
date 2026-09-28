@@ -1,5 +1,4 @@
 import {
-  COMBINING_MARK_RE,
   PATH_GLUED_PROSE_CHARS,
   PATH_START_CHARS,
   PATH_TRAILING_CHARS,
@@ -260,7 +259,6 @@ export const consumeSpacedHostContinuation = (
   let hasQueryOrFragment = false;
   let pathStart = -1;
   let lastSignificantSymbol = "";
-  let labelEnd = start;
   while (cursor < meta.codePoints.length) {
     if (meta.zeroWidth[cursor]) {
       cursor++;
@@ -312,7 +310,7 @@ export const consumeSpacedHostContinuation = (
       }
     }
     const dot = parseDot(meta, cursor);
-    if (!inPath && dot && isClosedSentenceBoundary(meta, labelEnd, dot)) break;
+    if (!inPath && dot && isClosedSentenceBoundary(meta, dot)) break;
     if (dot && dot.start === cursor && dot.end > cursor + 1) {
       sawHostMarker = true;
       lastSignificantSymbol = ".";
@@ -338,17 +336,7 @@ export const consumeSpacedHostContinuation = (
     ) {
       break;
     }
-    if (meta.alphaNum[cursor]) {
-      sawAlphaNum = true;
-      labelEnd = cursor + 1;
-    } else if (
-      sawAlphaNum &&
-      !isIgnorableFormatting(meta, cursor) &&
-      COMBINING_MARK_RE.test(meta.codePoints[cursor] ?? "")
-    ) {
-      // Match parseLabel: attached marks belong to the preceding host label.
-      labelEnd = cursor + 1;
-    }
+    if (meta.alphaNum[cursor]) sawAlphaNum = true;
     lastSignificantSymbol = symbol;
     end = cursor + 1;
     cursor++;

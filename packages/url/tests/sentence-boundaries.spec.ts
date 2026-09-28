@@ -144,6 +144,69 @@ describe("closed sentence boundaries", () => {
     verify(text, [text], ["bar.example.com"]);
   });
 
+  it.each(["b-", "b_", "b--_", "b+", "b~", "b%", "b=", "e\u0301-", "e\u0301_"])(
+    "recognizes punctuation independently of the continued label %s",
+    (label) => {
+      for (const dots of [
+        ".",
+        "..",
+        "...",
+        "‥",
+        "…",
+        ".．.",
+        ".\u200b.\ufe0f.",
+        ". .",
+      ]) {
+        for (const ending of [
+          `)${dots} `,
+          ` ${dots}) `,
+          `> ${dots} `,
+          `${dots} ” `,
+        ]) {
+          const prefix = `😌 http://a ${label}${ending}`;
+          verify(prefix + "Bot", ["http://a"]);
+          verify(prefix + "evil.org/path", ["http://a", "evil.org/path"]);
+          verify(prefix + "evil.org/path", ["http://a"], ["evil.org"]);
+          verify(
+            prefix + "evil.org/path",
+            ["http://a", "evil.org/path"],
+            ["ab.evil.org"],
+          );
+        }
+      }
+    },
+  );
+
+  it.each([
+    "[.]",
+    "(.)",
+    "{.}",
+    "<.>",
+    "( . )",
+    "[ . ]",
+    "{ . }",
+    "< . >",
+    "［．］",
+    "（．）",
+    "｛．｝",
+    "＜．＞",
+  ])("keeps the neighboring dot marker %s atomic", (marker) => {
+    const text = `http://a b${marker}. com`;
+    verify(text, [text]);
+    const url = `example ${marker} com`;
+    verify(`${url})... evil.org`, [url, "evil.org"]);
+  });
+
+  it("preserves whitespace between sentence dots", () => {
+    verify("http://a b). .evil.org", ["http://a", "evil.org"]);
+    verify("http://a. .) evil.org", ["http://a", "evil.org"]);
+  });
+
+  it.each(["http://a b...evil.org", "http://a b-).evil.org"])(
+    "preserves continuation without sentence spacing: %s",
+    (text) => verify(text, [text]),
+  );
+
   it.each([
     "é",
     "e\u0301",

@@ -82,26 +82,56 @@ export const isRightSpacedSentenceDot = (
   return pos < before && (meta.whitespace[pos] ?? false);
 };
 
-// A closed sentence ends a host before another label can be joined. Inspect
-// both sides of the literal dot before deciding: closers and spacing may occur
-// on either side, but a sentence requires whitespace after the dot.
+const previousVisibleSymbol = (meta: TextMeta, start: number): number => {
+  let pos = start;
+  while (pos >= 0 && (meta.whitespace[pos] || isIgnorableFormatting(meta, pos)))
+    pos--;
+  return pos;
+};
+
+const isBracketedDotAt = (meta: TextMeta, pos: number): boolean => {
+  const before = previousVisibleSymbol(meta, pos - 1);
+  let after = pos + 1;
+  while (
+    after < meta.codePoints.length &&
+    (meta.whitespace[after] || isIgnorableFormatting(meta, after))
+  )
+    after++;
+  return DOT_LITERAL_CHARS.some(
+    (chars) =>
+      meta.raw[before] === chars[0] &&
+      meta.raw[after] === chars[chars.length - 1],
+  );
+};
+
+// Inspect punctuation itself, not a caller's approximation of a host-label end.
+// The first literal sentence dot owns its entire punctuation run; later dots
+// stop at the previous one instead of rescanning the same suffix.
 export const isClosedSentenceBoundary = (
   meta: TextMeta,
-  labelEnd: number,
   dot: Match,
 ): boolean => {
   if (
     dot.end !== dot.start + 1 ||
-    !isSentenceDotSymbol(meta.raw[dot.start] ?? "")
+    !isSentenceDotSymbol(meta.raw[dot.start] ?? "") ||
+    isBracketedDotAt(meta, dot.start)
   ) {
     return false;
   }
 
   let hasCloser = false;
-  for (let pos = labelEnd; pos < dot.start; pos++) {
-    if (isSentenceCloserSymbol(meta.raw[pos] ?? "")) hasCloser = true;
-    else if (!meta.whitespace[pos] && !isIgnorableFormatting(meta, pos)) {
-      return false;
+  for (let pos = dot.start - 1; pos >= 0; pos--) {
+    const raw = meta.raw[pos] ?? "";
+    if (isSentenceDotSymbol(raw)) return false;
+    if (isSentenceCloserSymbol(raw)) {
+      // A bracketed dot is one URL token; its closing bracket is not prose.
+      const before = previousVisibleSymbol(meta, pos - 1);
+      if (meta.symbol[before] === "." && isBracketedDotAt(meta, before)) {
+        break;
+      }
+      hasCloser = true;
+    } else if (!meta.whitespace[pos] && !isIgnorableFormatting(meta, pos)) {
+      break;
     }
   }
 
@@ -109,7 +139,11 @@ export const isClosedSentenceBoundary = (
   for (let pos = dot.end; pos < meta.codePoints.length; pos++) {
     if (isSentenceCloserSymbol(meta.raw[pos] ?? "")) hasCloser = true;
     else if (meta.whitespace[pos]) hasRightWhitespace = true;
-    else if (!isIgnorableFormatting(meta, pos)) break;
+    else if (
+      !isSentenceDotSymbol(meta.raw[pos] ?? "") &&
+      !isIgnorableFormatting(meta, pos)
+    )
+      break;
   }
   return hasCloser && hasRightWhitespace;
 };

@@ -46,8 +46,10 @@ handling for ambiguous `example. com` prose, while strong forms such as
 `example. com/path`, `example[.]com`, and `example dot com` remain detectable.
 It does not validate network reachability.
 
-A closing bracket or quote next to a sentence dot, with whitespace after the
-dot, ends the host before allowlist matching. For example, `word). Bot` stays
+A closing bracket or quote next to sentence dots, with whitespace after a
+dot, ends the host before allowlist matching. Single dots and ellipses follow
+the same rule, independently of letters, combining marks, or joiners before
+the punctuation. For example, `word). Bot` stays
 unchanged, and `docs .) example.com/path` matches only `example.com/path`.
 An allowed `docs.example.com` cannot suppress that separate match. Path-like
 text after the boundary does not rejoin the host: `example). com/path` stays

@@ -353,7 +353,7 @@ export const parseDomain = (
     const dot = parseDot(meta, pos);
     if (!dot) break;
     const currentTld = labels[labels.length - 1];
-    if (isClosedSentenceBoundary(meta, currentTld.end, dot)) break;
+    if (isClosedSentenceBoundary(meta, dot)) break;
     if (
       !allowUnknownTld &&
       labels.length >= 2 &&
