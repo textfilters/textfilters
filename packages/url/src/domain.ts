@@ -5,9 +5,10 @@ import {
   isIgnorableFormatting,
   isRightSpacedDotSymbol,
   isRightSpacedSentenceDot,
-  isSentenceBoundaryBetweenLabels,
+  getSentenceBoundaryBetweenLabels,
   isWhitespaceWrappedDot,
   parseDot,
+  type SentenceBoundary,
 } from "./dots.js";
 import {
   countCodePoints,
@@ -456,7 +457,7 @@ export const hasAmbiguousRightSpacedSuffix = (
   const tld = domain.labels.at(-1);
   if (!previous || !tld || domain.end !== tld.end) return false;
 
-  return isSentenceBoundaryBetweenLabels(meta, previous, tld);
+  return getSentenceBoundaryBetweenLabels(meta, previous, tld) !== null;
 };
 
 const preferCompletedDomainBeforeSpacedSeparator = (
@@ -503,28 +504,38 @@ const preferCompletedDomainBeforeSpacedSeparator = (
 const preferDomainAfterSentence = (
   meta: TextMeta,
   domain: DomainMatch,
-): DomainMatch => {
+): BareDomainCandidates => {
   for (let index = domain.labels.length - 2; index >= 1; index--) {
     const previous = domain.labels[index - 1];
     const next = domain.labels[index];
     if (!previous || !next) continue;
 
-    if (!isSentenceBoundaryBetweenLabels(meta, previous, next)) continue;
+    const sentenceBoundary = getSentenceBoundaryBetweenLabels(
+      meta,
+      previous,
+      next,
+    );
+    if (!sentenceBoundary) continue;
 
     return {
-      start: next.start,
-      end: domain.end,
-      pos: domain.pos,
-      labels: domain.labels.slice(index),
+      parsedDomain: domain,
+      boundaryDomain: {
+        start: next.start,
+        end: domain.end,
+        pos: domain.pos,
+        labels: domain.labels.slice(index),
+      },
+      sentenceBoundary,
     };
   }
 
-  return domain;
+  return { parsedDomain: domain, boundaryDomain: domain };
 };
 
 interface BareDomainCandidates {
   readonly parsedDomain: DomainMatch;
   readonly boundaryDomain: DomainMatch;
+  readonly sentenceBoundary?: SentenceBoundary;
 }
 
 export const parseBareDomainCandidates = (
@@ -542,11 +553,7 @@ export const parseBareDomainCandidates = (
     listedTlds,
     asciiTldTargets,
   );
-  return {
-    parsedDomain,
-    boundaryDomain:
-      completedDomain === parsedDomain
-        ? preferDomainAfterSentence(meta, parsedDomain)
-        : completedDomain,
-  };
+  return completedDomain === parsedDomain
+    ? preferDomainAfterSentence(meta, parsedDomain)
+    : { parsedDomain, boundaryDomain: completedDomain };
 };

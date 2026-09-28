@@ -142,13 +142,15 @@ export const parseDot = (meta: TextMeta, start: number): Match | null => {
   return null;
 };
 
-export const isSentenceBoundaryBetweenLabels = (
+export type SentenceBoundary = "spaced-dot" | "closing-punctuation";
+
+export const getSentenceBoundaryBetweenLabels = (
   meta: TextMeta,
   previous: Label,
   next: Label,
-): boolean => {
+): SentenceBoundary | null => {
   const dot = parseDot(meta, previous.pos);
-  if (!dot || !isRightSpacedSentenceDot(meta, dot, next.start)) return false;
+  if (!dot || !isRightSpacedSentenceDot(meta, dot, next.start)) return null;
 
   let hasWhitespace = false;
   let hasCloser = false;
@@ -159,11 +161,15 @@ export const isSentenceBoundaryBetweenLabels = (
     } else if (isSentenceCloserSymbol(meta.raw[pos] ?? "")) {
       hasCloser = true;
     } else {
-      return false;
+      return null;
     }
   }
 
   // Keep `example . com` detectable; whitespace before a sentence dot is
   // accepted here only around a closing bracket or quote, as in `word ) . Bot`.
-  return !hasWhitespace || hasCloser;
+  if (hasWhitespace && !hasCloser) return null;
+  for (let pos = dot.end; !hasCloser && pos < next.start; pos++) {
+    hasCloser = isSentenceCloserSymbol(meta.raw[pos] ?? "");
+  }
+  return hasCloser ? "closing-punctuation" : "spaced-dot";
 };

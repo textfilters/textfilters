@@ -252,7 +252,7 @@ const selectBareDomainCandidate = (
     asciiTldTargets,
   );
   if (!parsed) return null;
-  const { parsedDomain, boundaryDomain } = parsed;
+  const { parsedDomain, boundaryDomain, sentenceBoundary } = parsed;
   if (
     shouldPreserveBareDomainAsProse(meta, parsedDomain, ambiguousSpacedDots) ||
     (boundaryDomain !== parsedDomain &&
@@ -308,9 +308,10 @@ const selectBareDomainCandidate = (
     boundaryDomain !== parsedDomain &&
     parsedDomain.start === boundaryDomain.start;
   const useParsedDomain =
-    allowedSuffixWouldBroadenTrust ||
-    preserveAllowedSingleLabelSubdomain ||
-    preserveAllowedCompletedDomain;
+    sentenceBoundary !== "closing-punctuation" &&
+    (allowedSuffixWouldBroadenTrust ||
+      preserveAllowedSingleLabelSubdomain ||
+      preserveAllowedCompletedDomain);
 
   return {
     parsedDomain,

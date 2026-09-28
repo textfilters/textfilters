@@ -566,6 +566,54 @@ describe("URL scanner", () => {
     }
   });
 
+  it.each([
+    "). ",
+    " ). ",
+    ") . ",
+    " ) . ",
+    '". ',
+    "». ",
+    "]. ",
+    ")。 ",
+    "\u200b)\ufe0f.\u200b ",
+    ".) ",
+    '." ',
+    ".\u200b» ",
+  ])(
+    "keeps allowlists within the closing-punctuation boundary %j",
+    (ending) => {
+      for (const lead of ["docs", "docs.internal"]) {
+        const prefix = `😌 ${lead}${ending}`;
+        const domain = "example.com";
+        const text = prefix + domain;
+        for (const [allowedDomains, blocked] of [
+          [[`${lead}.${domain}`], true],
+          [[domain], false],
+          [[`${lead}.${domain}`, domain], false],
+        ] as const) {
+          const ranges: readonly Range[] = blocked
+            ? [[Array.from(prefix).length, Array.from(text).length]]
+            : [];
+          expectScannerFixture({ text, ranges, allowedDomains });
+          const filter = createUrlFilter({ allowedDomains });
+          expect(filter.process(text)).toEqual({
+            censored: blocked ? prefix + mask(domain) : text,
+            matches: blocked
+              ? [
+                  {
+                    start: prefix.length,
+                    end: text.length,
+                    value: domain,
+                    filter: "url",
+                  },
+                ]
+              : [],
+          });
+        }
+      }
+    },
+  );
+
   it("keeps completed domains before quoted sentence endings independent", () => {
     const completed = "example.com";
     for (const ending of [

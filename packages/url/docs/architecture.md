@@ -28,6 +28,10 @@ Closing brackets and quotes before a sentence dot preserve this boundary:
 matches only the domain. Both prose preservation and domain range selection
 use the same boundary check. Whitespace around a dot without a closing bracket
 or quote remains supported obfuscation, as in `example . com`.
+After a closing-punctuation boundary selects a following domain, allowlists
+apply to that domain only. An allowed `docs.example.com` cannot exempt
+`example.com` in `docs). example.com`; an explicit allowance for `example.com`
+can. Plain spaced-dot ambiguity retains its existing allowlist handling.
 Stronger URL evidence, including a path, bracketed dot, word dot, scheme, or
 explicit authority, remains detectable.
 
