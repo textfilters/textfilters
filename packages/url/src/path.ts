@@ -3,7 +3,11 @@ import {
   PATH_START_CHARS,
   PATH_TRAILING_CHARS,
 } from "./chars.js";
-import { isIgnorableFormatting, parseDot } from "./dots.js";
+import {
+  isClosedSentenceBoundary,
+  isIgnorableFormatting,
+  parseDot,
+} from "./dots.js";
 import type { Match, TextMeta } from "./meta.js";
 
 export const hasQueryOrFragmentAfter = (
@@ -255,6 +259,7 @@ export const consumeSpacedHostContinuation = (
   let hasQueryOrFragment = false;
   let pathStart = -1;
   let lastSignificantSymbol = "";
+  let labelEnd = start;
   while (cursor < meta.codePoints.length) {
     if (meta.zeroWidth[cursor]) {
       cursor++;
@@ -306,6 +311,7 @@ export const consumeSpacedHostContinuation = (
       }
     }
     const dot = parseDot(meta, cursor);
+    if (!inPath && dot && isClosedSentenceBoundary(meta, labelEnd, dot)) break;
     if (dot && dot.start === cursor && dot.end > cursor + 1) {
       sawHostMarker = true;
       lastSignificantSymbol = ".";
@@ -331,7 +337,10 @@ export const consumeSpacedHostContinuation = (
     ) {
       break;
     }
-    if (meta.alphaNum[cursor]) sawAlphaNum = true;
+    if (meta.alphaNum[cursor]) {
+      sawAlphaNum = true;
+      labelEnd = cursor + 1;
+    }
     lastSignificantSymbol = symbol;
     end = cursor + 1;
     cursor++;

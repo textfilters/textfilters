@@ -2,13 +2,12 @@ import { lowerNfkc } from "./normalize.js";
 
 import { COMBINING_MARK_RE, PATH_START_CHARS } from "./chars.js";
 import {
+  isClosedSentenceBoundary,
   isIgnorableFormatting,
   isRightSpacedDotSymbol,
   isRightSpacedSentenceDot,
-  getSentenceBoundaryBetweenLabels,
   isWhitespaceWrappedDot,
   parseDot,
-  type SentenceBoundary,
 } from "./dots.js";
 import {
   countCodePoints,
@@ -354,6 +353,7 @@ export const parseDomain = (
     const dot = parseDot(meta, pos);
     if (!dot) break;
     const currentTld = labels[labels.length - 1];
+    if (isClosedSentenceBoundary(meta, currentTld.end, dot)) break;
     if (
       !allowUnknownTld &&
       labels.length >= 2 &&
@@ -449,6 +449,17 @@ export const parseDomain = (
   return { start: first.start, end, pos, labels };
 };
 
+const hasOnlyIgnorableFormatting = (
+  meta: TextMeta,
+  start: number,
+  end: number,
+): boolean => {
+  for (let cursor = start; cursor < end; cursor++) {
+    if (!isIgnorableFormatting(meta, cursor)) return false;
+  }
+  return true;
+};
+
 export const hasAmbiguousRightSpacedSuffix = (
   meta: TextMeta,
   domain: DomainMatch,
@@ -457,7 +468,12 @@ export const hasAmbiguousRightSpacedSuffix = (
   const tld = domain.labels.at(-1);
   if (!previous || !tld || domain.end !== tld.end) return false;
 
-  return getSentenceBoundaryBetweenLabels(meta, previous, tld) !== null;
+  const dot = parseDot(meta, previous.pos);
+  return (
+    dot !== null &&
+    hasOnlyIgnorableFormatting(meta, previous.end, dot.start) &&
+    isRightSpacedSentenceDot(meta, dot, tld.start)
+  );
 };
 
 const preferCompletedDomainBeforeSpacedSeparator = (
@@ -504,38 +520,35 @@ const preferCompletedDomainBeforeSpacedSeparator = (
 const preferDomainAfterSentence = (
   meta: TextMeta,
   domain: DomainMatch,
-): BareDomainCandidates => {
+): DomainMatch => {
   for (let index = domain.labels.length - 2; index >= 1; index--) {
     const previous = domain.labels[index - 1];
     const next = domain.labels[index];
     if (!previous || !next) continue;
 
-    const sentenceBoundary = getSentenceBoundaryBetweenLabels(
-      meta,
-      previous,
-      next,
-    );
-    if (!sentenceBoundary) continue;
+    const dot = parseDot(meta, previous.pos);
+    if (
+      !dot ||
+      !hasOnlyIgnorableFormatting(meta, previous.end, dot.start) ||
+      !isRightSpacedSentenceDot(meta, dot, next.start)
+    ) {
+      continue;
+    }
 
     return {
-      parsedDomain: domain,
-      boundaryDomain: {
-        start: next.start,
-        end: domain.end,
-        pos: domain.pos,
-        labels: domain.labels.slice(index),
-      },
-      sentenceBoundary,
+      start: next.start,
+      end: domain.end,
+      pos: domain.pos,
+      labels: domain.labels.slice(index),
     };
   }
 
-  return { parsedDomain: domain, boundaryDomain: domain };
+  return domain;
 };
 
 interface BareDomainCandidates {
   readonly parsedDomain: DomainMatch;
   readonly boundaryDomain: DomainMatch;
-  readonly sentenceBoundary?: SentenceBoundary;
 }
 
 export const parseBareDomainCandidates = (
@@ -553,7 +566,11 @@ export const parseBareDomainCandidates = (
     listedTlds,
     asciiTldTargets,
   );
-  return completedDomain === parsedDomain
-    ? preferDomainAfterSentence(meta, parsedDomain)
-    : { parsedDomain, boundaryDomain: completedDomain };
+  return {
+    parsedDomain,
+    boundaryDomain:
+      completedDomain === parsedDomain
+        ? preferDomainAfterSentence(meta, parsedDomain)
+        : completedDomain,
+  };
 };

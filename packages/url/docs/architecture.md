@@ -23,17 +23,21 @@ created. External mutation therefore cannot change an existing instance.
 Allowed hosts are removed before public matches are produced.
 
 Ambiguous literal-dot whitespace keeps the conservative default behavior.
-Closing brackets and quotes before a sentence dot preserve this boundary:
-`word). Bot` and `word ) . Bot` stay unmasked, and `word). example.com`
-matches only the domain. Both prose preservation and domain range selection
-use the same boundary check. Whitespace around a dot without a closing bracket
-or quote remains supported obfuscation, as in `example . com`.
-After a closing-punctuation boundary selects a following domain, allowlists
-apply to that domain only. An allowed `docs.example.com` cannot exempt
-`example.com` in `docs). example.com`; an explicit allowance for `example.com`
-can. Plain spaced-dot ambiguity retains its existing allowlist handling.
 Stronger URL evidence, including a path, bracketed dot, word dot, scheme, or
 explicit authority, remains detectable.
+
+Closed sentence boundaries are decided before host labels are joined. The
+domain parser and explicit short-host continuation use the same predicate in
+`dots.ts`: a literal sentence dot, a closing bracket or quote on either side,
+and whitespace after the dot. The predicate inspects both sides before deciding
+and ignores formatting characters. It uses raw normalized punctuation so dot
+markers and other characters mapped to dots keep their URL meaning.
+
+This boundary ends a host even when the following text looks like a path.
+Matching resumes independently after the boundary; allowlist selection receives
+only the separate hosts. No range-stage boundary repair or allowlist override
+is needed. Plain spaced dots without a closer retain their existing ambiguity
+and allowlist behavior.
 
 The parser stays split by responsibility because URL syntax has independent
 scheme, authority, host, path, normalization, and TLD concerns. None of those

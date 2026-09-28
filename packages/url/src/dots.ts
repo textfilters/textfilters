@@ -11,7 +11,6 @@ import {
   matchesRawChars,
   toRawChars,
   toSkeletonChars,
-  type Label,
   type Match,
   type TextMeta,
 } from "./meta.js";
@@ -83,6 +82,38 @@ export const isRightSpacedSentenceDot = (
   return pos < before && (meta.whitespace[pos] ?? false);
 };
 
+// A closed sentence ends a host before another label can be joined. Inspect
+// both sides of the literal dot before deciding: closers and spacing may occur
+// on either side, but a sentence requires whitespace after the dot.
+export const isClosedSentenceBoundary = (
+  meta: TextMeta,
+  labelEnd: number,
+  dot: Match,
+): boolean => {
+  if (
+    dot.end !== dot.start + 1 ||
+    !isSentenceDotSymbol(meta.raw[dot.start] ?? "")
+  ) {
+    return false;
+  }
+
+  let hasCloser = false;
+  for (let pos = labelEnd; pos < dot.start; pos++) {
+    if (isSentenceCloserSymbol(meta.raw[pos] ?? "")) hasCloser = true;
+    else if (!meta.whitespace[pos] && !isIgnorableFormatting(meta, pos)) {
+      return false;
+    }
+  }
+
+  let hasRightWhitespace = false;
+  for (let pos = dot.end; pos < meta.codePoints.length; pos++) {
+    if (isSentenceCloserSymbol(meta.raw[pos] ?? "")) hasCloser = true;
+    else if (meta.whitespace[pos]) hasRightWhitespace = true;
+    else if (!isIgnorableFormatting(meta, pos)) break;
+  }
+  return hasCloser && hasRightWhitespace;
+};
+
 export const isWhitespaceWrappedListSeparator = (
   meta: TextMeta,
   dot: Match,
@@ -140,36 +171,4 @@ export const parseDot = (meta: TextMeta, start: number): Match | null => {
   }
 
   return null;
-};
-
-export type SentenceBoundary = "spaced-dot" | "closing-punctuation";
-
-export const getSentenceBoundaryBetweenLabels = (
-  meta: TextMeta,
-  previous: Label,
-  next: Label,
-): SentenceBoundary | null => {
-  const dot = parseDot(meta, previous.pos);
-  if (!dot || !isRightSpacedSentenceDot(meta, dot, next.start)) return null;
-
-  let hasWhitespace = false;
-  let hasCloser = false;
-  for (let pos = previous.end; pos < dot.start; pos++) {
-    if (isIgnorableFormatting(meta, pos)) continue;
-    if (meta.whitespace[pos]) {
-      hasWhitespace = true;
-    } else if (isSentenceCloserSymbol(meta.raw[pos] ?? "")) {
-      hasCloser = true;
-    } else {
-      return null;
-    }
-  }
-
-  // Keep `example . com` detectable; whitespace before a sentence dot is
-  // accepted here only around a closing bracket or quote, as in `word ) . Bot`.
-  if (hasWhitespace && !hasCloser) return null;
-  for (let pos = dot.end; !hasCloser && pos < next.start; pos++) {
-    hasCloser = isSentenceCloserSymbol(meta.raw[pos] ?? "");
-  }
-  return hasCloser ? "closing-punctuation" : "spaced-dot";
 };
