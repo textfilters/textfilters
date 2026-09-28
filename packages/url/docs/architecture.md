@@ -23,6 +23,11 @@ created. External mutation therefore cannot change an existing instance.
 Allowed hosts are removed before public matches are produced.
 
 Ambiguous literal-dot whitespace keeps the conservative default behavior.
+Closing brackets and quotes before a sentence dot preserve this boundary:
+`word). Bot` and `word ) . Bot` stay unmasked, and `word). example.com`
+matches only the domain. Both prose preservation and domain range selection
+use the same boundary check. Whitespace around a dot without a closing bracket
+or quote remains supported obfuscation, as in `example . com`.
 Stronger URL evidence, including a path, bracketed dot, word dot, scheme, or
 explicit authority, remains detectable.
 

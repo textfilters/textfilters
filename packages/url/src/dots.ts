@@ -11,6 +11,7 @@ import {
   matchesRawChars,
   toRawChars,
   toSkeletonChars,
+  type Label,
   type Match,
   type TextMeta,
 } from "./meta.js";
@@ -139,4 +140,30 @@ export const parseDot = (meta: TextMeta, start: number): Match | null => {
   }
 
   return null;
+};
+
+export const isSentenceBoundaryBetweenLabels = (
+  meta: TextMeta,
+  previous: Label,
+  next: Label,
+): boolean => {
+  const dot = parseDot(meta, previous.pos);
+  if (!dot || !isRightSpacedSentenceDot(meta, dot, next.start)) return false;
+
+  let hasWhitespace = false;
+  let hasCloser = false;
+  for (let pos = previous.end; pos < dot.start; pos++) {
+    if (isIgnorableFormatting(meta, pos)) continue;
+    if (meta.whitespace[pos]) {
+      hasWhitespace = true;
+    } else if (isSentenceCloserSymbol(meta.raw[pos] ?? "")) {
+      hasCloser = true;
+    } else {
+      return false;
+    }
+  }
+
+  // Keep `example . com` detectable; whitespace before a sentence dot is
+  // accepted here only around a closing bracket or quote, as in `word ) . Bot`.
+  return !hasWhitespace || hasCloser;
 };

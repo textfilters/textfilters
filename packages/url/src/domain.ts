@@ -5,6 +5,7 @@ import {
   isIgnorableFormatting,
   isRightSpacedDotSymbol,
   isRightSpacedSentenceDot,
+  isSentenceBoundaryBetweenLabels,
   isWhitespaceWrappedDot,
   parseDot,
 } from "./dots.js";
@@ -447,17 +448,6 @@ export const parseDomain = (
   return { start: first.start, end, pos, labels };
 };
 
-const hasOnlyIgnorableFormatting = (
-  meta: TextMeta,
-  start: number,
-  end: number,
-): boolean => {
-  for (let cursor = start; cursor < end; cursor++) {
-    if (!isIgnorableFormatting(meta, cursor)) return false;
-  }
-  return true;
-};
-
 export const hasAmbiguousRightSpacedSuffix = (
   meta: TextMeta,
   domain: DomainMatch,
@@ -466,12 +456,7 @@ export const hasAmbiguousRightSpacedSuffix = (
   const tld = domain.labels.at(-1);
   if (!previous || !tld || domain.end !== tld.end) return false;
 
-  const dot = parseDot(meta, previous.pos);
-  return (
-    dot !== null &&
-    hasOnlyIgnorableFormatting(meta, previous.end, dot.start) &&
-    isRightSpacedSentenceDot(meta, dot, tld.start)
-  );
+  return isSentenceBoundaryBetweenLabels(meta, previous, tld);
 };
 
 const preferCompletedDomainBeforeSpacedSeparator = (
@@ -524,14 +509,7 @@ const preferDomainAfterSentence = (
     const next = domain.labels[index];
     if (!previous || !next) continue;
 
-    const dot = parseDot(meta, previous.pos);
-    if (
-      !dot ||
-      !hasOnlyIgnorableFormatting(meta, previous.end, dot.start) ||
-      !isRightSpacedSentenceDot(meta, dot, next.start)
-    ) {
-      continue;
-    }
+    if (!isSentenceBoundaryBetweenLabels(meta, previous, next)) continue;
 
     return {
       start: next.start,

@@ -490,6 +490,82 @@ describe("URL scanner", () => {
     }
   });
 
+  it("keeps the reported emoji message unchanged", () => {
+    const filter = createUrlFilter();
+    const message =
+      "🙂‍↕️😌 тоже. Пиксельный должен быть 🙂‍↕️, а вот 😌 ( название: расслабленное лицо). Вот ты мастер путател";
+    expectScannerFixture({ text: message, ranges: [] });
+    expect(filter.process(message)).toEqual({ censored: message, matches: [] });
+  });
+
+  it.each([
+    "). ",
+    " ). ",
+    ") . ",
+    " ) . ",
+    '". ',
+    ' " . ',
+    "'. ",
+    "”. ",
+    "’. ",
+    "». ",
+    "]. ",
+    "}. ",
+    "」. ",
+    "』. ",
+    ")。 ",
+    " ) ． ",
+    "\u200b)\ufe0f.\u200b ",
+    ")\u00a0.\ufe0f\u00a0",
+    "\t) .\n",
+  ])("preserves the sentence boundary %j", (ending) => {
+    const filter = createUrlFilter();
+    const prefix = `😌 лицо${ending}`;
+    for (const [suffix, values] of [
+      ["Вот ты мастер путател", []],
+      ["example.com", ["example.com"]],
+    ] as const) {
+      const text = prefix + suffix;
+      const ranges = values.map((value): Range => [
+        Array.from(prefix).length,
+        Array.from(prefix + value).length,
+      ]);
+      expectScannerFixture({ text, ranges });
+      expectScannerFixture({
+        text,
+        ranges,
+        allowedDomains: ["trusted.example"],
+      });
+      expect(filter.process(text)).toEqual({
+        censored: maskRanges(text, ranges),
+        matches: values.map((value) => ({
+          start: prefix.length,
+          end: prefix.length + value.length,
+          value,
+          filter: "url",
+        })),
+      });
+      expect(filter.censor(filter.censor(text))).toBe(filter.censor(text));
+    }
+  });
+
+  it("preserves strong URL evidence around sentence-like separators", () => {
+    for (const text of [
+      "example).com",
+      "example). com/path",
+      "example ) . com/path",
+      "example . com",
+      "example[.]com",
+      "example(.)com",
+      "example dot com",
+      "example точка com",
+      "example.вот",
+      "hxxp://example[.]com/path",
+    ]) {
+      expectScannerFixture({ text, ranges: wholeRange(text) });
+    }
+  });
+
   it("keeps completed domains before quoted sentence endings independent", () => {
     const completed = "example.com";
     for (const ending of [
