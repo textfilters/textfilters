@@ -26,6 +26,29 @@ Ambiguous literal-dot whitespace keeps the conservative default behavior.
 Stronger URL evidence, including a path, bracketed dot, word dot, scheme, or
 explicit authority, remains detectable.
 
+Closed sentence boundaries are decided before host labels are joined. The
+domain parser and explicit short-host continuation use the same predicate in
+`dots.ts`: a run of literal sentence dots, closing brackets or quotes, spacing,
+and formatting characters, with at least one closer and whitespace after a dot.
+The predicate inspects the punctuation itself. Neither caller reconstructs a
+label end, so combining marks and accepted joiners cannot change this decision.
+Raw normalized punctuation keeps ASCII and compatibility ellipses consistent.
+Bracketed dot markers, including spaced forms, remain atomic URL tokens and
+cannot supply sentence punctuation to an adjacent dot.
+
+Only the first literal dot in a punctuation run inspects the whole suffix.
+Later dots stop at the preceding dot, which already decided that run. The
+callers encounter that first dot before attempting later joins. This bounds
+repeated boundary inspection linearly in the run length; it is not a complexity
+claim for the entire URL parser. Access-count tests cover long runs with and
+without closers, spaces, and formatting characters.
+
+This boundary ends a host even when the following text looks like a path.
+Matching resumes independently after the boundary; allowlist selection receives
+only the separate hosts. No range-stage boundary repair or allowlist override
+is needed. Plain spaced dots without a closer retain their existing ambiguity
+and allowlist behavior.
+
 The parser stays split by responsibility because URL syntax has independent
 scheme, authority, host, path, normalization, and TLD concerns. None of those
 internal contracts are package exports.

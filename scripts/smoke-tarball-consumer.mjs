@@ -69,16 +69,24 @@ try {
 
   for (const result of packResults) {
     const paths = result.files.map((file) => file.path);
+    const documentationFiles =
+      result.name === "@textfilters/url"
+        ? ["docs/architecture.md", "docs/release-process.md"]
+        : [];
     assert(paths.includes("package.json"));
     assert(paths.includes("README.md"));
     assert(paths.includes("LICENSE"));
     assert(paths.includes("dist/index.js"));
     assert(paths.includes("dist/index.d.ts"));
+    for (const file of documentationFiles) {
+      assert(paths.includes(file), `${result.name} is missing ${file}`);
+    }
     for (const file of paths) {
       assert(
         file === "package.json" ||
           file === "README.md" ||
           file === "LICENSE" ||
+          documentationFiles.includes(file) ||
           file.startsWith("dist/"),
         `${result.name} contains unexpected tarball file: ${file}`,
       );

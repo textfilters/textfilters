@@ -46,8 +46,18 @@ handling for ambiguous `example. com` prose, while strong forms such as
 `example. com/path`, `example[.]com`, and `example dot com` remain detectable.
 It does not validate network reachability.
 
+A closing bracket or quote next to sentence dots, with whitespace after a
+dot, ends the host before allowlist matching. Single dots and ellipses follow
+the same rule, independently of letters, combining marks, or joiners before
+the punctuation. For example, `word). Bot` stays
+unchanged, and `docs .) example.com/path` matches only `example.com/path`.
+An allowed `docs.example.com` cannot suppress that separate match. Path-like
+text after the boundary does not rejoin the host: `example). com/path` stays
+unchanged. Forms without that boundary, such as `example).com/path` and
+`example [.] com/path`, remain detectable.
+
 Public methods accept strings only. Matches use UTF-16 offsets into the source
 text, and custom masks are supplied to `censor()` or `process()`.
 
-See [architecture](https://github.com/textfilters/textfilters/blob/main/packages/url/docs/architecture.md) for internal matching ownership and
-[the release process](https://github.com/textfilters/textfilters/blob/main/packages/url/docs/release-process.md) for release details.
+See [architecture](docs/architecture.md) for internal matching ownership and
+[the release process](docs/release-process.md) for release details.

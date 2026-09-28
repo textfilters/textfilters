@@ -3,7 +3,11 @@ import {
   PATH_START_CHARS,
   PATH_TRAILING_CHARS,
 } from "./chars.js";
-import { isIgnorableFormatting, parseDot } from "./dots.js";
+import {
+  isClosedSentenceBoundary,
+  isIgnorableFormatting,
+  parseDot,
+} from "./dots.js";
 import type { Match, TextMeta } from "./meta.js";
 
 export const hasQueryOrFragmentAfter = (
@@ -306,6 +310,7 @@ export const consumeSpacedHostContinuation = (
       }
     }
     const dot = parseDot(meta, cursor);
+    if (!inPath && dot && isClosedSentenceBoundary(meta, dot)) break;
     if (dot && dot.start === cursor && dot.end > cursor + 1) {
       sawHostMarker = true;
       lastSignificantSymbol = ".";

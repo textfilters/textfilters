@@ -23,7 +23,11 @@ export const isSentenceDotSymbol = (value: string): boolean =>
   SENTENCE_DOT_SYMBOL_SET.has(value);
 
 export const isSentenceCloserSymbol = (value: string): boolean =>
-  value === '"' || value === "'" || SENTENCE_CLOSER_RE.test(value);
+  value === '"' ||
+  value === "'" ||
+  value === ">" ||
+  value === "`" ||
+  SENTENCE_CLOSER_RE.test(value);
 
 export const PATH_START_CHARS = new Set([":", "/", "?", "#"]);
 export const PATH_TRAILING_CHARS = new Set([

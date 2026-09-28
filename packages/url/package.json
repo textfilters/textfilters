@@ -22,6 +22,8 @@
   "files": [
     "dist",
     "README.md",
+    "docs/architecture.md",
+    "docs/release-process.md",
     "LICENSE"
   ],
   "main": "./dist/index.js",

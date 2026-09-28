@@ -2,6 +2,7 @@ import { lowerNfkc } from "./normalize.js";
 
 import { COMBINING_MARK_RE, PATH_START_CHARS } from "./chars.js";
 import {
+  isClosedSentenceBoundary,
   isIgnorableFormatting,
   isRightSpacedDotSymbol,
   isRightSpacedSentenceDot,
@@ -352,6 +353,7 @@ export const parseDomain = (
     const dot = parseDot(meta, pos);
     if (!dot) break;
     const currentTld = labels[labels.length - 1];
+    if (isClosedSentenceBoundary(meta, dot)) break;
     if (
       !allowUnknownTld &&
       labels.length >= 2 &&
