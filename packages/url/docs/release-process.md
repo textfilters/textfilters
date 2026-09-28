@@ -11,5 +11,3 @@ this workspace in dependency order.
 
 The first monorepo release excludes imported history and starts after the
 migration boundary recorded in the root release configuration.
-
-See the [monorepo release process](../../../docs/release-process.md).
