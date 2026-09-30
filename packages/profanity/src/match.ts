@@ -32,6 +32,7 @@ interface DenyCandidate {
   readonly start: number;
   readonly end: number;
   readonly runEnd: number;
+  readonly characterEnd: number;
   readonly entry: CompiledDenyEntry;
 }
 
@@ -109,6 +110,7 @@ function scanAcceptedDeny(
   const compact = createCompactView(units);
   const { characters, runs } = compact;
   let start = 0;
+  let characterStart = 0;
   let allowIndex = 0;
   let maximumAllowEnd = -1;
 
@@ -118,29 +120,40 @@ function scanAcceptedDeny(
       characters,
       runs,
       start,
+      characterStart,
       dictionary.deny,
     );
 
-    if (!candidate) {
-      start++;
-      continue;
+    if (candidate) {
+      while (
+        allowIndex < allowRanges.length &&
+        allowRanges[allowIndex][0] <= candidate.start
+      ) {
+        maximumAllowEnd = Math.max(maximumAllowEnd, allowRanges[allowIndex][1]);
+        allowIndex++;
+      }
+
+      if (candidate.end > maximumAllowEnd) {
+        if (sink(candidate) === false) return false;
+        start = candidate.runEnd;
+        characterStart = candidate.characterEnd + 1;
+        if (characterStart > runs[start].characterEnd) {
+          start++;
+          characterStart = runs[start]?.characterStart ?? characters.length;
+        }
+        continue;
+      }
     }
 
-    while (
-      allowIndex < allowRanges.length &&
-      allowRanges[allowIndex][0] <= candidate.start
+    if (
+      runs[start].removedWithin > 0 &&
+      characterStart < runs[start].characterEnd
     ) {
-      maximumAllowEnd = Math.max(maximumAllowEnd, allowRanges[allowIndex][1]);
-      allowIndex++;
-    }
-
-    if (candidate.end <= maximumAllowEnd) {
+      characterStart++;
+    } else {
       start++;
-      continue;
+      characterStart = runs[start]?.characterStart ?? characters.length;
     }
-
-    if (sink(candidate) === false) return false;
-    start = candidate.runEnd + 1;
   }
 
   return true;
@@ -151,10 +164,11 @@ function findLongestCandidate(
   characters: readonly CompactCharacter[],
   runs: readonly CompactRun[],
   start: number,
+  characterStart: number,
   root: DenyTrieNode,
 ): DenyCandidate | undefined {
-  const firstRun = runs[start];
-  if (!hasWordBoundaryBefore(units, firstRun.unitStart)) return undefined;
+  const firstCharacter = characters[characterStart];
+  if (!hasWordBoundaryBefore(units, firstCharacter.unitIndex)) return undefined;
 
   let node = root;
   let skippedSeparators = 0;
@@ -162,28 +176,45 @@ function findLongestCandidate(
 
   for (let end = start; end < runs.length; end++) {
     const run = runs[end];
-    skippedSeparators +=
-      run.removedWithin + (end === start ? 0 : run.removedBefore);
-    if (skippedSeparators > MAX_SKIPPED_SEPARATORS) break;
-
     const child = node.children.get(run.value);
     if (!child) break;
     node = child;
-    if (node.entries.length === 0) continue;
-    if (!hasWordBoundaryAfter(units, run.unitEnd)) continue;
 
-    for (const entry of node.entries) {
-      if (!hasMinimumRunCounts(entry, runs, start)) continue;
-      if (!hasAllowedWhitespace(entry, characters, runs, start, end)) continue;
+    const first = end === start ? characterStart : run.characterStart;
+    for (let last = first; last <= run.characterEnd; last++) {
+      const character = characters[last];
+      if (last !== characterStart) skippedSeparators += character.removedBefore;
+      if (skippedSeparators > MAX_SKIPPED_SEPARATORS) return selected;
+      if (node.entries.length === 0) continue;
+      if (!hasWordBoundaryAfter(units, character.unitIndex)) continue;
 
-      const candidate = {
-        start: firstRun.start,
-        end: run.end,
-        runEnd: end,
-        entry,
-      };
-      if (!selected || compareCandidates(candidate, selected) < 0) {
-        selected = candidate;
+      for (const entry of node.entries) {
+        if (!hasMinimumRunCounts(entry, runs, start, characterStart, last)) {
+          continue;
+        }
+        if (
+          !hasAllowedWhitespace(
+            entry,
+            characters,
+            runs,
+            start,
+            characterStart,
+            last,
+          )
+        ) {
+          continue;
+        }
+
+        const candidate = {
+          start: firstCharacter.start,
+          end: character.end,
+          runEnd: end,
+          characterEnd: last,
+          entry,
+        };
+        if (!selected || compareCandidates(candidate, selected) < 0) {
+          selected = candidate;
+        }
       }
     }
   }
@@ -196,10 +227,9 @@ function hasAllowedWhitespace(
   characters: readonly CompactCharacter[],
   runs: readonly CompactRun[],
   runStart: number,
-  runEnd: number,
+  characterStart: number,
+  characterEnd: number,
 ): boolean {
-  const characterStart = runs[runStart].characterStart;
-  const characterEnd = runs[runEnd].characterEnd;
   const whitespaceOffsets: number[] = [];
 
   for (let index = characterStart + 1; index <= characterEnd; index++) {
@@ -217,9 +247,17 @@ function hasAllowedWhitespace(
     ({ groupIndex, minimumBefore, minimumAfter }) => {
       let groupOffset = 0;
       for (let index = 0; index < groupIndex; index++) {
-        groupOffset += runs[runStart + index].count;
+        groupOffset += matchedRunCount(
+          runs[runStart + index],
+          characterStart,
+          characterEnd,
+        );
       }
-      const inputCount = runs[runStart + groupIndex].count;
+      const inputCount = matchedRunCount(
+        runs[runStart + groupIndex],
+        characterStart,
+        characterEnd,
+      );
       return [
         groupOffset + minimumBefore,
         groupOffset + inputCount - minimumAfter,
@@ -248,9 +286,25 @@ function hasMinimumRunCounts(
   entry: CompiledDenyEntry,
   runs: readonly CompactRun[],
   start: number,
+  characterStart: number,
+  characterEnd: number,
 ): boolean {
   return entry.groups.every(
-    ([, minimumCount], index) => runs[start + index].count >= minimumCount,
+    ([, minimumCount], index) =>
+      matchedRunCount(runs[start + index], characterStart, characterEnd) >=
+      minimumCount,
+  );
+}
+
+function matchedRunCount(
+  run: CompactRun,
+  characterStart: number,
+  characterEnd: number,
+): number {
+  return (
+    Math.min(run.characterEnd, characterEnd) -
+    Math.max(run.characterStart, characterStart) +
+    1
   );
 }
 

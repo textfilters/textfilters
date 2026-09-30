@@ -155,6 +155,98 @@ describe("profanity runtime", () => {
     expect(filter.check("n_i_g_a")).toBe(false);
   });
 
+  it.each([" ", ",", "-", "\n", "💬"])(
+    "keeps matching boundaries inside repeated-letter runs with %j",
+    (separator) => {
+      const filter = createProfanityFilter({
+        id: "adjacent",
+        deny: ["bad", "dog"],
+        allow: [],
+      });
+      const text = `😀 bad${separator}dog!`;
+      const matches = [
+        {
+          start: 3,
+          end: 6,
+          value: "bad",
+          filter: "profanity",
+          data: { dictionary: "adjacent", term: "bad" },
+        },
+        {
+          start: 6 + separator.length,
+          end: 9 + separator.length,
+          value: "dog",
+          filter: "profanity",
+          data: { dictionary: "adjacent", term: "dog" },
+        },
+      ];
+      const censored = `😀 ***${separator}***!`;
+
+      expect(filter.check(text)).toBe(true);
+      expect(filter.find(text)).toEqual(matches);
+      expect(filter.censor(text)).toBe(censored);
+      expect(filter.process(text)).toEqual({ censored, matches });
+      expect(censored.length).toBe(text.length);
+    },
+  );
+
+  it("preserves stretches, minimum counts, and neutral adjacent words", () => {
+    const filter = createProfanityFilter({
+      id: "repeated-boundaries",
+      deny: ["bad", "dog", "aa", "ab"],
+      allow: [],
+    });
+
+    expect(filter.censor("good dog")).toBe("good ***");
+    expect(filter.censor("bad dream")).toBe("*** dream");
+    expect(filter.censor("baaad dddog")).toBe("***** *****");
+    expect(filter.censor("b a d d")).toBe("*******");
+    expect(filter.censor("bad.d")).toBe("*****");
+    expect(filter.censor("bad d")).toBe("*** d");
+    expect(filter.censor("a ab")).toBe("a **");
+    expect(filter.censor("aa ab")).toBe("** **");
+    expect(filter.censor(`bad${"-".repeat(17)}dog`)).toBe(
+      `***${"-".repeat(17)}***`,
+    );
+    expect(filter.check("baddog")).toBe(false);
+    expect(filter.check("ba d")).toBe(false);
+  });
+
+  it("keeps longest phrases and exact allows across repeated-letter boundaries", () => {
+    const phraseFilter = createProfanityFilter({
+      id: "repeated-phrase",
+      deny: ["bad", "dog", "bad dog"],
+      allow: [],
+    });
+
+    for (const text of ["bad dog", "bad-dog", "baddog", "b a d d o g"]) {
+      expect(phraseFilter.find(text)).toEqual([
+        {
+          start: 0,
+          end: text.length,
+          value: text,
+          filter: "profanity",
+          data: { dictionary: "repeated-phrase", term: "bad dog" },
+        },
+      ]);
+      expect(phraseFilter.censor(text)).toBe("*".repeat(text.length));
+    }
+
+    const allowFilter = createProfanityFilter({
+      id: "repeated-allow",
+      deny: ["bad", "dog"],
+      allow: ["safe bad dog"],
+    });
+    const text = "safe bad dog bad dog";
+    expect(allowFilter.censor(text)).toBe("safe bad dog *** ***");
+    expect(
+      allowFilter.find(text).map(({ start, end }) => [start, end]),
+    ).toEqual([
+      [13, 16],
+      [17, 20],
+    ]);
+  });
+
   it("enforces word boundaries while keeping phrase compacting", () => {
     const filter = createProfanityFilter(english, {
       id: "phrases",

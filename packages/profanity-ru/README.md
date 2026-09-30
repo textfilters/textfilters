@@ -36,6 +36,12 @@ builder validates source formatting and combines family files deterministically
 into the ESM module under `dist`. Runtime normalization stays in
 `@textfilters/profanity`.
 
+Reviewed inflections and compounds are maintained as complete deny terms in
+their family files. The dictionary covers the listed word forms; it does not
+infer arbitrary suffixes or compounds from short roots. Neutral words and
+identity terms remain outside these insult families. Regression tests exercise
+the built dictionary through the public runtime and filter composition.
+
 ## License
 
 MIT
