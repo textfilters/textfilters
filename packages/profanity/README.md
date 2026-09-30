@@ -41,6 +41,10 @@ optional aliases. The runtime compiles reusable indexes at construction and
 preserves leftmost-longest matching, source ranges, dictionary identity, and
 match metadata.
 
+Adjacent words remain independently matchable when the last letter of one word
+equals the first letter of the next. Repeated-letter and separator-obfuscated
+spellings still preserve the complete accepted source range.
+
 Public methods accept strings only. Custom masks are supplied to `censor()` or
 `process()`. Application-specific policy belongs outside the runtime.
 
