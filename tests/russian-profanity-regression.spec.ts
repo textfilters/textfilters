@@ -116,6 +116,16 @@ describe("Russian inflected and compound insult regressions", () => {
     "пиздазасранчика",
     "пиздазасранчики",
     "пиздазасранчиками",
+    "уебок",
+    "уебка",
+    "уебку",
+    "уебком",
+    "уебке",
+    "уебки",
+    "уебков",
+    "уебкам",
+    "уебками",
+    "уебках",
   ])("masks a complete word with source metadata: %s", (word) => {
     const text = `😀 ${word}!`;
     const matches = [
@@ -147,6 +157,12 @@ describe("Russian inflected and compound insult regressions", () => {
     ["мухоёбливые", "мухоебливые"],
     ["мухоёб", "мухоеб"],
     ["пизда-засранчики", "пиздазасранчики"],
+    ["yебoк", "уебок"],
+    ["уёбок", "уебок"],
+    ["УЁБКИ", "уебки"],
+    ["yёбкaми", "уебками"],
+    ["у-е-б-о-к", "уебок"],
+    ["уе\u200Bбок", "уебок"],
   ])("preserves original ranges for %s", (word, term) => {
     const text = `💬 ${word}!`;
     const censored = `💬 ${"*".repeat(word.length)}!`;
@@ -220,4 +236,12 @@ describe("Russian inflected and compound insult regressions", () => {
     expect(filter.check(text)).toBe(false);
     expect(filter.process(text)).toEqual({ censored: text, matches: [] });
   });
+
+  it.each(["хуярюдетскиерисунки", "префиксуебок", "уебоксуффикс"])(
+    "preserves word boundaries in concatenated tokens: %s",
+    (text) => {
+      expect(filter.check(text)).toBe(false);
+      expect(filter.process(text)).toEqual({ censored: text, matches: [] });
+    },
+  );
 });
