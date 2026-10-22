@@ -248,6 +248,19 @@ const parsePhoneCandidate = (
       (hasYearFirstDatePrefix(groups, groupSeparators) ||
         hasMonthFirstDatePrefix(groups, groupSeparators) ||
         hasDayFirstDatePrefix(groups, groupSeparators));
+    if (
+      hasDatePrefix &&
+      /^(?:[01][0-9]|2[0-3]) [0-5][0-9] [0-5][0-9]$/u.test(
+        groups.slice(3, 6).join(" "),
+      ) &&
+      groupSeparators.slice(2, 5).every((separator) => /^\s+$/u.test(separator))
+    ) {
+      return {
+        rejectedUntil: extendTimeSuffixEnd(meta, groupEnds[5], {
+          allowFraction: true,
+        }),
+      };
+    }
     const hasTimeAfterDate =
       hasDatePrefix &&
       isValidTimeParts(groups[3], groups[4], groupSeparators[3]);

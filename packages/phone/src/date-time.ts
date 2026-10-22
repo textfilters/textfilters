@@ -99,7 +99,9 @@ export const hasDayFirstDatePrefix = (
   (groups[1]?.length === 1 || groups[1]?.length === 2) &&
   DAY_FIRST_YEAR_GROUP_RE.test(groups[2] ?? "") &&
   separatorHas(separators[0], "./-") &&
-  separatorHas(separators[1], "./-") &&
+  (separatorHas(separators[1], "./-") ||
+    (YEAR_GROUP_RE.test(groups[2] ?? "") &&
+      /^\s+$/u.test(separators[1] ?? ""))) &&
   isValidDateParts(groups[2], groups[1], groups[0]);
 
 export const hasMonthFirstDatePrefix = (
@@ -110,7 +112,9 @@ export const hasMonthFirstDatePrefix = (
   (groups[1]?.length === 1 || groups[1]?.length === 2) &&
   DAY_FIRST_YEAR_GROUP_RE.test(groups[2] ?? "") &&
   separatorHas(separators[0], "/-") &&
-  separatorHas(separators[1], "/-") &&
+  (separatorHas(separators[1], "/-") ||
+    (YEAR_GROUP_RE.test(groups[2] ?? "") &&
+      /^\s+$/u.test(separators[1] ?? ""))) &&
   isValidDateParts(groups[2], groups[0], groups[1]);
 
 export const hasYearFirstDatePrefix = (

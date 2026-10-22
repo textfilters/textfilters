@@ -37,5 +37,11 @@ fields that require moderation.
 The detector does not validate whether a number is assigned or reachable.
 Public methods accept strings only.
 
+Valid dates may contain whitespace before a four-digit year. After a valid date,
+a complete spaced `HH MM SS` takes precedence over phone detection, regardless
+of the trailing numbers. The remaining text is scanned separately. Use `+` or a
+phone label such as `call` for a phone number that would otherwise look like a
+timestamp immediately after a date.
+
 See [architecture](https://github.com/textfilters/textfilters/blob/main/packages/phone/docs/architecture.md) for internal matching ownership and
 [the release process](https://github.com/textfilters/textfilters/blob/main/packages/phone/docs/release-process.md) for release details.
