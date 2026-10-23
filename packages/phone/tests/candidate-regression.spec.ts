@@ -4,6 +4,109 @@ import { filter } from "../src/index.js";
 import { toRawChar } from "../src/digits.js";
 
 describe("phone candidate regression", () => {
+  it.each([
+    "10/07 2026 14 04 04",
+    "10/07 2026 14 04 04 nostalgia for the old days",
+    "10/07 2026 14:04:04",
+    "10/07\u00a02026 14 04 04",
+    "29/02 2024 14 04 04",
+    "07/30 2026 14 04 04",
+    "10/07 2026 02 12 34 5678",
+    "10/07 2026 14 04 04+0300",
+    "10/07 2026 14 04 04.123-03:30",
+  ])("preserves a valid date with whitespace before its year: %s", (text) => {
+    expect(filter.check(text)).toBe(false);
+    expect(filter.find(text)).toEqual([]);
+    expect(filter.censor(text)).toBe(text);
+    expect(filter.process(text)).toEqual({ censored: text, matches: [] });
+  });
+
+  it.each(["", "1", "123", "1234", "12345", "123456789", "12 34 56"])(
+    "preserves a spaced timestamp followed by a short numeric tail: %s",
+    (tail) => {
+      const text = `10/07 2026 14 04 04 ${tail}`;
+      expect(filter.check(text)).toBe(false);
+      expect(filter.find(text)).toEqual([]);
+      expect(filter.censor(text)).toBe(text);
+      expect(filter.process(text)).toEqual({ censored: text, matches: [] });
+    },
+  );
+
+  it.each([
+    "+7 999 123 45 67",
+    "8 (999) 123-45-67",
+    "+44 20 7946 0958",
+    "+49/30 2026 140404",
+    "202 555 0187",
+    "02 12 34 5678",
+    "10/07 (2026) 14 04 04",
+    "12/03 20 1234 56",
+    "29/02 2026 14 04 04",
+    "31/04 2026 14 04 04",
+    "10/13 3026 14 04 04",
+  ])("still masks phones and invalid date-like sequences: %s", (phone) => {
+    const prefix = "😀 10/07 2026 call ";
+    const text = prefix + phone;
+    const matches = [
+      { start: prefix.length, end: text.length, value: phone, filter: "phone" },
+    ];
+    const censored = prefix + "#".repeat(phone.length);
+    expect(filter.check(text)).toBe(true);
+    expect(filter.find(text)).toEqual(matches);
+    expect(filter.censor(text, "#")).toBe(censored);
+    expect(filter.process(text, "#")).toEqual({ censored, matches });
+  });
+
+  it.each([
+    "79991234567",
+    "7999 123 456",
+    "202 555 0187",
+    "02 12 34 5678",
+    "+7 999 123 45 67",
+    "+44 20 7946 0958",
+  ])("masks the complete phone after a date or timestamp: %s", (phone) => {
+    for (const prefix of [
+      "10/07 2026 14 04 04 ",
+      "10/07 2026 14 04 04+0300 ",
+      "😀 10/07 2026 14 04 04-0300 ",
+      "😀 10/07 2026 14 04 04+00 ",
+      "😀 10/07 2026 14 04 04-03 ",
+      "😀 10/07 2026 14 04 04+23:59 ",
+      "😀 10/07/2026 14 04 04-03:30 ",
+      "😀 10/07 2026 14 04 04.123+0300 ",
+      "😀 10/07 2026 14 04 04,123-03:30 ",
+      "😀 10/07 2026 call ",
+      "😀 10/07 2026 14 04 04 ",
+      "😀 10/07 2026 00 00 00 ",
+      "😀 10/07 2026 23 59 59 ",
+      "😀 10/07/2026 14 04 04 ",
+      "😀 10/07\u00a02026\u00a014\u00a004\u00a004 ",
+      "😀 10/07 2026 14:04:04 ",
+    ]) {
+      const text = prefix + phone;
+      const matches = [
+        {
+          start: prefix.length,
+          end: text.length,
+          value: phone,
+          filter: "phone",
+        },
+      ];
+      const censored = prefix + "#".repeat(phone.length);
+      expect(filter.check(text)).toBe(true);
+      expect(filter.find(text)).toEqual(matches);
+      expect(filter.censor(text, "#")).toBe(censored);
+      expect(filter.process(text, "#")).toEqual({ censored, matches });
+    }
+  });
+
+  it("still masks a grouped phone immediately after a date", () => {
+    const phone = "202 555 0187";
+    expect(filter.censor(`10/07 2026 ${phone}`)).toBe(
+      `10/07 2026 ${"*".repeat(phone.length)}`,
+    );
+  });
+
   it("keeps digit-free and below-threshold inputs clean", () => {
     for (const text of [
       "HELLO",
